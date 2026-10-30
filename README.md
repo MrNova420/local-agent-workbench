@@ -4,7 +4,7 @@ A Windows desktop workbench for running a project-scoped coding agent with local
 
 ## Current state
 
-This is an early development build. The renderer, secure Electron bridge, worker adapter, Ollama discovery, project/session views, approval flow, MCP configuration, and change review are implemented. The desktop product has not yet passed its visible end-to-end acceptance run or the approved live model check. Treat it as a development build until those gates are complete.
+This is a working V1 development build. The packaged app passed a visible disposable-project workflow covering model discovery, project/session selection, chat, approved file edits and tests, cancellation, and session resume. A live response from the exact default Ollama tag confirmed the UI can report first-token delay and generation throughput. Detailed evidence and limits are in [the acceptance log](docs/ACCEPTANCE_LOG.md). MCP server discovery and calls have mocked coverage but have not yet had a visible live-server acceptance run.
 
 ## Requirements for development
 
@@ -61,8 +61,8 @@ Electron uses context isolation, renderer sandboxing, disabled Node integration,
 - KV-cache or quantization tuning is not enabled automatically; evaluate it only with controlled quality/performance measurements.
 - The app does not modify OpenCode configuration.
 
-## Acceptance still required
+## Remaining acceptance work
 
-1. Run the mocked suites and build the Windows sidecar/package.
-2. Open the packaged app visibly against a disposable empty project. Exercise hello, a coding task, change review and approval, test output, request cancellation, save, and resume while confirming the workspace path throughout.
-3. After those gates pass, run the previously approved live model check and record first-token delay, generation speed, effective context, and peak memory. Preserve any Ollama model that was already loaded before the check.
+- Exercise MCP discovery, tool approval, invocation, and cleanup with a disposable local stdio MCP server.
+- Capture peak CPU, RAM, and VRAM during a longer coding turn with a time-series sampler; the UI currently reports live readings, while the completed run below only provides observed samples, not a sampled peak.
+- Continue compatibility and recovery checks on a clean Windows install.

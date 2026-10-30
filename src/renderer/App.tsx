@@ -4,6 +4,7 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import type { AccessMode, ApprovalMode, ModelInfo, ProjectFile, RunOptions, SessionSummary, WorkerCommand, WorkerEvent } from '../shared/protocol';
 import { nextRunPhase } from '../shared/run-state';
+import { addGenerationUsage, emptyRunMetrics, outputTokensPerSecond, recordFirstToken, type RunMetrics } from '../shared/run-metrics';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; streaming?: boolean };
 type Session = {
@@ -41,6 +42,7 @@ function shortPath(value?: string) {
 }
 function fmt(n?: number) { return n == null ? '—' : new Intl.NumberFormat().format(n); }
 function secs(ms: number) { return `${Math.floor(ms / 1000)}s`; }
+function tokenDelay(ms: number | null) { return ms == null ? '—' : `${(ms / 1000).toFixed(1)}s`; }
 
 function Icon({ name }: { name: 'spark' | 'folder' | 'arrow' | 'close' | 'play' | 'stop' | 'clock' | 'cpu' | 'memory' | 'branch' | 'chevron' | 'plus' | 'terminal' | 'check' | 'refresh' }) {
   const paths: Record<string, React.ReactNode> = {
@@ -92,6 +94,7 @@ export default function App() {
   const [phase, setPhase] = useState('Ready');
   const [startedAt, setStartedAt] = useState(0);
   const [elapsed, setElapsed] = useState(0);
+  const [runMetrics, setRunMetrics] = useState<RunMetrics>(emptyRunMetrics);
   const [snapshot, setSnapshot] = useState<Record<string, unknown>>({});
   const [notice, setNotice] = useState<Notice | null>(null);
   const [approval, setApproval] = useState<Approval | null>(null);
@@ -189,6 +192,7 @@ export default function App() {
       if (event.type === 'service_log') console.info('[agent service]', event.text);
       if (event.type === 'phase') {
         setPhase((current) => nextRunPhase(current, event));
+        if (event.phase === 'generating') setRunMetrics((current) => recordFirstToken(current, event.elapsed));
       }
       if (event.type === 'text') {
         const chunk = String(event.text || '');
@@ -216,7 +220,10 @@ export default function App() {
         const root = String(event.workspace || workspace);
         if (root) void request<SessionSummary[]>({ command: 'sessions_list', workspace: root }).then(setSessions).catch(() => undefined);
       }
-      if (event.type === 'generation_complete') setPhase((current) => nextRunPhase(current, event));
+      if (event.type === 'generation_complete') {
+        setPhase((current) => nextRunPhase(current, event));
+        setRunMetrics((current) => addGenerationUsage(current, event.usage));
+      }
       if (event.type === 'complete') {
         setRunning(false); setPhase((current) => nextRunPhase(current, event));
         setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
@@ -317,6 +324,7 @@ export default function App() {
         : options.context;
       const created = await request<Session>({ command: 'session_new', workspace, model: selectedModel, context: configuredContext });
       setSession(created); setMessages([]); setTrace([]); setPlan([]); setPrompt(''); setElapsed(0); setPhase('Ready'); setView('session');
+      setRunMetrics(emptyRunMetrics());
       setOptions((old) => ({ ...old, context: created.context }));
       void refreshWorkspace(workspace);
       window.setTimeout(() => promptRef.current?.focus(), 60);
@@ -333,7 +341,7 @@ export default function App() {
     };
     setMessages((current) => [...current, { role: 'user', content: task }]);
     setTrace([]); setPlan([]); setPrompt(''); setRunning(true); setPhase('Connecting to Ollama');
-    setStartedAt(Date.now()); setElapsed(0);
+    setStartedAt(Date.now()); setElapsed(0); setRunMetrics(emptyRunMetrics());
     try { await request({ command: 'run_start', options: run }); }
     catch (error) { setRunning(false); setPhase('Run failed'); notify((error as Error).message, 'bad'); }
   }
@@ -436,7 +444,7 @@ export default function App() {
         root={workspace} session={session} messages={messages} trace={trace} plan={plan} phase={phase}
         elapsed={elapsed} running={running} prompt={prompt} setPrompt={setPrompt} promptRef={promptRef}
         options={options} setOptions={setOptions} files={availableFiles} telemetry={telemetry}
-        onRun={startRun} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
+        runMetrics={runMetrics} onRun={startRun} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
         onDiff={showDiff} onMcp={openMcp} onEnter={enter} endRef={endRef} model={model}
       />}
     </main>
@@ -533,12 +541,13 @@ function ProjectHome({ root, tab, setTab, files, sessions, onNew, onOpenSession,
   </section>;
 }
 
-function SessionRoom({ root, session, messages, trace, plan, phase, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onEnter, endRef, model }: {
+function SessionRoom({ root, session, messages, trace, plan, phase, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onEnter, endRef, model }: {
   root: string; session: Session | null; messages: ChatMessage[]; trace: TraceRow[]; plan: Array<{ title?: string; text?: string; status?: string }>;
   phase: string; elapsed: number; running: boolean; prompt: string; setPrompt: (value: string) => void;
   promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
   setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>; files: ProjectFile[];
   telemetry: { cpu: number | null; ram: string; gpu: string; loadedContext: number | null; contextMismatch: boolean; serviceRss: string; serviceCpu: number | null };
+  runMetrics: RunMetrics;
   onRun: () => void; onCancel: () => void; onSettings: () => void; onBack: () => void; onDiff: () => void; onMcp: () => void;
   onEnter: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void; endRef: React.RefObject<HTMLDivElement | null>; model: string;
 }) {
@@ -563,6 +572,7 @@ function SessionRoom({ root, session, messages, trace, plan, phase, elapsed, run
       <aside className="run-sheet">
         <div className="run-sheet-heading"><div><span className="eyebrow-line">LIVE WORK SHEET</span><h2>Task signals</h2></div><span className={`run-lamp ${running ? 'active' : ''}`}/></div>
         <div className="signal-matrix"><div className={`signal-card signal-wide ${telemetry.contextMismatch ? 'signal-warning' : ''}`}><small>MODEL / CONTEXT</small><strong title={model}>{shortModel(model)}</strong><span>{telemetry.loadedContext ? `RUNTIME ${fmt(telemetry.loadedContext)} / ${fmt(options.context)} REQUESTED TOKENS` : `${fmt(options.context)} REQUESTED · NOT CURRENTLY LOADED`}</span></div><div className="signal-card"><small>ELAPSED</small><strong>{running ? secs(elapsed) : '—'}</strong><span>{running ? phase.toUpperCase() : 'NO ACTIVE RUN'}</span></div><div className="signal-card"><small>FILES IN VIEW</small><strong>{files.length}</strong><span>INDEXED / IGNORE AWARE</span></div></div>
+        <div className="run-metrics" aria-label="Measured Ollama generation statistics"><div><small>FIRST TOKEN</small><strong>{tokenDelay(runMetrics.firstTokenMs)}</strong></div><div><small>OUTPUT / SEC</small><strong>{outputTokensPerSecond(runMetrics)?.toFixed(1) ?? '—'}</strong></div><div><small>OUTPUT TOKENS</small><strong>{fmt(runMetrics.outputTokens)}</strong></div></div>
         {telemetry.contextMismatch && <p className="context-warning" role="status">Ollama reports a smaller runtime context than requested. Available memory may limit allocation.</p>}
         <div className="sheet-section"><div className="sheet-heading"><h3>Plan</h3><span>{plan.length ? `${plan.length} steps` : 'Awaiting agent'}</span></div>{plan.length ? <ol className="plan-list">{plan.map((item, index) => <li key={`${index}-${item.title || item.text}`}><span>{String(index + 1).padStart(2, '0')}</span><b>{item.title || item.text || 'Work item'}</b><small>{item.status || 'pending'}</small></li>)}</ol> : <p className="sheet-empty">A task checklist appears here when the agent creates one.</p>}</div>
         <div className="sheet-section trace-section"><div className="sheet-heading"><h3>Activity trace</h3><span>{trace.length} events</span></div>{trace.length ? <div className="trace-list">{trace.slice(-8).reverse().map((row) => <div className="trace-item" key={row.id}><span className={`trace-dot ${row.kind}`}/><div><b>{row.title}</b><small>{row.description || ''}</small></div></div>)}</div> : <p className="sheet-empty">Reads, tool calls, and results will be grouped here.</p>}</div>
