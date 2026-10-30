@@ -56,7 +56,15 @@ class RequestScopedOllama:
     def stream(self, state: dict[str, Any], messages: list[dict[str, Any]],
                cancel: threading.Event, emit: Any) -> dict[str, Any]:
         try:
-            return self.runtime.stream(state, messages, cancel, emit)
+            result = self.runtime.stream(state, messages, cancel, emit)
+            usage = {
+                key: result[key]
+                for key in ("eval_count", "eval_duration")
+                if isinstance(result.get(key), (int, float)) and not isinstance(result.get(key), bool)
+            }
+            if usage:
+                emit({"type": "generation_usage", "usage": usage})
+            return result
         except Exception as exc:
             if cancel.is_set():
                 raise RequestCancelled("Cancelled") from exc

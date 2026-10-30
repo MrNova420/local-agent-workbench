@@ -98,6 +98,23 @@ def test_stream_close_exception_is_reported_as_request_cancellation():
     assert len(errors) == 1 and type(errors[0]).__name__ == "RequestCancelled"
 
 
+def test_stream_reports_exact_usage_for_every_ollama_response():
+    class UsageRuntime:
+        def stream(self, _state, _messages, _cancel, _emit):
+            return {"eval_count": 9, "eval_duration": 4_500_000_000, "message": {"content": "done"}}
+
+        def cancel(self):
+            pass
+
+    events = []
+    adapter = RequestScopedOllama(UsageRuntime())
+
+    result = adapter.stream({}, [], threading.Event(), events.append)
+
+    assert result["eval_count"] == 9
+    assert events == [{"type": "generation_usage", "usage": {"eval_count": 9, "eval_duration": 4_500_000_000}}]
+
+
 def test_context_retrieval_and_compaction_keep_recent_task_and_configured_window(tmp_path):
     (tmp_path / "alpha.py").write_text("def target_function():\n    return 42\n", encoding="utf-8")
     (tmp_path / "unrelated.md").write_text("notes about a different subject", encoding="utf-8")

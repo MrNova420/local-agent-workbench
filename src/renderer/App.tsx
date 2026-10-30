@@ -4,7 +4,7 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import type { AccessMode, ApprovalMode, ModelInfo, ProjectFile, RunOptions, SessionSummary, WorkerCommand, WorkerEvent } from '../shared/protocol';
 import { nextRunPhase } from '../shared/run-state';
-import { addGenerationUsage, emptyRunMetrics, outputTokensPerSecond, recordFirstToken, type RunMetrics } from '../shared/run-metrics';
+import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordStreamedText, type RunMetrics } from '../shared/run-metrics';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; streaming?: boolean };
 type Session = {
@@ -192,10 +192,11 @@ export default function App() {
       if (event.type === 'service_log') console.info('[agent service]', event.text);
       if (event.type === 'phase') {
         setPhase((current) => nextRunPhase(current, event));
-        if (event.phase === 'generating') setRunMetrics((current) => recordFirstToken(current, event.elapsed));
+        if (event.phase === 'generating') setRunMetrics((current) => beginGeneration(recordFirstToken(current, event.elapsed)));
       }
       if (event.type === 'text') {
         const chunk = String(event.text || '');
+        setRunMetrics((current) => recordStreamedText(current, chunk));
         setMessages((current) => {
           const last = current.at(-1);
           if (last?.role === 'assistant' && last.streaming) return [...current.slice(0, -1), { ...last, content: last.content + chunk }];
@@ -222,22 +223,26 @@ export default function App() {
       }
       if (event.type === 'generation_complete') {
         setPhase((current) => nextRunPhase(current, event));
-        setRunMetrics((current) => addGenerationUsage(current, event.usage));
       }
+      if (event.type === 'generation_usage') setRunMetrics((current) => addGenerationUsage(current, event.usage));
       if (event.type === 'complete') {
         setRunning(false); setPhase((current) => nextRunPhase(current, event));
+        setRunMetrics((current) => endGeneration(current));
         setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
       }
       if (event.type === 'cancelled') {
         setRunning(false); setPhase((current) => nextRunPhase(current, event)); setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
+        setRunMetrics((current) => endGeneration(current));
         notify('This request was cancelled. Ollama and the model were left alone.', 'warn');
       }
       if (event.type === 'error') {
         setRunning(false); setPhase((current) => nextRunPhase(current, event)); setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
+        setRunMetrics((current) => endGeneration(current));
         notify(String(event.error || 'The task failed.'), 'bad');
       }
       if (event.type === 'run_idle') {
         setRunning(false);
+        setRunMetrics((current) => endGeneration(current));
         setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
         setPhase((current) => nextRunPhase(current, event));
       }
@@ -572,7 +577,7 @@ function SessionRoom({ root, session, messages, trace, plan, phase, elapsed, run
       <aside className="run-sheet">
         <div className="run-sheet-heading"><div><span className="eyebrow-line">LIVE WORK SHEET</span><h2>Task signals</h2></div><span className={`run-lamp ${running ? 'active' : ''}`}/></div>
         <div className="signal-matrix"><div className={`signal-card signal-wide ${telemetry.contextMismatch ? 'signal-warning' : ''}`}><small>MODEL / CONTEXT</small><strong title={model}>{shortModel(model)}</strong><span>{telemetry.loadedContext ? `RUNTIME ${fmt(telemetry.loadedContext)} / ${fmt(options.context)} REQUESTED TOKENS` : `${fmt(options.context)} REQUESTED · NOT CURRENTLY LOADED`}</span></div><div className="signal-card"><small>ELAPSED</small><strong>{running ? secs(elapsed) : '—'}</strong><span>{running ? phase.toUpperCase() : 'NO ACTIVE RUN'}</span></div><div className="signal-card"><small>FILES IN VIEW</small><strong>{files.length}</strong><span>INDEXED / IGNORE AWARE</span></div></div>
-        <div className="run-metrics" aria-label="Measured Ollama generation statistics"><div><small>FIRST TOKEN</small><strong>{tokenDelay(runMetrics.firstTokenMs)}</strong></div><div><small>OUTPUT / SEC</small><strong>{outputTokensPerSecond(runMetrics)?.toFixed(1) ?? '—'}</strong></div><div><small>OUTPUT TOKENS</small><strong>{fmt(runMetrics.outputTokens)}</strong></div></div>
+        <div className="run-metrics" aria-label="Ollama generation statistics"><div><small>FIRST TOKEN</small><strong>{tokenDelay(runMetrics.firstTokenMs)}</strong></div><div title={outputTokensAreEstimated(runMetrics) ? 'Live estimate from streamed text; Ollama reports the exact rate after generation.' : 'Exact rate reported by Ollama.'}><small>OUTPUT / SEC{outputTokensAreEstimated(runMetrics) ? ' · LIVE' : ''}</small><strong>{liveOutputTokensPerSecond(runMetrics)?.toFixed(1).replace(/^/, outputTokensAreEstimated(runMetrics) ? '~' : '') ?? '—'}</strong></div><div title={outputTokensAreEstimated(runMetrics) ? 'Live estimate from streamed text; replaced by Ollama’s exact token count after generation.' : 'Exact output token count reported by Ollama.'}><small>OUTPUT TOKENS{outputTokensAreEstimated(runMetrics) ? ' · LIVE' : ''}</small><strong>{outputTokensAreEstimated(runMetrics) ? '~' : ''}{fmt(estimateOutputTokens(runMetrics))}</strong></div></div>
         {telemetry.contextMismatch && <p className="context-warning" role="status">Ollama reports a smaller runtime context than requested. Available memory may limit allocation.</p>}
         <div className="sheet-section"><div className="sheet-heading"><h3>Plan</h3><span>{plan.length ? `${plan.length} steps` : 'Awaiting agent'}</span></div>{plan.length ? <ol className="plan-list">{plan.map((item, index) => <li key={`${index}-${item.title || item.text}`}><span>{String(index + 1).padStart(2, '0')}</span><b>{item.title || item.text || 'Work item'}</b><small>{item.status || 'pending'}</small></li>)}</ol> : <p className="sheet-empty">A task checklist appears here when the agent creates one.</p>}</div>
         <div className="sheet-section trace-section"><div className="sheet-heading"><h3>Activity trace</h3><span>{trace.length} events</span></div>{trace.length ? <div className="trace-list">{trace.slice(-8).reverse().map((row) => <div className="trace-item" key={row.id}><span className={`trace-dot ${row.kind}`}/><div><b>{row.title}</b><small>{row.description || ''}</small></div></div>)}</div> : <p className="sheet-empty">Reads, tool calls, and results will be grouped here.</p>}</div>

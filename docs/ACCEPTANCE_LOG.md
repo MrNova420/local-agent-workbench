@@ -31,9 +31,15 @@ The follow-up turn displayed:
 
 These are observations from the UI and Ollama's loaded-model endpoint, not a sampled peak-memory benchmark. Earlier visible work reached about 31.2 / 32 GB RAM. No peak VRAM sample was recorded. The model remained loaded; this check did not unload it.
 
+Live-rate and token estimates are now derived from streamed response text and refresh with the app's one-second elapsed-time tick. The value is marked with `~` while generation is active; Ollama's `eval_count` and `eval_duration` replace the estimate when the response completes. Since Ollama exposes exact usage only at completion, interim token counts are explicitly approximate.
+
+After rebuilding the package with this behavior, a visible streaming check on the same model, context, workspace, and session showed `~2.0 tokens/s` / `~2 tokens` at 21 seconds, then `~2.5 tokens/s` / `~74 tokens` at 50 seconds and `~2.3 tokens/s` / `~116 tokens` at 71 seconds. On completion the exact Ollama values replaced them: 20.0 seconds to first token, 1.8 tokens/s, and 163 output tokens. This confirmed both live refresh and final exact-value replacement in the packaged app.
+
+A second visible check using the rebuilt package confirmed the final sidecar event path: while generating, the UI showed `~2.2 tokens/s` / `~6 tokens` at 17 seconds; on completion it replaced those estimates with Ollama's exact values of 13.9 seconds to first token, 1.8 tokens/s, and 48 output tokens. Ollama usage is now emitted for each response in the agent's tool loop as well as the final response.
+
 ## Verification and remaining limits
 
-- Automated suite at this milestone: 6 Vitest tests and 15 Pytest tests passed; TypeScript typecheck passed.
+- Automated suite at this milestone: 8 Vitest tests and 16 Pytest tests passed; TypeScript typecheck passed.
 - `npm run make` produced the Windows x64 package, Squirrel installer, and ZIP. The Python worker was bundled with the package.
 - The visible run verified chat, approvals, file changes, test command/output, cancellation, session recovery, full context, and live generation measurements.
 - MCP discovery/calls have mocked coverage only; no real stdio server was exercised in this acceptance run.
