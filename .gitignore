@@ -5,6 +5,8 @@ dist/
 coverage/
 sidecar/build/
 sidecar/dist/
+agent-worker.spec
+work/
 __pycache__/
 *.py[cod]
 .env
