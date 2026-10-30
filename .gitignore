@@ -1,0 +1,12 @@
+node_modules/
+.vite/
+out/
+dist/
+coverage/
+sidecar/build/
+sidecar/dist/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example

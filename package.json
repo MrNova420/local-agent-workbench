@@ -1,0 +1,35 @@
+{
+  "name": "local-agent-workbench",
+  "productName": "Local Agent Workbench",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local-first development workbench for Ollama coding agents.",
+  "main": ".vite/build/main.cjs",
+  "scripts": {
+    "start": "electron-forge start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "sidecar:build": "powershell -ExecutionPolicy Bypass -File scripts/build-sidecar.ps1",
+    "package": "npm run sidecar:build && electron-forge package",
+    "make": "npm run sidecar:build && electron-forge make"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "8.0.1",
+    "@electron-forge/maker-squirrel": "8.0.1",
+    "@electron-forge/maker-zip": "8.0.1",
+    "@electron-forge/plugin-vite": "8.0.1",
+    "@types/node": "24.10.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "electron": "45.2.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  }
+}
