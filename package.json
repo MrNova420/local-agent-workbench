@@ -37,5 +37,13 @@
     "vite": "8.3.5",
     "vitest": "5.0.5"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MrNova420/local-agent-workbench.git"
+  },
+  "homepage": "https://github.com/MrNova420/local-agent-workbench#readme",
+  "bugs": {
+    "url": "https://github.com/MrNova420/local-agent-workbench/issues"
+  }
 }

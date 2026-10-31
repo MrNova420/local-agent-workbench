@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: MrNova420/local-agent-workbench-core
-          ref: ecbf2914740fdd2d2b4f04a49d9d22dab0ccdc34
+          ref: 559da925c6b7a38ea5905e1939aa9d9483e4dbb0
           path: engine
       - uses: actions/setup-node@v4
         with:
