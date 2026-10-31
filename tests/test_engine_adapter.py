@@ -105,7 +105,8 @@ def test_stream_close_exception_is_reported_as_request_cancellation():
 def test_stream_reports_exact_usage_for_every_ollama_response():
     class UsageRuntime:
         def stream(self, _state, _messages, _cancel, _emit):
-            return {"eval_count": 9, "eval_duration": 4_500_000_000, "message": {"content": "done"}}
+            return {"prompt_eval_count": 100, "prompt_eval_cached_count": 60, "prompt_eval_duration": 800_000_000,
+                    "eval_count": 9, "eval_duration": 4_500_000_000, "load_duration": 30_000_000, "message": {"content": "done"}}
 
         def cancel(self):
             pass
@@ -116,7 +117,10 @@ def test_stream_reports_exact_usage_for_every_ollama_response():
     result = adapter.stream({}, [], threading.Event(), events.append)
 
     assert result["eval_count"] == 9
-    assert events == [{"type": "generation_usage", "usage": {"eval_count": 9, "eval_duration": 4_500_000_000}}]
+    assert events == [{"type": "generation_usage", "usage": {
+        "prompt_eval_count": 100, "prompt_eval_cached_count": 60, "prompt_eval_duration": 800_000_000,
+        "eval_count": 9, "eval_duration": 4_500_000_000, "load_duration": 30_000_000,
+    }}]
 
 
 def test_context_retrieval_and_compaction_keep_recent_task_and_configured_window(tmp_path):

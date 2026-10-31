@@ -1,6 +1,7 @@
 export type AccessMode = 'copy' | 'plan' | 'ask' | 'edit';
 export type ApprovalMode = 'per-action' | 'per-task' | 'auto';
 export type ReasoningChoice = boolean | string | null;
+export type HarnessProfile = 'standard' | 'small-model';
 export type ReasoningCapability = {
   support: 'toggle' | 'levels' | 'unknown' | 'none';
   default: boolean | string | null;
@@ -20,6 +21,7 @@ export type RunOptions = {
   approvalMode: ApprovalMode;
   keepAlive: string;
   reasoning: ReasoningChoice;
+  harnessProfile: HarnessProfile;
 };
 
 export type WorkerCommand =

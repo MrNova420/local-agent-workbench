@@ -68,7 +68,7 @@ class RequestScopedOllama:
             result = self.runtime.stream(state, messages, cancel, emit)
             usage = {
                 key: result[key]
-                for key in ("eval_count", "eval_duration")
+                for key in ("prompt_eval_count", "prompt_eval_cached_count", "prompt_eval_duration", "eval_count", "eval_duration", "load_duration")
                 if isinstance(result.get(key), (int, float)) and not isinstance(result.get(key), bool)
             }
             if usage:
@@ -715,6 +715,9 @@ class AgentService:
         if access not in {"copy", "plan", "ask", "edit"} or approval_mode not in {"per-action", "per-task", "auto"}:
             raise ValueError("Invalid access or approval setting.")
         reasoning = options.get("reasoning")
+        harness_profile = str(options.get("harnessProfile", "standard"))
+        if harness_profile not in {"standard", "small-model"}:
+            raise ValueError("Invalid harness workflow profile.")
         if reasoning is not None:
             if not isinstance(reasoning, (str, bool)):
                 raise ValueError("Invalid reasoning choice.")
@@ -731,6 +734,7 @@ class AgentService:
             approval_mode="per-action" if approval_mode == "auto" else approval_mode, max_tokens=int(options["maxTokens"]),
             temperature=float(options["temperature"]), keep_alive=str(options.get("keepAlive", "30m")),
             reasoning=reasoning,
+            harness_profile=harness_profile,
         )
         if state["context"] < 1024 or state["max_tokens"] < 1 or not 0 <= state["temperature"] <= 2:
             raise ValueError("Context, output token, or temperature setting is outside the supported range.")
@@ -758,11 +762,13 @@ class AgentService:
             "safe_messages": copy.deepcopy(state.get("messages", [])), "partial_content": "",
             "partial_thinking": "", "active_operation": None, "tool_batch": None,
             "completed_tool_results": {}, "settings": {"model": model, "provider_id": provider.provider_id,
-                "context": state["context"], "max_tokens": state["max_tokens"], "reasoning": reasoning},
+                "context": state["context"], "max_tokens": state["max_tokens"], "reasoning": reasoning,
+                "harness_profile": harness_profile},
         }
         turn = TurnContext.capture(
             workspace=working, model=model, context=state["context"], access=access,
             approval_mode=approval_mode, max_tokens=state["max_tokens"],
+            harness_profile=harness_profile,
             temperature=state["temperature"], runtime_options=state.get("runtime_options", {}),
             prompt=prompt, session=state, mcp_tools=list(self.mcp_tools),
         )
@@ -828,6 +834,7 @@ class AgentService:
                 relay, approve, runtime_options=turn.runtime_options,
                 max_tokens=turn.max_tokens, temperature=turn.temperature,
                 project_instructions=knowledge.instructions(), mcp_tools=mcp_tools,
+                harness_profile=turn.harness_profile,
                 mcp_call=lambda name, args: self.mcp.run(self.mcp.call(name, args), cancel_event=controller["cancel"]),
             )
             chosen_runtime = self.providers.runtime_for(turn.model, engine.runtime, state.get("provider_id"))

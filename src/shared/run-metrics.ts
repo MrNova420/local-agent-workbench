@@ -1,6 +1,8 @@
 export type RunMetrics = {
   firstTokenMs: number | null;
   outputTokens: number;
+  promptTokens: number;
+  cachedPromptTokens: number;
   decodeNanoseconds: number;
   pendingCharacters: number;
   estimatedDecodeNanoseconds: number;
@@ -12,6 +14,8 @@ export function emptyRunMetrics(): RunMetrics {
   return {
     firstTokenMs: null,
     outputTokens: 0,
+    promptTokens: 0,
+    cachedPromptTokens: 0,
     decodeNanoseconds: 0,
     pendingCharacters: 0,
     estimatedDecodeNanoseconds: 0,
@@ -48,15 +52,19 @@ export function endGeneration(metrics: RunMetrics, nowMs = Date.now()): RunMetri
 export function addGenerationUsage(metrics: RunMetrics, usage: unknown): RunMetrics {
   if (!usage || typeof usage !== 'object') return endGeneration(metrics);
   const row = usage as Record<string, unknown>;
+  const promptTokens = typeof row.prompt_eval_count === 'number' && Number.isFinite(row.prompt_eval_count) ? Math.max(0, Math.floor(row.prompt_eval_count)) : 0;
+  const cachedPromptTokens = typeof row.prompt_eval_cached_count === 'number' && Number.isFinite(row.prompt_eval_cached_count) ? Math.max(0, Math.min(promptTokens || Infinity, Math.floor(row.prompt_eval_cached_count))) : 0;
   const hasCount = typeof row.eval_count === 'number' && Number.isFinite(row.eval_count);
   const hasDuration = typeof row.eval_duration === 'number' && Number.isFinite(row.eval_duration);
-  if (!hasCount || !hasDuration) return endGeneration(metrics);
+  if (!hasCount || !hasDuration) return { ...endGeneration(metrics), promptTokens: metrics.promptTokens + promptTokens, cachedPromptTokens: metrics.cachedPromptTokens + cachedPromptTokens };
 
   const tokens = Math.max(0, Math.floor(row.eval_count as number));
   const duration = Math.max(0, row.eval_duration as number);
   return {
     ...metrics,
     outputTokens: metrics.outputTokens + tokens,
+    promptTokens: metrics.promptTokens + promptTokens,
+    cachedPromptTokens: metrics.cachedPromptTokens + cachedPromptTokens,
     decodeNanoseconds: metrics.decodeNanoseconds + duration,
     pendingCharacters: 0,
     generationStartedAtMs: null,
