@@ -840,7 +840,12 @@ class AgentService:
             terminal = relay.terminal_event
             run_state = state.get("run_state")
             if isinstance(run_state, dict):
-                run_state["status"] = "cancelled" if terminal and terminal.get("type") == "cancelled" else "stopped" if terminal and terminal.get("type") == "stopped_after_operation" else "completed"
+                run_state["status"] = (
+                    "failed" if terminal and terminal.get("type") == "error"
+                    else "cancelled" if terminal and terminal.get("type") == "cancelled"
+                    else "stopped" if terminal and terminal.get("type") == "stopped_after_operation"
+                    else "completed"
+                )
                 run_state["active_operation"] = None
                 run_state["safe_messages"] = copy.deepcopy(messages)
                 run_state["partial_content"] = ""

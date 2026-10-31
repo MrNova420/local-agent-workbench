@@ -377,6 +377,7 @@ def test_engine_failure_is_saved_with_the_session(service, tmp_path, monkeypatch
 
     saved = service.sessions.load(session_id)
     assert saved["last_error"]["message"] == "Synthetic provider stream failure"
+    assert saved["run_state"]["status"] == "failed"
 
 
 def test_protocol_escapes_unicode_for_legacy_windows_stdout(service, monkeypatch):
