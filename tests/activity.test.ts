@@ -83,6 +83,17 @@ describe('durable live activity state', () => {
     expect(trace).toContain('run command');
   });
 
+  it('labels capped tool scans as partial rather than complete in activity views', () => {
+    const record: ActivityRecord = {
+      id: 'scan-1', sessionId: 's-1', turnId: 't-1', kind: 'operation', name: 'search_files',
+      status: 'partial', result: 'Some results were returned; the scan may be incomplete.',
+    };
+    const markup = renderToStaticMarkup(createElement(ActivityFeed, { entries: [record], mode: 'compact', surface: 'sidebar' }));
+    expect(markup).toContain('activity-partial');
+    expect(markup).toContain('state-partial');
+    expect(markup).toContain('partial');
+  });
+
   it('progressively reveals long output without discarding the remainder', () => {
     const record: ActivityRecord = {
       id: 'op-large', sessionId: 's-1', turnId: 't-1', kind: 'operation', name: 'run_command',
