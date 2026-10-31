@@ -4,7 +4,7 @@
 
 ## Product objective
 
-Deliver feature parity with Codex and OpenCode for the full local coding-agent workflow: project understanding through edits, approved commands, verification, review, and resumable history. The parity target is the serious coding workflow, adapted for local runtimes and the actual capability of each model; it is not a claim that cloud-only providers or proprietary services are included. The model is one component of that system. A successful chat response alone is not proof that a file changed or a test ran.
+Deliver **1:1 user-facing feature and workflow parity with Codex and OpenCode** for coding-agent use, with equivalent local implementations wherever those products depend on hosted services. This is the product target, not a reduced “small-model edition” or a claim based only on the core coding loop. It covers the complete discoverable product surface: project/workspace lifecycle, conversation and run controls, model/runtime configuration, context and instructions, tools and integrations, safety/approvals, code intelligence, review, recovery, customization, diagnostics, and packaging. Cloud accounts, proprietary model behavior, hosted compute, and remote services cannot be reproduced locally; each must have a clearly labeled local equivalent or a concrete incompatibility entry in the parity register. No capability may silently disappear from the target because it is difficult or currently absent. The model is one component of that system. A successful chat response alone is not proof that a file changed or a test ran.
 
 ## Codex / OpenCode parity map
 
@@ -12,21 +12,31 @@ The references below were reviewed directly from the official OpenCode documenta
 
 | Capability area | Codex / OpenCode baseline | Workbench status and parity requirement |
 |---|---|---|
+| Project onboarding and discovery | Open, initialize, inspect, resume, and switch projects; discover instructions and repository conventions | Project selection exists. Full onboarding, project switching/history, setup diagnostics, and instruction discovery need end-to-end acceptance. |
+| Interaction surfaces | Desktop, terminal/CLI, editor integration, command palette, keyboard navigation, attention/notifications | Electron desktop exists. CLI and editor surfaces, complete shortcut map, command palette parity, and notifications need implementation or explicit product-equivalent decisions. |
 | Conversation and turns | Durable thread/session, multiple turns, stream events, interrupt/continue, recoverable state | Mirrored resumable sessions and events exist. Complete crash/failure/reopen acceptance and turn-level serialization remain required. |
+| Run orchestration | Queue/steer input, cancel/interrupt, retry, continue, background/reattach, side chats, long-running goals | Cancellation/recovery foundations exist; queue/steer, detach/reattach, side conversations, goals, and safe retry controls need parity work. |
+| History management | Search, rename, archive, fork/branch, export/import, compare and resume conversations | Basic save/resume exists. Full history lifecycle and migration/import/export need parity work. |
 | Model/provider identity | Provider-qualified model identity, per-turn model/options, runtime usage | Ollama and local llama.cpp/HF GGUF adapters exist. Make capability/unsupported states truthful and test both actual provider paths. |
+| Model controls | Provider/model selection, model variants/reasoning controls, sampling and token/context settings, favorites/recents, capability discovery | Exact context/output/reasoning request fields exist for current adapters. Broader provider controls and per-model support/limits need parity tests; never silently rewrite user selections. |
 | Context and instructions | Repository instructions, skill discovery/loading, project context, compaction and tool-result management | Project instructions/skills and retrieval exist. Need explain included context, improve retrieval and compaction evidence, and finish large-repo retrieval/paging. |
+| Multimodal input/output | Attachments and supported image/audio or other model inputs; generated artifacts where provider supports them | File/chat workflow is primarily text. Inventory supported local modalities and implement capability-based attachment/artifact flows without pretending unsupported models accept them. |
 | File operations | List/glob, grep/search, read (including ranges), precise edit, write, patch | List/search/read/write/patch exist; read ranges and uncapped writes now exist. `edit`/precise replacement and continuation for capped listings/search are parity gaps. |
 | Command execution | Real terminal command, working directory, live output, process lifecycle, approval policy | Argv commands and streamed output exist; process-tree cancellation is being hardened. OS-level sandbox is absent and is a release-critical gap for any broad auto-approval. |
 | Permissions and approvals | Per-action allow/ask/deny, path/command-aware decisions, explicit approval events and decisions | Current access modes plus per-action/per-task/auto exist. Fine-grained rules and safe command matching are missing; auto remains opt-in, with project boundary enforced for host tools. |
 | MCP and extensions | Local and remote MCP, custom tools, scopes/credentials, permissions, graceful startup/shutdown | Local stdio MCP exists. Remote MCP, tool permission rules, custom tool packaging, credential-safe settings, and failure isolation need acceptance/design. |
+| Skills, plugins, and reusable commands | Discoverable skills, lifecycle-managed plugins/hooks, project/global custom commands, extension compatibility | Project instructions/skills exist. Plugin lifecycle, hooks, custom command UX, update/error isolation, and compatibility/import story need implementation. |
 | Code intelligence | LSP diagnostics, definitions/references, symbols, code actions where available | No LSP client/tool in the current app; add capability-discovered language-server integration. |
 | Planning and agents | Plan/build roles, custom agents, subagents, task delegation, todo/checklist tools | Plan tool exists. Agent profiles, read-only planning boundaries, subagents and delegation are queued after single-agent reliability, as previously agreed. |
 | Review and Git | Changed-file summary, diff, file context, review requests, preserve user edits | Git diff and non-Git snapshots exist. Add Git status/branch awareness, untracked/rename/deletion review, diff navigation and safe conflict handling; never rewrite user history. |
 | Workspace isolation | Project roots, worktrees, external-directory controls, distinct execution environment | Captured root/session prevents switching leaks; commands still run with user privileges. Add managed worktree flows and actual Windows process/filesystem/network containment. |
+| Environment and remote work | Local/remote hosts, worktrees, background execution, reattachment, environment status | Local Windows only today. Keep local-first as default; comparable remote environment support requires a separately designed, secured transport and is not implied by local MCP. |
 | Long-running UX | Waiting/generating, operation events, inline tool activity, approvals, steer/queue, interrupt, final/error status | Streaming worksheet and decision modal exist. Acceptance must prove command-child cancellation, no ghost run, and restored transcript/activity/status. |
-| Setup and release | Runtime/model management, clear health/diagnostics, install/update/migrations | Inference/runtime setup is partial. Build a first-run/repair/upgrade path and reproducible installer only after core packaged acceptance. |
+| Settings and customization | Project/global config, themes, keybindings, agents, permissions, formatters, LSP, notifications | App settings are partial. Implement discoverable settings with scope, validation, migration, and per-feature capability reporting. |
+| Setup, health, and release | Runtime/model management, diagnostics, install/update/migrations, crash/support data | Inference/runtime setup is partial. Build first-run/repair/upgrade, reproducible installer, diagnostics/export, and safe model/runtime recovery. |
+| Scheduled and repeatable work | Custom slash commands, automations/scheduled tasks, reusable workflows | Custom commands/automations are not complete. Implement local scheduling only with clear machine-on/background behavior, logs, cancellation, and permissions. |
 
-Parity is verified feature-by-feature, not inferred from visual similarity. Every row must end as implemented + tested, explicitly deferred with a reason, or incompatible with the local-only boundary. No row is declared complete on UI appearance alone.
+Parity is verified feature-by-feature, not inferred from visual similarity. **The target is all rows, not only P0/P1 or the first release slice.** Sequencing may defer implementation, but a deferred row remains an open parity requirement and cannot be described as 1:1-ready. Every row must end as implemented + tested, or have a documented, user-visible local equivalent/incompatibility with its consequence. No row is declared complete on UI appearance alone.
 
 ### Core task path
 
@@ -122,7 +132,7 @@ sequenceDiagram
 - Run a separate provider acceptance for Ollama and llama.cpp/Hugging Face GGUF; test a model that is known to support structured tools and one without tool-call support.
 - Benchmark runtime changes only with fixed prompts and recorded hardware/context/output/reasoning; preserve the loaded-model state and settings around each measurement.
 
-### P3 — Complete product parity after core stability
+### P3 — Remaining 1:1 product parity after core stability
 
 - Build a capability-based model/provider registry, including honest model tool-call probes and complete Hugging Face GGUF flow; retain the agreed Ollama and llama.cpp support and no implicit model load.
 - Implement per-tool/per-path permissions, policy explanation, persistent approval scopes where the user chooses them, and Windows sandbox enforcement for commands.
@@ -131,6 +141,8 @@ sequenceDiagram
 - Complete session lifecycle parity: rename, archive, export/import, fork/branch, search, move/rebind project safely, recover/migrate, and mirror conflict resolution.
 - Complete workspace lifecycle parity: project roots, worktrees and cleanup review, startup tasks, setup profiles, and isolated disposable runs; avoid destructive cleanup of unrelated work.
 - Finish app lifecycle and quality-of-life parity: keyboard navigation/commands, settings and permissions discovery, app setup/repair/update, diagnostics, local analytics, and the model-orbit popover and worksheet arrangement backlog.
+- Add the remaining cross-surface parity requirements: CLI/editor integration, history search/fork/archive/export/import, queued/steered and background runs, side conversations/goals, custom commands and automations, multimodal attachments/artifacts where supported, and remote environments where a safe local-first architecture can support them.
+- Audit the complete public feature surface of both products before release and repeat the mapping on upstream changes. Keep an explicit parity register with source links, implementation status, test evidence, local equivalent, and known incompatibility for each capability.
 
 ## Core acceptance gate
 
@@ -149,6 +161,11 @@ The app is core-ready only when the packaged visible path passes and no known P0
 - OpenAI Codex harness architecture (state, tools, events, approvals, sandbox, recovery): <https://developers.openai.com/blog/codex-as-a-platform>
 - Codex app-server protocol and command approval requests/reconnect behavior: <https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md>
 - Codex app workflow (worktrees, queued/steering messages, diff review, goals and history): <https://developers.openai.com/blog/mastering-codex-remote-for-engineering>
+- Codex managed harness capabilities (sessions, context compaction, skills, MCP, steering, delegation, resume): <https://developers.openai.com/api/docs/guides/agents-api/overview>
+- OpenCode TUI workflow, command palette, session controls, context compaction, export and model controls: <https://docs.opencode.ai/docs/tui/>
+- OpenCode configuration surface (custom commands, snapshots, formatters, LSP, plugins): <https://docs.opencode.ai/docs/config/>
+- OpenCode keybindings and keyboard navigation: <https://docs.opencode.ai/docs/keybinds/>
+- OpenCode LSP integration and diagnostics: <https://docs.opencode.ai/docs/lsp/>
 - OpenAI Agents API overview of sessions, turns, environments, events, MCP, tools, resume: <https://developers.openai.com/api/docs/guides/agents-api/overview>
 - Ollama structured tool calling: <https://docs.ollama.com/capabilities/tool-calling>
 - Ollama thinking capabilities and exact supported values: <https://docs.ollama.com/capabilities/thinking>

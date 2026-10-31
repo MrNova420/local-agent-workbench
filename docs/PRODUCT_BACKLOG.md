@@ -1,6 +1,6 @@
 # Product Backlog
 
-The active release focus is the core agent harness and full-project workflow described in [CORE_HARNESS_READINESS.md](CORE_HARNESS_READINESS.md). The visual and analytics items below remain queued until that core gate passes. Existing runtime and model-support requirements remain in [MODEL_RUNTIME_EXPANSION.md](MODEL_RUNTIME_EXPANSION.md).
+The product target is full 1:1 user-facing feature and workflow parity with Codex and OpenCode, as tracked in [CORE_HARNESS_READINESS.md](CORE_HARNESS_READINESS.md). The current implementation sequence starts with stabilizing the core agent harness and full-project workflow; deferred parity items remain required for the overall target and must not be treated as dropped scope. The visual and analytics items below remain queued until the core gate passes. Existing runtime and model-support requirements remain in [MODEL_RUNTIME_EXPANSION.md](MODEL_RUNTIME_EXPANSION.md).
 
 ## Queued for review and implementation
 
