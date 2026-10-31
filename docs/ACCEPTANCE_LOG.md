@@ -1,5 +1,12 @@
 # Visible Acceptance Log
 
+## Source/package checks — 2026-10-31
+
+- Engine suite after explicit build-task continuation and small-model workflow: 114 passed, one upstream Starlette `python_multipart` deprecation warning.
+- Electron renderer: 42 Vitest passed; sidecar adapter: 35 pytest passed with the same upstream warning; TypeScript typecheck passed.
+- Built isolated package `out-core-acceptance-2026-10-31-small-model-cache` from the current app and engine source. The bundled worker answered JSONL `ping` with `ready` / version `0.1.0`.
+- The existing older app instance was left open, so this package was not launched for visual acceptance. The new Home button, profile persistence, plan-to-tool continuation, and cache display still need a visible test in one app instance.
+
 Date: 2026-10-30  
 Build: Windows x64 Electron Forge package and Squirrel installer  
 Workspace: `work/acceptance-empty` (disposable)  

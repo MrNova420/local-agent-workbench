@@ -70,7 +70,7 @@ Design the local-retention and export controls first. Record provider-exact coun
 
 ### B-009: Core small-model workflow reliability and measured runtime optimization
 
-**Source status:** workflow-profile, plan-to-tool continuation, and provider cache telemetry are implemented in source and automated tests pass. The current Electron package has not yet been rebuilt or visibly accepted with these exact changes.
+**Source status:** workflow-profile, plan-to-tool continuation, and provider cache telemetry are implemented in source and automated tests pass. A fresh isolated Electron package now contains the updated sidecar and returns a successful JSONL `ping`; full visible interaction acceptance remains open.
 
 - The Small-model workflow is an explicit setting, captured in run settings/session history. It instructs the agent to work in short sequential tool operations and inspect results. Standard remains available. Neither profile changes model/runtime, context, output cap, reasoning, temperature, approvals, or access.
 - An explicit implementation request that returns only a plan/progress note can receive one follow-up model call requesting structured tool use. Plan-only/read-only work is excluded, and normal approvals still gate actions. Validate for false positives and avoid claiming completion when the follow-up reports a blocker.
