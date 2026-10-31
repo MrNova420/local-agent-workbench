@@ -34,6 +34,7 @@ def test_ollama_jsonl_stream_preserves_requested_context_and_model_reasoning_def
 
     payload = json.loads(open_url.call_args.args[0].data)
     assert payload["options"]["num_ctx"] == 262144
+    assert payload["options"]["num_predict"] == 1024
     assert payload["keep_alive"] == "30m"
     assert "think" not in payload and "reasoning_effort" not in payload
     assert result["message"]["content"] == "hello"
