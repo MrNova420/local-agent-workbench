@@ -27,6 +27,7 @@ def service(tmp_path, monkeypatch):
     monkeypatch.setattr(worker, "APP_DATA", tmp_path / "appdata")
     result = worker.AgentService()
     result.runtime = FakeRuntime()
+    result.providers.by_id("ollama").client = result.runtime
     return result
 
 
@@ -36,6 +37,7 @@ def test_dynamic_models_and_full_advertised_context(service):
     assert info == {
         "model": "model-a:latest", "context": 262144, "max_output_tokens": None,
         "reasoning": {"support": "unknown", "default": None, "values": []},
+        "provider": "ollama", "context_limit_known": True,
     }
 
 
@@ -48,6 +50,21 @@ def test_model_info_exposes_exact_ollama_reasoning_values(service):
     assert result["reasoning"] == {
         "support": "levels", "default": "medium", "values": ["low", "medium", "high", False],
     }
+
+
+def test_gguf_registration_is_stable_and_uses_unknown_training_context(service, tmp_path):
+    model = tmp_path / "model.gguf"
+    model.write_bytes(b"fixture")
+    registered = service.handle("gguf_register", {"path": str(model)})
+    again = service.handle("gguf_register", {"path": str(model)})
+    assert registered == again
+    assert registered["id"].startswith("gguf::")
+    assert service.handle("models", {})[-1] == registered["id"]
+    info = service.handle("model_info", {"model": registered["id"]})
+    assert info["context"] is None
+    assert info["context_limit_known"] is False
+    assert info["provider"] == "llama.cpp"
+    assert info["reasoning"]["values"] == [False, True, "minimal", "low", "medium", "high", "xhigh", "max"]
 
 
 def test_sessions_are_filtered_by_exact_project_root(service, tmp_path):

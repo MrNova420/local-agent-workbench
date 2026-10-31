@@ -44,3 +44,14 @@ A second visible check using the rebuilt package confirmed the final sidecar eve
 - The visible run verified chat, approvals, file changes, test command/output, cancellation, session recovery, full context, and live generation measurements.
 - MCP discovery/calls have mocked coverage only; no real stdio server was exercised in this acceptance run.
 - Resource figures are point observations, not peak measurements. A longer coding benchmark with RAM/VRAM sampling is still needed before making performance or peak-memory claims.
+
+## 2026-10-31 provider-expansion implementation checkpoint
+
+- App `npm run typecheck` passed.
+- App `npm test` passed: 12 Vitest tests and 20 sidecar tests. One third-party Starlette `multipart` pending-deprecation warning remains.
+- Existing engine `python -m pytest -q` passed: 82 tests. The same third-party warning remains.
+- New automated coverage exercises provider identity/routing, Hub search and pinned file downloads, credential-safe redirects/path traversal rejection, llama.cpp streaming/tool deltas and usage, exact context/output settings, external server ownership protection, and session-provider migration.
+- Windows x64 package/installer build is in progress. No packaged visual workflow for the new model library or GGUF path has been accepted yet. No Hugging Face model was downloaded, no llama.cpp binary was installed or selected, and no GGUF was loaded during these automated checks.
+- The earlier visible Ollama acceptance above is historical evidence for the previous app build and does not establish the expanded provider workflow.
+- Updated Windows x64 package build: `npx electron-forge make` with `LOCAL_AGENT_OUT_DIR=out-acceptance` completed successfully. It produced the packaged app, Squirrel distributable, and ZIP without touching the older running app in `out/`. The first attempt using default `out/` correctly failed with `EBUSY` because that older instance held the resources directory open.
+- The installed endpoint check to `127.0.0.1:11434/api/ps` timed out; the current Ollama process/API state could not be verified from this session. No inference was started by the new package.

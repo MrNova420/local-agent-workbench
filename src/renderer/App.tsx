@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
-import type { AccessMode, ApprovalMode, ModelInfo, ProjectFile, RunOptions, SessionSummary, WorkerCommand, WorkerEvent } from '../shared/protocol';
+import type { AccessMode, ApprovalMode, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, WorkerCommand, WorkerEvent } from '../shared/protocol';
 import { nextRunPhase } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordStreamedText, type RunMetrics } from '../shared/run-metrics';
 import { buildTokenPresets, normalizeReasoningChoice } from '../shared/model-controls';
@@ -12,6 +12,8 @@ type Session = {
   session_id: string;
   workspace: string;
   model: string;
+  provider_id?: 'ollama' | 'llama.cpp';
+  model_id?: string;
   context: number;
   messages: Array<{ role: string; content?: string; thinking?: string; tool_calls?: unknown[] }>;
   access?: AccessMode;
@@ -28,7 +30,6 @@ type Approval = { actionId: string; name: string; arguments: unknown; workspace:
 type Notice = { tone: 'good' | 'warn' | 'bad'; text: string };
 type AppliedSettings = { model: string; context: number; maxOutput: number; reasoning: boolean | string | null };
 
-const DEFAULT_MODEL = 'hf.co/mradermacher/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M';
 const initialOptions = {
   context: 8192,
   maxTokens: 4096,
@@ -79,6 +80,7 @@ function Markdown({ content }: { content: string }) {
 
 export default function App() {
   const [models, setModels] = useState<string[]>([]);
+  const [modelLabels, setModelLabels] = useState<Record<string, string>>({});
   const [model, setModel] = useState('');
   const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null);
   const [workspace, setWorkspace] = useState(localStorage.getItem('agent-workspace') || '');
@@ -105,6 +107,8 @@ export default function App() {
   const [approval, setApproval] = useState<Approval | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mcpOpen, setMcpOpen] = useState(false);
+  const [modelLibraryOpen, setModelLibraryOpen] = useState(false);
+  const [downloadedModelDirectory, setDownloadedModelDirectory] = useState('');
   const [diffOpen, setDiffOpen] = useState(false);
   const [mcpJson, setMcpJson] = useState('{"mcpServers":{}}');
   const [options, setOptions] = useState(initialOptions);
@@ -125,11 +129,14 @@ export default function App() {
   const refreshModels = useCallback(async () => {
     setConnected('checking');
     try {
-      const rows = await request<string[]>({ command: 'models' });
+      const catalog = await request<ModelCatalog>({ command: 'model_catalog' });
+      const rows = [...catalog.ollama, ...catalog.gguf.map((entry) => entry.id)];
       setModels(rows);
-      setConnected('yes');
-      setModel((current) => current && rows.includes(current) ? current : rows.includes(DEFAULT_MODEL) ? DEFAULT_MODEL : rows[0] || '');
-      if (!rows.length) notify('Ollama is connected, but no models are installed.', 'warn');
+      setModelLabels(Object.fromEntries(catalog.gguf.map((entry) => [entry.id, entry.label])));
+      setConnected(catalog.ollama_error ? 'no' : 'yes');
+      setModel((current) => current && rows.includes(current) ? current : rows[0] || '');
+      if (catalog.ollama_error && !catalog.gguf.length) notify(`Ollama is not reachable: ${catalog.ollama_error}`, 'bad');
+      else if (!catalog.ollama_error && !rows.length) notify('Ollama is connected, but no models are installed.', 'warn');
     } catch (error) {
       setConnected('no');
       setModels([]);
@@ -164,6 +171,7 @@ export default function App() {
     try {
       const loaded = await request<Session>({ command: 'session_resume', sessionId: id });
       const root = loaded.workspace;
+      setModel(loaded.model);
       const rows: ChatMessage[] = loaded.messages.filter((row) => (row.role === 'user' || row.role === 'assistant') && row.content)
         .map((row) => ({ role: row.role as ChatMessage['role'], content: row.content || '', thinking: typeof row.thinking === 'string' ? row.thinking : undefined }));
       setWorkspace(root);
@@ -176,7 +184,7 @@ export default function App() {
         temperature: loaded.temperature ?? 0.2,
         keepAlive: loaded.keep_alive || '30m',
         access: loaded.access || 'ask',
-        approvalMode: loaded.approval_mode || 'per-action',
+        approvalMode: loaded.approval_mode === 'per-task' ? 'per-task' : 'per-action',
         reasoning: loaded.reasoning ?? null,
       });
       setContextTouched(true);
@@ -196,6 +204,18 @@ export default function App() {
         notify(String(event.error || 'Agent service stopped.'), 'bad');
       }
       if (event.type === 'service_log') console.info('[agent service]', event.text);
+      if (event.type === 'model_registered') {
+        setModelLabels((current) => ({ ...current, [String(event.model)]: String(event.label || shortModel(String(event.model))) }));
+        setModel(String(event.model));
+        void refreshModels();
+      }
+      if (event.type === 'hf_download_job_complete') { setDownloadedModelDirectory(String(event.directory || '')); notify('Selected Hugging Face files were downloaded at the pinned revision.', 'good'); void refreshModels(); }
+      if (event.type === 'hf_download_error' || event.type === 'llama_error' || event.type === 'ollama_import_error') notify(String(event.error || 'Model operation failed.'), 'bad');
+      if (event.type === 'llama_loading') notify(`Loading ${shortModel(String(event.model))} with ${fmt(Number(event.context))} context. The app owns this runtime process.`, 'warn');
+      if (event.type === 'llama_ready') notify(`GGUF server ready · ${fmt(Number(event.effective_context ?? event.context))} ${event.effective_context == null ? 'configured' : 'effective'} context.`, 'good');
+      if (event.type === 'llama_load_cancelled' || event.type === 'hf_download_cancelled') notify('Model operation cancelled.', 'warn');
+      if (event.type === 'ollama_import_complete') { notify(`Safetensors import complete: ${String(event.name)}.`, 'good'); void refreshModels(); }
+      if (event.type === 'ollama_import_cancelled') notify('Safetensors import cancelled.', 'warn');
       if (event.type === 'phase') {
         setPhase((current) => nextRunPhase(current, event));
         if (event.phase === 'generating') setRunMetrics((current) => beginGeneration(recordFirstToken(current, event.elapsed)));
@@ -241,24 +261,29 @@ export default function App() {
       if (event.type === 'generation_usage') setRunMetrics((current) => addGenerationUsage(current, event.usage));
       if (event.type === 'inference_settings') setAppliedSettings({ model: String(event.model), context: Number(event.requested_context), maxOutput: Number(event.max_output_tokens), reasoning: event.reasoning_override == null ? null : event.reasoning_override as boolean | string });
       if (event.type === 'complete') {
+        setApproval(null);
         setRunning(false); setPhase((current) => nextRunPhase(current, event));
         setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
         setRunMetrics((current) => endGeneration(current));
         setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
       }
       if (event.type === 'cancelled') {
-        setRunning(false); setPhase((current) => nextRunPhase(current, event)); setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
+        setApproval(null); setRunning(false); setPhase((current) => nextRunPhase(current, event)); setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
         setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
         setRunMetrics((current) => endGeneration(current));
-        notify('This request was cancelled. Ollama and the model were left alone.', 'warn');
+        notify('This request was cancelled. Runtime processes and model state were left alone.', 'warn');
       }
       if (event.type === 'error') {
+        setApproval(null);
         setRunning(false); setPhase((current) => nextRunPhase(current, event)); setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
         setRunMetrics((current) => endGeneration(current));
+        setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
         notify(String(event.error || 'The task failed.'), 'bad');
       }
       if (event.type === 'run_idle') {
+        setApproval(null);
         setRunning(false);
+        setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
         setRunMetrics((current) => endGeneration(current));
         setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
         setPhase((current) => nextRunPhase(current, event));
@@ -268,7 +293,7 @@ export default function App() {
       if (event.type === 'context_limit') notify(String(event.error), 'bad');
     });
     return unsubscribe;
-  }, [notify, request, workspace]);
+  }, [notify, refreshModels, request, workspace]);
 
   useEffect(() => {
     const onShortcut = (event: KeyboardEvent) => {
@@ -293,7 +318,7 @@ export default function App() {
     void request<ModelInfo>({ command: 'model_info', model }).then((value) => {
       if (!current) return;
       setModelInfo(value);
-      if (!contextTouched && !session && !settingsTouched) setOptions((old) => ({ ...old, context: value.context }));
+      if (!contextTouched && !session && !settingsTouched && value.context !== null) setOptions((old) => ({ ...old, context: value.context! }));
     }).catch(() => { if (current) setModelInfo(null); });
     return () => { current = false; };
   }, [contextTouched, model, request, session, settingsTouched]);
@@ -320,13 +345,16 @@ export default function App() {
   const telemetry = useMemo(() => {
     const loaded = Array.isArray(snapshot.loaded) ? snapshot.loaded as Array<Record<string, unknown>> : [];
     const active = loaded.find((row) => row.name === model);
+    const llama = snapshot.llama && typeof snapshot.llama === 'object' ? snapshot.llama as Record<string, unknown> : {};
+    const llamaMatches = model.startsWith('gguf::') && llama.running === true && String(llama.model || '') === model.slice('gguf::'.length);
+    const llamaContext = llamaMatches && typeof llama.effective_context === 'number' ? llama.effective_context : null;
     return {
       cpu: typeof snapshot.cpu_percent === 'number' ? Math.round(snapshot.cpu_percent) : null,
       ram: typeof snapshot.ram_total_bytes === 'number' && typeof snapshot.ram_available_bytes === 'number'
         ? `${((snapshot.ram_total_bytes - snapshot.ram_available_bytes) / 1024 ** 3).toFixed(1)} / ${(snapshot.ram_total_bytes / 1024 ** 3).toFixed(0)} GB` : '—',
       gpu: typeof snapshot.gpu === 'string' ? snapshot.gpu.split(',')[0].trim() : 'GPU status unavailable',
-      loadedContext: active && typeof active.context_length === 'number' ? active.context_length : null,
-      contextMismatch: Boolean(active && typeof active.context_length === 'number' && active.context_length < options.context),
+      loadedContext: llamaMatches ? llamaContext : active && typeof active.context_length === 'number' ? active.context_length : null,
+      contextMismatch: Boolean((llamaMatches && llamaContext !== null && llamaContext < options.context) || (active && typeof active.context_length === 'number' && active.context_length < options.context)),
       serviceRss: typeof snapshot.service_rss_bytes === 'number' ? `${(snapshot.service_rss_bytes / 1024 ** 3).toFixed(2)} GB` : '—',
       serviceCpu: typeof snapshot.service_cpu_percent === 'number' ? Math.round(snapshot.service_cpu_percent) : null,
     };
@@ -340,10 +368,10 @@ export default function App() {
   async function newSession() {
     if (!workspace) { await chooseWorkspace(); return; }
     try {
-      const selectedModel = model || DEFAULT_MODEL;
-      const configuredContext = !contextTouched && !settingsTouched
-        ? (await request<ModelInfo>({ command: 'model_info', model: selectedModel })).context
-        : options.context;
+      const selectedModel = model;
+      if (!selectedModel) { notify('Add or install a local model from Model Library before starting a session.', 'warn'); setModelLibraryOpen(true); return; }
+      const selectedInfo = await request<ModelInfo>({ command: 'model_info', model: selectedModel });
+      const configuredContext = !contextTouched && !settingsTouched ? selectedInfo.context ?? options.context : options.context;
       const created = await request<Session>({ command: 'session_new', workspace, model: selectedModel, context: configuredContext });
       setSession(created); setMessages([]); setTrace([]); setPlan([]); setPrompt(''); setElapsed(0); setPhase('Ready'); setView('session');
       setRunMetrics(emptyRunMetrics());
@@ -355,9 +383,19 @@ export default function App() {
 
   async function startRun() {
     if (running || !session || !workspace || !model || !prompt.trim()) return;
+    if (model.startsWith('gguf::')) {
+      try {
+        const status = await request<Record<string, unknown>>({ command: 'llama_status' });
+        if (status.running !== true || status.model !== model.slice('gguf::'.length) || status.context !== options.context || status.reasoning !== options.reasoning) {
+          setModelLibraryOpen(true);
+          notify('Load the selected GGUF with these context and reasoning settings before starting the task.', 'warn');
+          return;
+        }
+      } catch (error) { notify(`Could not verify llama.cpp runtime: ${(error as Error).message}`, 'bad'); return; }
+    }
     const task = prompt.trim();
     const run: RunOptions = {
-      workspace, sessionId: session.session_id, prompt: task, model,
+      workspace, sessionId: session.session_id, prompt: task, model, providerId: model.startsWith('gguf::') ? 'llama.cpp' : 'ollama',
       context: options.context, maxTokens: options.maxTokens, temperature: options.temperature,
       access: options.access, approvalMode: options.approvalMode, keepAlive: options.keepAlive,
       reasoning: normalizeReasoningChoice(options.reasoning, modelInfo?.reasoning ?? null),
@@ -422,7 +460,7 @@ export default function App() {
     }
     setSettingsOpen(false);
     if (session) {
-      setSession({ ...session, model, context: options.context, access: options.access, approval_mode: options.approvalMode, reasoning: options.reasoning, max_tokens: options.maxTokens, temperature: options.temperature, keep_alive: options.keepAlive });
+      setSession({ ...session, model, model_id: model, provider_id: model.startsWith('gguf::') ? 'llama.cpp' : 'ollama', context: options.context, access: options.access, approval_mode: options.approvalMode === 'auto' ? 'per-action' : options.approvalMode, reasoning: options.reasoning, max_tokens: options.maxTokens, temperature: options.temperature, keep_alive: options.keepAlive });
     }
   }
 
@@ -446,18 +484,20 @@ export default function App() {
       <div className="model-control no-drag">
         <span className="model-glyph"><Icon name="spark"/></span>
         <label><small>LOCAL MODEL</small><select value={model} onChange={(e) => { setModel(e.target.value); setContextTouched(false); setSettingsTouched(false); }} disabled={running}>
-          {!models.length && <option value="">Waiting for Ollama</option>}{models.map((name) => <option value={name} key={name}>{name}</option>)}
+          {!models.length && <option value="">No local models</option>}{models.map((name) => <option value={name} key={name}>{modelLabels[name] || shortModel(name)}</option>)}
         </select></label>
       </div>
-      <div className={`connection-pill no-drag ${connected}`}><span className="connection-light"/>{connected === 'yes' ? 'OLLAMA READY' : connected === 'no' ? 'OLLAMA OFFLINE' : 'CHECKING'}</div>
+      <div className={`connection-pill no-drag ${model.startsWith('gguf::') ? (snapshot.llama && (snapshot.llama as Record<string, unknown>).running ? 'yes' : 'no') : connected}`}><span className="connection-light"/>{model.startsWith('gguf::') ? snapshot.llama && (snapshot.llama as Record<string, unknown>).running ? 'GGUF LOADED' : 'GGUF NOT LOADED' : connected === 'yes' ? 'OLLAMA READY' : connected === 'no' ? 'OLLAMA OFFLINE' : 'CHECKING'}</div>
+      <Button kind="quiet" className="top-settings no-drag" onClick={() => setModelLibraryOpen(true)}>Model library</Button>
       <Button kind="quiet" className="top-settings no-drag" onClick={() => setSettingsOpen(true)}>Settings <span className="keycap">CTRL ,</span></Button>
     </header>
 
     <main className="main-stage">
       {view === 'landing' && <Landing
-        workspace={workspace} sessions={sessions} models={models} model={model} context={options.context}
+        workspace={workspace} sessions={sessions} models={models} modelLabels={modelLabels} model={model} context={options.context}
         connected={connected} telemetry={telemetry} onChoose={chooseWorkspace} onOpen={showProject}
         onResume={loadSession} onModel={(name) => { setModel(name); setContextTouched(false); setSettingsTouched(false); }} onRefresh={() => { void refreshModels(); }}
+        onLibrary={() => setModelLibraryOpen(true)}
       />}
       {view === 'project' && <ProjectHome
         root={workspace} tab={projectTab} setTab={setProjectTab} files={availableFiles} sessions={currentSessions}
@@ -480,7 +520,8 @@ export default function App() {
     </footer>
 
     {notice && <div className={`toast toast-${notice.tone}`} role="status"><span>{notice.text}</span><button onClick={() => setNotice(null)}><Icon name="close"/></button></div>}
-    {settingsOpen && <SettingsModal model={model} modelInfo={modelInfo} options={options} setOptions={setOptions} onClose={() => setSettingsOpen(false)} onSave={saveSettings} onMcp={openMcp} />}
+    {settingsOpen && <SettingsModal model={model} modelLabel={modelLabels[model] || shortModel(model)} modelInfo={modelInfo} options={options} setOptions={setOptions} onClose={() => setSettingsOpen(false)} onSave={saveSettings} onMcp={openMcp} />}
+    {modelLibraryOpen && <ModelLibraryModal model={model} models={models} modelLabels={modelLabels} context={options.context} reasoning={options.reasoning} downloadedDirectory={downloadedModelDirectory} onModel={setModel} onRefresh={refreshModels} onClose={() => setModelLibraryOpen(false)} notify={notify}/>}
     {mcpOpen && <Modal title="Local MCP connections" eyebrow="TOOL BRIDGE" onClose={() => setMcpOpen(false)}>
       <p className="modal-copy">Each server starts as a local stdio process. Add only commands you trust. Tool calls require approval.</p>
       <textarea className="code-editor mcp-editor" value={mcpJson} onChange={(e) => setMcpJson(e.target.value)} spellCheck={false}/>
@@ -500,10 +541,10 @@ export default function App() {
   </div>;
 }
 
-function Landing({ workspace, sessions, models, model, context, connected, telemetry, onChoose, onOpen, onResume, onModel, onRefresh }: {
-  workspace: string; sessions: SessionSummary[]; models: string[]; model: string; context: number; connected: string;
+function Landing({ workspace, sessions, models, modelLabels, model, context, connected, telemetry, onChoose, onOpen, onResume, onModel, onRefresh, onLibrary }: {
+  workspace: string; sessions: SessionSummary[]; models: string[]; modelLabels: Record<string, string>; model: string; context: number; connected: string;
   telemetry: { cpu: number | null; ram: string; gpu: string; serviceRss: string; serviceCpu: number | null };
-  onChoose: () => void; onOpen: (root: string) => void; onResume: (id: string) => void; onModel: (name: string) => void; onRefresh: () => void;
+  onChoose: () => void; onOpen: (root: string) => void; onResume: (id: string) => void; onModel: (name: string) => void; onRefresh: () => void; onLibrary: () => void;
 }) {
   const recentProjects = useMemo(() => [...new Set([workspace, ...sessions.map((row) => row.workspace)].filter(Boolean))].slice(0, 4), [sessions, workspace]);
   return <section className="landing-view">
@@ -517,7 +558,7 @@ function Landing({ workspace, sessions, models, model, context, connected, telem
       </div>
       <div className="landing-visual" aria-hidden="true">
         <div className="visual-orbit orbit-a"/><div className="visual-orbit orbit-b"/><div className="visual-orbit orbit-c"/>
-        <div className="visual-core"><span>LOCAL</span><strong>9B</strong><small>WORKS IN YOUR SPACE</small></div>
+        <div className="visual-core"><span>LOCAL</span><strong>AI</strong><small>WORKS IN YOUR SPACE</small></div>
         <div className="orbit-label label-tl"><i/> PRIVATE BY DEFAULT</div><div className="orbit-label label-br"><i/> NO REMOTE ROUTING</div>
         <div className="visual-coordinate">[LOCATION REMOVED]<br/>[LOCATION REMOVED]</div>
       </div>
@@ -529,7 +570,8 @@ function Landing({ workspace, sessions, models, model, context, connected, telem
       </div>
       <div className="landing-column engine-column">
         <div className="section-heading"><div><span className="section-number">02</span><h2>Inference source</h2></div><span className={`source-status ${connected}`}>{connected === 'yes' ? 'REACHABLE' : connected === 'no' ? 'OFFLINE' : 'CHECKING'}</span></div>
-        <label className="model-picker-card"><span className="picker-symbol"><Icon name="spark"/></span><span className="picker-content"><small>OLLAMA MODEL</small><select value={model} onChange={(e) => onModel(e.target.value)}>{!models.length && <option value="">No installed models</option>}{models.map((name) => <option key={name}>{name}</option>)}</select><span>Model reasoning stays at its own default.</span></span><Icon name="chevron"/></label>
+        <label className="model-picker-card"><span className="picker-symbol"><Icon name="spark"/></span><span className="picker-content"><small>LOCAL MODEL</small><select value={model} onChange={(e) => onModel(e.target.value)}>{!models.length && <option value="">No installed models</option>}{models.map((name) => <option key={name} value={name}>{modelLabels[name] || shortModel(name)}</option>)}</select><span>Choose Ollama models or add Hugging Face GGUF files.</span></span><Icon name="chevron"/></label>
+        <Button kind="outline" onClick={onLibrary}>Browse Hugging Face / add local models</Button>
         <div className="engine-foot"><span><Icon name="cpu"/> {telemetry.serviceCpu == null ? 'SERVICE READY' : `SERVICE ${telemetry.serviceCpu}% CPU`}</span><span><Icon name="memory"/> {telemetry.serviceRss} SIDECAR</span><span>{sessions.length} SAVED SESSIONS</span></div>
       </div>
     </div>
@@ -607,27 +649,159 @@ function SessionRoom({ root, session, messages, trace, plan, phase, elapsed, run
   </section>;
 }
 
-function shortModel(value: string) { return value.split('/').at(-1) || value || 'No model selected'; }
+type HubModel = { repo: string; revision: string; downloads: number; likes: number; gated: boolean };
+type HubFile = { path: string; format: string; size: number | null; is_lfs: boolean; revision: string };
+
+function ModelLibraryModal({ model, models, modelLabels, context, reasoning, downloadedDirectory, onModel, onRefresh, onClose, notify }: {
+  model: string; models: string[]; modelLabels: Record<string, string>; context: number; reasoning: boolean | string | null;
+  downloadedDirectory: string; onModel: (value: string) => void; onRefresh: () => Promise<void>; onClose: () => void;
+  notify: (text: string, tone?: Notice['tone']) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<HubModel[]>([]);
+  const [repo, setRepo] = useState<HubModel | null>(null);
+  const [files, setFiles] = useState<HubFile[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [configuredBinary, setConfiguredBinary] = useState('');
+  const [runtime, setRuntime] = useState<Record<string, unknown>>({});
+  const [downloadText, setDownloadText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [operation, setOperation] = useState<'idle' | 'search' | 'files' | 'download' | 'load' | 'import'>('idle');
+  const [safetensorsName, setSafetensorsName] = useState('imported-hf-model');
+
+  useEffect(() => {
+    void window.agent.request<Record<string, unknown>>({ command: 'llama_status' }).then((value) => {
+      setRuntime(value);
+      setConfiguredBinary(String(value.configured_binary || ''));
+    }).catch((error) => notify(`Could not read llama.cpp status: ${(error as Error).message}`, 'warn'));
+    const unsubscribe = window.agent.onEvent((event) => {
+      if (event.type === 'hf_download_progress') {
+        const size = (value: unknown) => typeof value === 'number' ? `${(value / 1024 ** 2).toFixed(1)} MB` : 'unknown size';
+        setDownloadText(`${String(event.file)} · ${size(event.received_bytes)} / ${size(event.total_bytes)}`);
+      }
+      if (event.type === 'llama_ready') { setRuntime((value) => ({ ...value, running: true, model: event.model, context: event.context, effective_context: event.effective_context, owned: event.owned, reasoning: event.reasoning })); setBusy(false); setOperation('idle'); }
+      if (event.type === 'llama_error' || event.type === 'hf_download_error' || event.type === 'ollama_import_error' || event.type === 'llama_load_cancelled' || event.type === 'hf_download_cancelled' || event.type === 'ollama_import_cancelled') { setBusy(false); setOperation('idle'); }
+      if (event.type === 'hf_download_job_complete' || event.type === 'ollama_import_complete') { setBusy(false); setOperation('idle'); }
+    });
+    return unsubscribe;
+  }, [notify]);
+
+  async function searchHub() {
+    if (!query.trim()) return;
+    setBusy(true); setOperation('search'); setResults([]); setRepo(null); setFiles([]); setDownloadText('Searching the Hub…');
+    try { setResults(await window.agent.request<HubModel[]>({ command: 'hf_search', query })); setDownloadText(''); }
+    catch (error) { notify(`Hugging Face search failed: ${(error as Error).message}`, 'bad'); setDownloadText('Search failed.'); }
+    finally { setBusy(false); setOperation('idle'); }
+  }
+
+  async function inspectRepo(row: HubModel) {
+    setRepo(row); setBusy(true); setOperation('files'); setFiles([]); setSelectedFiles([]); setDownloadText(`Inspecting ${row.repo} at ${row.revision.slice(0, 10)}…`);
+    try {
+      const rows = await window.agent.request<HubFile[]>({ command: 'hf_repo_files', repo: row.repo, revision: row.revision });
+      setFiles(rows);
+      const gguf = rows.filter((file) => file.format === 'gguf');
+      const tensors = rows.filter((file) => file.format === 'safetensors');
+      const support = rows.filter((file) => file.format === 'other' && /^(config\.json|generation_config\.json|tokenizer.*|special_tokens_map\.json|added_tokens\.json)$/i.test(file.path.split('/').at(-1) || ''));
+      setSelectedFiles(gguf.length ? [gguf[0].path] : [...tensors, ...support].map((file) => file.path));
+      setDownloadText('');
+    } catch (error) { notify(`Could not inspect repository: ${(error as Error).message}`, 'bad'); setDownloadText('Repository inspection failed.'); }
+    finally { setBusy(false); setOperation('idle'); }
+  }
+
+  async function addLocalGguf() {
+    const path = await window.agent.chooseModelFile();
+    if (!path) return;
+    try {
+      const record = await window.agent.request<{ id: string }>({ command: 'gguf_register', path, source: { kind: 'local' } });
+      onModel(record.id); await onRefresh(); notify('Local GGUF added to the model library.');
+    } catch (error) { notify(`Could not add GGUF: ${(error as Error).message}`, 'bad'); }
+  }
+
+  async function chooseServer() {
+    const path = await window.agent.chooseLlamaBinary();
+    if (!path) return;
+    try {
+      const saved = await window.agent.request<{ binary: string }>({ command: 'llama_binary_set', path });
+      setConfiguredBinary(saved.binary); notify('llama.cpp server executable saved.');
+    } catch (error) { notify(`Could not configure llama.cpp: ${(error as Error).message}`, 'bad'); }
+  }
+
+  async function downloadFiles() {
+    if (!repo || !selectedFiles.length) return;
+    setBusy(true); setOperation('download'); setDownloadText('Starting selected downloads…');
+    try {
+      await window.agent.request({ command: 'hf_download_start', repo: repo.repo, revision: repo.revision, files: selectedFiles });
+      setDownloadText(`Downloading ${selectedFiles.length} selected file(s)…`);
+    } catch (error) { setBusy(false); setOperation('idle'); notify(`Could not start download: ${(error as Error).message}`, 'bad'); }
+  }
+
+  async function loadSelectedGguf() {
+    if (!model.startsWith('gguf::')) return;
+    if (!configuredBinary) {
+      const path = await window.agent.chooseLlamaBinary();
+      if (!path) return;
+      try { const saved = await window.agent.request<{ binary: string }>({ command: 'llama_binary_set', path }); setConfiguredBinary(saved.binary); }
+      catch (error) { notify(`Could not configure llama.cpp: ${(error as Error).message}`, 'bad'); return; }
+    }
+    setBusy(true); setOperation('load'); setDownloadText(`Loading model with ${fmt(context)} context…`);
+    try {
+      await window.agent.request({ command: 'llama_model_load', model, context, reasoning });
+    } catch (error) { setBusy(false); setOperation('idle'); notify(`Could not load GGUF: ${(error as Error).message}`, 'bad'); }
+  }
+
+  async function addSafetensorsToOllama() {
+    let directory = downloadedDirectory;
+    if (!directory) directory = await window.agent.chooseModelDirectory() || '';
+    if (!directory) return;
+    setBusy(true); setOperation('import'); setDownloadText(`Importing ${safetensorsName} into Ollama…`);
+    try { await window.agent.request({ command: 'ollama_safetensors_import', directory, name: safetensorsName }); }
+    catch (error) { setBusy(false); setOperation('idle'); notify(`Could not start Safetensors import: ${(error as Error).message}`, 'bad'); }
+  }
+
+  async function cancelOperation() {
+    const command = operation === 'download' ? 'hf_download_cancel' : operation === 'load' ? 'llama_model_cancel' : operation === 'import' ? 'ollama_import_cancel' : null;
+    if (!command) return;
+    try { await window.agent.request({ command }); setDownloadText('Cancelling operation…'); }
+    catch (error) { notify(`Could not cancel operation: ${(error as Error).message}`, 'bad'); }
+  }
+
+  const selectedBytes = files.filter((file) => selectedFiles.includes(file.path)).reduce((total, file) => total + (file.size || 0), 0);
+  const isGguf = model.startsWith('gguf::');
+  const runtimeRunning = runtime.running === true && runtime.model === model;
+  return <Modal title="Model library" eyebrow="LOCAL RUNTIMES / HUGGING FACE" wide onClose={onClose}>
+    <p className="modal-copy">Ollama models stay available as installed. Search Hugging Face, pin a revision, and download only the files you select. GGUF inference uses an explicitly configured llama.cpp server; the app never loads a model on launch.</p>
+    <div className="library-runtime-card"><div><small>LLAMA.CPP SERVER</small><strong>{configuredBinary ? configuredBinary.split(/[\\/]/).at(-1) : 'Not configured'}</strong><span>{runtimeRunning ? `APP-OWNED · ${fmt(Number(runtime.effective_context ?? runtime.context))} ${runtime.effective_context == null ? 'configured' : 'effective'} context` : 'No app-owned GGUF server active'}</span></div><Button kind="outline" onClick={() => void chooseServer()}>{configuredBinary ? 'Change executable' : 'Choose executable'}</Button></div>
+    <div className="library-toolbar"><Button kind="outline" onClick={() => void addLocalGguf()}>Add local GGUF</Button><Button kind="outline" onClick={() => void onRefresh()}>Refresh installed models</Button>{isGguf && <><Button kind="bright" disabled={busy} onClick={() => void loadSelectedGguf()}>{runtimeRunning ? 'Reload selected settings' : 'Load selected GGUF'}</Button>{runtimeRunning && <Button kind="danger" onClick={() => void window.agent.request({ command: 'llama_model_stop' }).then(() => { setRuntime((value) => ({ ...value, running: false })); notify('Stopped the app-owned llama.cpp server.'); })}>Stop app-owned model</Button>}</>}</div>
+    <div className="library-current"><span>SELECTED MODEL</span><code>{modelLabels[model] || shortModel(model)}</code><span>Context {fmt(context)} · reasoning {reasoning == null ? 'default' : String(reasoning)}</span></div>
+    <div className="settings-fields select-fields"><label className="settings-field"><span>Hugging Face model search</span><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void searchHub(); }} placeholder="Search model names or authors"/></label><div className="settings-field library-search-action"><span>Public and gated repositories</span><Button kind="bright" disabled={busy || !query.trim()} onClick={() => void searchHub()}>Search Hugging Face</Button></div></div>
+    {results.length > 0 && <div className="library-columns"><div className="library-results">{results.map((row) => <button className={`library-result ${repo?.repo === row.repo ? 'selected' : ''}`} key={row.repo} onClick={() => void inspectRepo(row)}><strong>{row.repo}</strong><small>{fmt(row.downloads)} downloads · {row.gated ? 'gated' : 'public'} · {row.revision.slice(0, 10)}</small></button>)}</div>{repo && <div className="library-files"><div className="library-files-heading"><strong>{repo.repo}</strong><small>Revision {repo.revision}</small></div>{files.map((file) => <label className="library-file" key={file.path}><input type="checkbox" checked={selectedFiles.includes(file.path)} onChange={(event) => setSelectedFiles((current) => event.target.checked ? [...current, file.path] : current.filter((name) => name !== file.path))}/><span><b>{file.path}</b><small>{file.format.toUpperCase()} · {file.size == null ? 'size unknown' : `${(file.size / 1024 ** 3).toFixed(2)} GB`}</small></span></label>)}<div className="library-download-row"><span>{selectedFiles.length} file(s) · {(selectedBytes / 1024 ** 3).toFixed(2)} GB listed</span><Button kind="bright" disabled={busy || !selectedFiles.length} onClick={() => void downloadFiles()}>Download selected</Button></div></div>}</div>}
+    {downloadText && <div className="library-progress" role="status"><span>{downloadText}</span>{['download', 'load', 'import'].includes(operation) && <Button kind="danger" onClick={() => void cancelOperation()}>Cancel operation</Button>}</div>}
+    <div className="library-safetensors"><div><strong>Safetensors through Ollama</strong><small>Import a downloaded repository folder or choose a local model directory. Ollama accepts only supported architectures.</small></div><input aria-label="Ollama model name" value={safetensorsName} onChange={(event) => setSafetensorsName(event.target.value)} maxLength={64}/><Button kind="outline" disabled={busy} onClick={() => void addSafetensorsToOllama()}>Import directory</Button></div>
+    <div className="modal-actions"><Button kind="quiet" onClick={onClose}>Close</Button></div>
+  </Modal>;
+}
+
+function shortModel(value: string) { return value.startsWith('gguf::') ? value.slice('gguf::'.length).replaceAll('\\', '/').split('/').at(-1) || 'GGUF model' : value.split('/').at(-1) || value || 'No model selected'; }
 function memoryPct(value: string) { const match = value.match(/([\d.]+)\s*\/\s*([\d.]+)/); return match ? Math.min(100, Number(match[1]) / Number(match[2]) * 100) : 0; }
 
 function Modal({ title, eyebrow, children, onClose, wide = false, dismissible = true }: { title: string; eyebrow: string; children: React.ReactNode; onClose: () => void; wide?: boolean; dismissible?: boolean }) {
   return <div className="modal-backdrop" onMouseDown={(e) => { if (dismissible && e.target === e.currentTarget) onClose(); }} onKeyDown={(e) => { if (!dismissible && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); } }}><section className={`modal-card ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>{dismissible && <button className="modal-close" onClick={onClose} aria-label="Close"><Icon name="close"/></button>}<span className="eyebrow-line">{eyebrow}</span><h2>{title}</h2>{children}</section></div>;
 }
 
-function SettingsModal({ model, modelInfo, options, setOptions, onClose, onSave, onMcp }: {
-  model: string; modelInfo: ModelInfo | null; options: typeof initialOptions; setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>;
+function SettingsModal({ model, modelLabel, modelInfo, options, setOptions, onClose, onSave, onMcp }: {
+  model: string; modelLabel: string; modelInfo: ModelInfo | null; options: typeof initialOptions; setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>;
   onClose: () => void; onSave: () => void; onMcp: () => void;
 }) {
-  const tokenPresets = buildTokenPresets({ contextLimit: modelInfo?.context ?? options.context, outputLimit: modelInfo?.max_output_tokens ?? null });
+  const tokenPresets = buildTokenPresets({ contextLimit: modelInfo?.context ?? null, contextLimitKnown: modelInfo?.context_limit_known ?? false, outputLimit: modelInfo?.max_output_tokens ?? null });
   const reasoning = modelInfo?.reasoning;
   const reasoningValues: Array<boolean | string | null> = [null, ...(reasoning?.support === 'toggle' || reasoning?.support === 'levels' ? reasoning.values : [])];
   const selectedReasoningIndex = Math.max(0, reasoningValues.findIndex((value) => value === options.reasoning));
   const field = (label: string, value: number, key: 'context' | 'maxTokens' | 'temperature') => <label className="settings-field"><span>{label}</span><input type="number" value={value} min={key === 'context' ? 1024 : 1} max={key === 'temperature' ? 2 : undefined} step={key === 'temperature' ? 0.1 : 1} onChange={(e) => setOptions((old) => ({ ...old, [key]: key === 'temperature' ? Number(e.target.value) : Number.parseInt(e.target.value || '0', 10) }))}/></label>;
   return <Modal title="Run configuration" eyebrow="MODEL / EXECUTION" onClose={onClose}>
-    <div className="setting-model-strip"><span className="picker-symbol"><Icon name="spark"/></span><span><small>SELECTED MODEL</small><strong title={model}>{model}</strong><i>{reasoning?.support === 'levels' || reasoning?.support === 'toggle' ? 'Reasoning controls reported by model' : 'Reasoning controls unavailable; model default is preserved'}</i></span></div>
-    <div className="settings-fields"><label className="settings-field"><span>Context window preset</span><select value={tokenPresets.context.some((preset) => preset.value === options.context) ? String(options.context) : 'custom'} onChange={(e) => { if (e.target.value !== 'custom') setOptions((old) => ({ ...old, context: Number(e.target.value) })); }}><option value="custom">Custom value</option>{tokenPresets.context.map((preset) => <option key={preset.value} value={preset.value} disabled={preset.disabled}>{preset.label}{preset.disabled ? ' · exceeds model limit' : ''}</option>)}</select></label>{field('Context tokens · custom', options.context, 'context')}{<label className="settings-field"><span>Maximum output preset{tokenPresets.outputLimitKnown ? '' : ' · provider maximum unknown'}</span><select value={tokenPresets.output.some((preset) => preset.value === options.maxTokens) ? String(options.maxTokens) : 'custom'} onChange={(e) => { if (e.target.value !== 'custom') setOptions((old) => ({ ...old, maxTokens: Number(e.target.value) })); }}><option value="custom">Custom value</option>{tokenPresets.output.map((preset) => <option key={preset.value} value={preset.value} disabled={preset.disabled}>{preset.label}{preset.disabled ? ' · exceeds supported limit' : ''}</option>)}</select></label>}{field('Maximum output tokens · custom', options.maxTokens, 'maxTokens')}{field('Temperature', options.temperature, 'temperature')}</div>
+    <div className="setting-model-strip"><span className="picker-symbol"><Icon name="spark"/></span><span><small>SELECTED MODEL</small><strong title={model}>{modelLabel}</strong><i>{reasoning?.support === 'levels' || reasoning?.support === 'toggle' ? 'Reasoning values reported by runtime' : 'Reasoning controls unavailable; model default is preserved'}</i></span></div>
+    <div className="settings-fields"><label className="settings-field"><span>Context window preset{tokenPresets.contextLimitKnown ? '' : ' · model maximum unknown'}</span><select value={tokenPresets.context.some((preset) => preset.value === options.context) ? String(options.context) : 'custom'} onChange={(e) => { if (e.target.value !== 'custom') setOptions((old) => ({ ...old, context: Number(e.target.value) })); }}><option value="custom">Custom value</option>{tokenPresets.context.map((preset) => <option key={preset.value} value={preset.value} disabled={preset.disabled}>{preset.label}{preset.disabled ? ' · exceeds model limit' : ''}</option>)}</select></label>{field('Context tokens · custom', options.context, 'context')}{<label className="settings-field"><span>Maximum output preset{tokenPresets.outputLimitKnown ? '' : ' · provider maximum unknown'}</span><select value={tokenPresets.output.some((preset) => preset.value === options.maxTokens) ? String(options.maxTokens) : 'custom'} onChange={(e) => { if (e.target.value !== 'custom') setOptions((old) => ({ ...old, maxTokens: Number(e.target.value) })); }}><option value="custom">Custom value</option>{tokenPresets.output.map((preset) => <option key={preset.value} value={preset.value} disabled={preset.disabled}>{preset.label}{preset.disabled ? ' · exceeds supported limit' : ''}</option>)}</select></label>}{field('Maximum output tokens · custom', options.maxTokens, 'maxTokens')}{field('Temperature', options.temperature, 'temperature')}</div>
     <label className="settings-field"><span>Reasoning</span><select value={String(selectedReasoningIndex)} onChange={(e) => { const value = reasoningValues[Number(e.target.value)] ?? null; setOptions((old) => ({ ...old, reasoning: normalizeReasoningChoice(value, reasoning ?? null) })); }}><option value="0">Model default</option>{reasoningValues.slice(1).map((value, index) => <option key={`${typeof value}-${String(value)}-${index}`} value={index + 1}>{typeof value === 'boolean' ? value ? 'On' : 'Off' : value}</option>)}</select><small>{reasoning ? `Model default: ${String(reasoning.default ?? 'not reported')}` : 'The model did not report reasoning controls; no override will be sent.'}</small></label>
-    <div className="context-facts"><span>Advertised context <b>{modelInfo ? fmt(modelInfo.context) : 'Unknown'}</b></span><span>Runtime allocation <b>Shown in the task signal panel</b></span></div>
+    <div className="context-facts"><span>Advertised maximum <b>{modelInfo?.context_limit_known ? fmt(modelInfo.context ?? undefined) : 'Unknown'}</b></span><span>Runtime context <b>{modelInfo?.effective_context ? fmt(modelInfo.effective_context) : modelInfo?.provider === 'llama.cpp' ? 'Not loaded / allocation unverified' : 'Shown in the task signal panel'}</b></span></div>
     <label className="settings-field"><span>Keep model warm after a request</span><select value={options.keepAlive} onChange={(e) => setOptions((old) => ({ ...old, keepAlive: e.target.value }))}><option value="30m">30 minutes</option><option value="10m">10 minutes</option><option value="5m">5 minutes</option><option value="0">Unload when idle (Ollama setting)</option></select></label>
     <div className="settings-fields select-fields"><label className="settings-field"><span>File access</span><select value={options.access} onChange={(e) => setOptions((old) => ({ ...old, access: e.target.value as AccessMode }))}><option value="copy">Copy workspace</option><option value="plan">Plan only</option><option value="ask">Ask before writes</option><option value="edit">Edit project</option></select></label><label className="settings-field"><span>Approval</span><select value={options.approvalMode} onChange={(e) => setOptions((old) => ({ ...old, approvalMode: e.target.value as ApprovalMode }))}><option value="per-action">Approve each action</option><option value="per-task">Approve for this task</option><option value="auto">Auto-approve actions · this run</option></select>{options.approvalMode === 'auto' && <small className="auto-approve-warning">Automatically approves project tool actions for this run. Workspace boundaries and access mode remain in force.</small>}</label></div>
     <div className="settings-bottom"><Button kind="outline" onClick={onMcp}>Configure local MCP</Button><span>Context is never silently reduced.</span></div>

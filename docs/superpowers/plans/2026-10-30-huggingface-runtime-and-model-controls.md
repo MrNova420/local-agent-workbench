@@ -8,7 +8,7 @@
 
 **Tech Stack:** Electron, React, TypeScript, Python sidecar, existing Python agent engine, Ollama API, optional llama.cpp server API, Hugging Face Hub references.
 
-**Status:** Queued plan only. Do not implement until the user explicitly asks to start execution.
+**Status:** Approved and in implementation. Provider discovery, controls, local GGUF, Hub catalog, and mocked runtime coverage are implemented; packaged visible acceptance remains open.
 
 **Spec:** `docs/MODEL_RUNTIME_EXPANSION.md`
 
@@ -185,4 +185,4 @@
 
 ## Handoff
 
-This plan has not been executed. Queue order is Tasks 1–4 for runtime/model support, Tasks 5–6 for approval and Live Work Sheet UX, then Task 7 for integration and acceptance. Native Transformers support remains a later, separately scoped backlog item. Wait for an explicit implementation go-ahead before starting any task.
+Implementation is underway under the user\u2019s explicit go-ahead. Automated suites currently pass. Next: package and visibly exercise the current UI in a disposable project, then run the approved live coding check while preserving pre-existing model state. Native Transformers support remains a later, separately scoped backlog item.

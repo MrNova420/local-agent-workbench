@@ -23,6 +23,12 @@ describe('model capability controls', () => {
     expect(unknown.output.some((item) => item.value === 10_000_000 && !item.disabled)).toBe(true);
   });
 
+  it('keeps model context tiers available when the runtime does not report a maximum', () => {
+    const unknown = buildTokenPresets({ contextLimit: null, contextLimitKnown: false, outputLimit: null });
+    expect(unknown.contextLimitKnown).toBe(false);
+    expect(unknown.context.some((item) => item.value === 1_000_000 && !item.disabled)).toBe(true);
+  });
+
   it('keeps reasoning default when metadata is absent and accepts only advertised choices', () => {
     const capability: ReasoningCapability = { support: 'levels', default: 'medium', values: ['low', 'medium', 'high'] };
 

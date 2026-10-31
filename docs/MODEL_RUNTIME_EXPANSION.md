@@ -1,6 +1,6 @@
 # Proposed Model Runtime and Hugging Face Support
 
-**Status: Queued for review. Plan/documentation only; implementation has not been authorized.**
+**Status: Implementation authorized and underway. Automated tests pass; packaged visible acceptance of the expanded provider flows remains pending.**
 
 ## Goal
 

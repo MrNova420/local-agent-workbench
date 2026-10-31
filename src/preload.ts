@@ -9,6 +9,9 @@ const api: DesktopApi = {
     return () => ipcRenderer.removeListener('agent:event', handler);
   },
   chooseWorkspace: () => ipcRenderer.invoke('app:choose-workspace') as Promise<string | null>,
+  chooseModelFile: () => ipcRenderer.invoke('app:choose-model-file') as Promise<string | null>,
+  chooseLlamaBinary: () => ipcRenderer.invoke('app:choose-llama-binary') as Promise<string | null>,
+  chooseModelDirectory: () => ipcRenderer.invoke('app:choose-model-directory') as Promise<string | null>,
   revealPath: (path) => ipcRenderer.invoke('app:reveal-path', path) as Promise<void>,
   version: process.env.npm_package_version ?? '0.1.0',
 };

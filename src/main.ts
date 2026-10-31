@@ -168,6 +168,21 @@ app.whenReady().then(async () => {
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory'], title: 'Choose a project workspace' });
     return result.canceled ? null : result.filePaths[0] ?? null;
   });
+  ipcMain.handle('app:choose-model-file', async (event) => {
+    assertTrusted(event);
+    const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile'], title: 'Select a GGUF model', filters: [{ name: 'GGUF model', extensions: ['gguf'] }] });
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  });
+  ipcMain.handle('app:choose-llama-binary', async (event) => {
+    assertTrusted(event);
+    const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile'], title: 'Select llama.cpp server', filters: [{ name: 'Windows executable', extensions: ['exe'] }] });
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  });
+  ipcMain.handle('app:choose-model-directory', async (event) => {
+    assertTrusted(event);
+    const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory'], title: 'Select a local Safetensors model directory' });
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  });
   ipcMain.handle('app:reveal-path', async (event, value: unknown) => {
     assertTrusted(event);
     if (typeof value !== 'string' || !path.isAbsolute(value)) throw new Error('Expected an absolute path.');

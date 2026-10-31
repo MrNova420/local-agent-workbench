@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "author": "Local Agent Workbench",
   "private": true,
-  "description": "A local-first development workbench for Ollama coding agents.",
+  "description": "A local-first development workbench for Ollama and Hugging Face models.",
   "main": ".vite/build/main.cjs",
   "scripts": {
     "start": "electron-forge start",

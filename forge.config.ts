@@ -5,6 +5,7 @@ import { VitePlugin } from '@electron-forge/plugin-vite';
 import path from 'node:path';
 
 const config: ForgeConfig = {
+  outDir: process.env.LOCAL_AGENT_OUT_DIR || 'out',
   packagerConfig: {
     asar: true,
     extraResource: [path.resolve('sidecar/dist/agent-worker.exe')],

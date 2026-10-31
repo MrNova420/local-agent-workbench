@@ -11,6 +11,7 @@ export type TokenPreset = { value: number; label: string; disabled: boolean };
 export type TokenPresetSet = {
   context: TokenPreset[];
   output: TokenPreset[];
+  contextLimitKnown: boolean;
   outputLimitKnown: boolean;
 };
 
@@ -32,12 +33,14 @@ function presetRows(limit: number | null, kind: 'context' | 'output'): TokenPres
   }));
 }
 
-export function buildTokenPresets({ contextLimit, outputLimit }: { contextLimit: number; outputLimit: number | null }): TokenPresetSet {
-  const safeContext = Number.isSafeInteger(contextLimit) && contextLimit >= 1 ? contextLimit : 4096;
+export function buildTokenPresets({ contextLimit, contextLimitKnown, outputLimit }: { contextLimit: number | null; contextLimitKnown?: boolean; outputLimit: number | null }): TokenPresetSet {
+  const safeContext = contextLimit !== null && Number.isSafeInteger(contextLimit) && contextLimit >= 1 ? contextLimit : null;
+  const contextKnown = safeContext !== null && contextLimitKnown !== false;
   const safeOutput = outputLimit !== null && Number.isSafeInteger(outputLimit) && outputLimit >= 1 ? outputLimit : null;
   return {
-    context: presetRows(safeContext, 'context'),
+    context: presetRows(contextKnown ? safeContext : null, 'context'),
     output: presetRows(safeOutput, 'output'),
+    contextLimitKnown: contextKnown,
     outputLimitKnown: safeOutput !== null,
   };
 }
