@@ -4,13 +4,13 @@ A Windows desktop workbench for a project-scoped coding agent. The original inte
 
 ## Current state
 
-The Ollama workflow has prior visible disposable-project evidence recorded in [the acceptance log](docs/ACCEPTANCE_LOG.md). The current provider expansion, model-library UI, broad context/output controls, per-run auto-approval, and decision-required approval dialog pass automated checks; the expanded packaged UI flow and live GGUF path still need acceptance. Mocked MCP coverage exists, but a real stdio server has not been exercised in the packaged app. Do not treat these verification tiers as interchangeable.
+The Ollama workflow has prior visible disposable-project evidence recorded in [the acceptance log](docs/ACCEPTANCE_LOG.md). The current provider expansion, model-library UI, broad context/output controls, per-run auto-approval, and decision-required approval dialog pass automated checks; the newest tool-directory, cache telemetry, and remote MCP changes have not yet passed the final verification run. The packaged app has not exercised a real stdio or remote MCP server. Do not treat source tests, package checks, and visible acceptance as interchangeable.
 
 ## Requirements for development
 
 - Windows 10/11 x64
 - Node.js 24 and npm
-- Python 3.12 with PyInstaller 6, pytest, and the packages in `sidecar/requirements.txt`
+- Python 3.12 with PyInstaller 6, pytest, and the packages in `sidecar/requirements.txt` (MCP 1.30+ for patched HTTP redirect behavior)
 - The existing Python engine source directory for sidecar builds. By default the build script resolves the sibling `local-9b-dev-app` directory; set `LOCAL_AGENT_CORE_PATH` to override it.
 - Ollama for installed Ollama models and imports
 - A compatible llama.cpp Windows server executable chosen by the user to run GGUF models
@@ -47,6 +47,7 @@ The Python executable is placed under `sidecar/dist/agent-worker.exe` and packag
 - Reasoning defaults are preserved unless the selected model/runtime offers controls and the user chooses an override. Returned reasoning text can be inspected separately from the reasoning generation setting.
 - The optional Small-model workflow gives smaller local models more explicit, adaptive work guidance. It can group independent reads, choose action sizes suited to the task, and continue through full implementation and verification; it does not impose a fixed tool-call count or change inference settings.
 - Prompt-cache measurements are shown when Ollama reports exact cached and total prompt counts. Cache/KV runtime tuning is not enabled automatically and must be benchmarked without changing selected context, output, reasoning, or warm-model settings.
+- The Tools & abilities directory reports built-in tools, configured MCP servers, and integrations still requiring a native adapter. Local stdio and remote Streamable HTTP MCP are supported in source. Remote MCP requires HTTPS (except loopback) and environment references for credential headers.
 - Context and maximum output token caps are independent. Presets cover common binary and decimal sizes through 16,777,216 tokens plus exact model maxima when known; custom values are preserved exactly. Unknown model limits remain explicitly unknown. The selected values pass to inference unchanged, with requested and effective context reported separately.
 - Model generation has no application-level response deadline. Cancel interrupts the active request without stopping Ollama or killing a runtime the app did not start.
 - Saved sessions live under `%LOCALAPPDATA%\\LocalAgentWorkbench\\sessions`; local MCP configuration and model downloads live in the same app-data directory. Disposable workspace copies are stored under `workspaces` there.
@@ -56,7 +57,7 @@ The Python executable is placed under `sidecar/dist/agent-worker.exe` and packag
 
 ## Security boundaries
 
-Electron uses context isolation, renderer sandboxing, disabled Node integration, a narrow preload bridge, sender validation for IPC, and a same-origin custom application protocol. The agent's built-in filesystem tools are scoped to the selected project and reject symbolic links and paths outside it. Shell commands use argv arrays and require approval. Local stdio MCP commands are user-configured processes; connect only servers you trust, since their tools may access resources outside the selected project. Hugging Face credentials are read from the user's existing local login/environment and are not written into URLs or progress events.
+Electron uses context isolation, renderer sandboxing, disabled Node integration, a narrow preload bridge, sender validation for IPC, and a same-origin custom application protocol. The agent's built-in filesystem tools are scoped to the selected project and reject symbolic links and paths outside it. Shell commands use argv arrays and require approval. Both stdio and remote MCP integrations can act beyond the project boundary using their process/network permissions. Approval dialogs describe this; they do not provide OS sandboxing. Only connect MCP servers you trust. Remote credential headers must reference environment variables and are not saved as secret literals in MCP JSON.
 
 ## Decisions and deferred work
 
