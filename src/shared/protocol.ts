@@ -29,6 +29,7 @@ export type WorkerCommand =
   | { command: 'models' }
   | { command: 'model_catalog' }
   | { command: 'model_info'; model: string }
+  | { command: 'tool_catalog' }
   | { command: 'hf_search'; query: string }
   | { command: 'hf_repo_files'; repo: string; revision: string }
   | { command: 'hf_download_start'; repo: string; revision: string; files: string[] }
@@ -139,6 +140,11 @@ export type ModelInfo = {
 };
 
 export type ModelCatalog = { ollama: string[]; gguf: Array<{ id: string; label: string; provider: 'llama.cpp' }>; ollama_error: string | null };
+export type ToolCatalog = {
+  tools: Array<{ name: string; description: string; source: 'built-in' | 'mcp'; permission: string }>;
+  integrations: Array<{ name: string; status: 'available' | 'configured' | 'not-installed' | 'planned'; detail: string }>;
+  mcpServers: Array<{ name: string; status: 'configured' | 'connected' | 'error'; detail?: string }>;
+};
 
 export type SessionSummary = {
   session_id: string;

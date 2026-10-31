@@ -67,6 +67,17 @@ def test_model_info_reports_known_missing_tool_capability(service):
     assert result["tool_support"] == "unsupported"
 
 
+def test_tool_catalog_lists_real_tools_and_unimplemented_integrations(service):
+    catalog = service.handle("tool_catalog", {})
+    names = {item["name"] for item in catalog["tools"]}
+    assert {"list_files", "search_files", "read_file", "write_file", "edit_file", "apply_patch", "run_command"} <= names
+    assert all(item["source"] == "built-in" for item in catalog["tools"])
+    integrations = {item["name"]: item for item in catalog["integrations"]}
+    assert integrations["Local MCP tools"]["status"] == "available"
+    assert integrations["Browser automation"]["status"] == "planned"
+    assert integrations["LSP diagnostics and navigation"]["status"] == "planned"
+
+
 def test_gguf_registration_is_stable_and_uses_unknown_training_context(service, tmp_path):
     model = tmp_path / "model.gguf"
     model.write_bytes(b"fixture")

@@ -96,7 +96,7 @@ The complete app and engine have independent Desktop Git clones with their own h
 
 ### B-012: Capability discovery, universal development tools, and safe execution boundaries
 
-**Priority:** Critical for full-product readiness; official cross-provider research is recorded in `CORE_HARNESS_READINESS.md`; implementation remains phased. The tool directory is now being added to expose actual available and missing capabilities.
+**Priority:** Critical for full-product readiness; official cross-provider research is recorded in `CORE_HARNESS_READINESS.md`; implementation remains phased. A first in-app tool directory now reports built-in, MCP, and not-yet-connected capabilities; a root-confined Git status/log tool is also being added.
 
 - Maintain a capability registry across provider/model/runtime, platform, project, and installed MCP integrations. Show supported/unsupported/unknown tool-call and modality capabilities; never infer a feature from an endpoint accepting a schema.
 - Expand integrations by need: searchable project tools, structured test/build profiles, browser automation, LSP diagnostics/navigation, debugger, Git/review, local MCP, and extensible custom tools. Keep discovery and permission approval host-controlled.

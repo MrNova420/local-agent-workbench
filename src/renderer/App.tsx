@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
-import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
+import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
 import { nextRunPhase, restoredRunPhase, runStepProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordStreamedText, type RunMetrics } from '../shared/run-metrics';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice } from '../shared/model-controls';
@@ -144,6 +144,9 @@ export default function App() {
   const [approval, setApproval] = useState<Approval | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mcpOpen, setMcpOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [toolCatalog, setToolCatalog] = useState<ToolCatalog | null>(null);
+  const [toolCatalogLoading, setToolCatalogLoading] = useState(false);
   const [modelLibraryOpen, setModelLibraryOpen] = useState(false);
   const [downloadedModelDirectory, setDownloadedModelDirectory] = useState('');
   const [diffOpen, setDiffOpen] = useState(false);
@@ -618,6 +621,13 @@ export default function App() {
     } catch (error) { notify((error as Error).message, 'bad'); }
   }
 
+  async function openTools() {
+    setToolsOpen(true); setToolCatalogLoading(true);
+    try { setToolCatalog(await request<ToolCatalog>({ command: 'tool_catalog' })); }
+    catch (error) { notify(`Could not load tool capabilities: ${(error as Error).message}`, 'bad'); }
+    finally { setToolCatalogLoading(false); }
+  }
+
   async function saveMcp() {
     try {
       const config = JSON.parse(mcpJson) as unknown;
@@ -684,7 +694,7 @@ export default function App() {
       {view === 'project' && <ProjectHome
         root={workspace} tab={projectTab} setTab={setProjectTab} files={availableFiles} sessions={currentSessions}
         onNew={() => void newSession()} onOpenSession={(id) => void loadSession(id, workspace)} onFiles={() => void refreshWorkspace(workspace)}
-        onDiff={showDiff} onMcp={openMcp} running={running}
+        onDiff={showDiff} onMcp={openMcp} onTools={openTools} running={running}
         onHome={() => setView('landing')}
       />}
       {view === 'session' && <SessionRoom
@@ -692,7 +702,7 @@ export default function App() {
         elapsed={elapsed} running={running} prompt={prompt} setPrompt={setPrompt} promptRef={promptRef}
         options={options} setOptions={setOptions} files={availableFiles} telemetry={telemetry}
         runMetrics={runMetrics} onRun={startRun} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
-        onDiff={showDiff} onMcp={openMcp} onEnter={enter} endRef={endRef} model={model} modelInfo={modelInfo} appliedSettings={appliedSettings} onToggleHarnessProfile={() => void toggleHarnessProfile()}
+        onDiff={showDiff} onMcp={openMcp} onTools={openTools} onEnter={enter} endRef={endRef} model={model} modelInfo={modelInfo} appliedSettings={appliedSettings} onToggleHarnessProfile={() => void toggleHarnessProfile()}
       />}
     </main>
 
@@ -715,6 +725,17 @@ export default function App() {
       <p className="modal-copy">Each server starts as a local stdio process. Add only commands you trust. Tool calls require approval.</p>
       <textarea className="code-editor mcp-editor" value={mcpJson} onChange={(e) => setMcpJson(e.target.value)} spellCheck={false}/>
       <div className="modal-actions"><Button kind="quiet" onClick={() => setMcpOpen(false)}>Cancel</Button><Button kind="bright" onClick={() => void saveMcp()}>Save connections</Button></div>
+    </Modal>}
+    {toolsOpen && <Modal title="Tools and integrations" eyebrow="CAPABILITY DIRECTORY" onClose={() => setToolsOpen(false)}>
+      <p className="tool-catalog-intro">This directory reports actual built-in and configured tools. Local MCP is the extension path for additional services; model support and permission still apply.</p>
+      {toolCatalogLoading && <div className="empty-state">Loading installed capabilities…</div>}
+      {toolCatalog && <>
+        <div className="tool-catalog-grid">{toolCatalog.integrations.map((item) => <article className="tool-catalog-card" key={item.name}><span className={`tool-status status-${item.status}`}>{item.status}</span><strong>{item.name}</strong><small>{item.detail}</small></article>)}</div>
+        <div className="section-heading tool-catalog-heading"><div><span className="section-number">01</span><h2>Available tools · {toolCatalog.tools.length}</h2></div><Button kind="outline" onClick={openMcp}>Configure MCP</Button></div>
+        <div className="tool-directory">{toolCatalog.tools.map((item) => <div className="tool-directory-row" key={`${item.source}:${item.name}`}><code>{item.name}</code><span>{item.description}</span><small>{item.source} · {item.permission}</small></div>)}{!toolCatalog.tools.length && <div className="empty-state">No connected tools are available yet.</div>}</div>
+        {toolCatalog.mcpServers.length > 0 && <div className="tool-server-list"><b>Configured MCP servers</b>{toolCatalog.mcpServers.map((server) => <span key={server.name}><code>{server.name}</code><i className={`tool-status status-${server.status}`}>{server.status}</i>{server.detail && <small>{server.detail}</small>}</span>)}</div>}
+      </>}
+      <div className="modal-actions"><Button kind="quiet" onClick={() => setToolsOpen(false)}>Close</Button><Button kind="bright" onClick={openMcp}>Manage integrations</Button></div>
     </Modal>}
     {approval && <ApprovalModal approval={approval} onChoice={(yes) => void answerApproval(yes)} onCancelRun={() => void cancelRun()} />}
     {activityChoiceOpen && <Modal title="Choose live activity display" eyebrow="NEW SESSION" dismissible={false} onClose={() => undefined}>
@@ -793,17 +814,17 @@ function Landing({ workspaces, workspaceSearch, sessions, models, modelLabels, m
   </section>;
 }
 
-function ProjectHome({ root, tab, setTab, files, sessions, onNew, onOpenSession, onFiles, onDiff, onMcp, onHome, running }: {
+function ProjectHome({ root, tab, setTab, files, sessions, onNew, onOpenSession, onFiles, onDiff, onMcp, onTools, onHome, running }: {
   root: string; tab: 'overview' | 'files' | 'sessions'; setTab: (value: 'overview' | 'files' | 'sessions') => void;
   files: ProjectFile[]; sessions: SessionSummary[]; onNew: () => void; onOpenSession: (id: string) => void;
-  onFiles: () => void; onDiff: () => void; onMcp: () => void; onHome: () => void; running: boolean;
+  onFiles: () => void; onDiff: () => void; onMcp: () => void; onTools: () => void; onHome: () => void; running: boolean;
 }) {
   const textFiles = files.filter((row) => row.text).length;
   return <section className="project-view">
     <div className="project-identity">
       <div className="project-monogram">{shortPath(root).slice(0, 2).toUpperCase()}</div>
       <div className="project-title"><span className="eyebrow-line"><span className="eyebrow-mark"/> ACTIVE PROJECT</span><h1>{shortPath(root)}</h1><p title={root}>{root}</p></div>
-      <div className="project-identity-actions"><Button kind="quiet" onClick={onHome}><Icon name="arrow"/> Home</Button><Button kind="outline" onClick={onMcp}>MCP connections</Button><Button kind="outline" onClick={onDiff}>Review Git changes</Button><Button kind="bright" disabled={running} onClick={onNew}><Icon name="plus"/> Start a task</Button></div>
+      <div className="project-identity-actions"><Button kind="quiet" onClick={onHome}><Icon name="arrow"/> Home</Button><Button kind="outline" onClick={onTools}>Tools &amp; abilities</Button><Button kind="outline" onClick={onMcp}>MCP connections</Button><Button kind="outline" onClick={onDiff}>Review Git changes</Button><Button kind="bright" disabled={running} onClick={onNew}><Icon name="plus"/> Start a task</Button></div>
     </div>
     <nav className="project-tabs">{(['overview', 'files', 'sessions'] as const).map((item, index) => <button key={item} className={tab === item ? 'active' : ''} onClick={() => { setTab(item); if (item === 'files') onFiles(); }}><span>0{index + 1}</span>{item}</button>)}</nav>
     {tab === 'overview' && <div className="project-overview">
@@ -822,14 +843,14 @@ function ProjectHome({ root, tab, setTab, files, sessions, onNew, onOpenSession,
   </section>;
 }
 
-function SessionRoom({ root, session, messages, activities, activityMode, plan, phase, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
+function SessionRoom({ root, session, messages, activities, activityMode, plan, phase, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
   root: string; session: Session | null; messages: ChatMessage[]; activities: ActivityRecord[]; activityMode: ActivityMode; plan: Array<{ title?: string; text?: string; status?: string }>;
   phase: string; elapsed: number; running: boolean; prompt: string; setPrompt: (value: string) => void;
   promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
   setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>; files: ProjectFile[];
   telemetry: TelemetryView;
   runMetrics: RunMetrics; appliedSettings: AppliedSettings | null;
-  onRun: () => void; onCancel: () => void; onSettings: () => void; onBack: () => void; onDiff: () => void; onMcp: () => void;
+  onRun: () => void; onCancel: () => void; onSettings: () => void; onBack: () => void; onDiff: () => void; onMcp: () => void; onTools: () => void;
   onEnter: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void; endRef: React.RefObject<HTMLDivElement | null>; model: string; modelInfo: ModelInfo | null; onToggleHarnessProfile: () => void;
 }) {
   const [sheetLayout, setSheetLayout] = useState<RunSheetLayout>(() => {
@@ -843,7 +864,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
   const steps = ['Ready', 'Waiting for first token', 'Generating', phase === 'Turn complete' ? 'Turn complete' : 'Finishing turn'];
   const currentStep = runStepProgress(phase, running);
   return <section className="session-view">
-    <div className="session-commandline"><button className="crumb-back" onClick={onBack}>PROJECT / {shortPath(root).toUpperCase()}</button><span className="crumb-slash">/</span><span className="session-crumb">SESSION {session?.session_id.slice(-8).toUpperCase()}</span><span className="commandline-spacer"/><button className="inline-command" onClick={onMcp}>MCP</button><button className="inline-command" onClick={onDiff}>CHANGES</button><span className={`phase-chip ${running ? 'is-running' : ''}`}><i/>{running ? phase.toUpperCase() : phase.toUpperCase()}</span><span className="run-elapsed"><Icon name="clock"/> {running ? secs(elapsed) : '—'}</span></div>
+    <div className="session-commandline"><button className="crumb-back" onClick={onBack}>PROJECT / {shortPath(root).toUpperCase()}</button><span className="crumb-slash">/</span><span className="session-crumb">SESSION {session?.session_id.slice(-8).toUpperCase()}</span><span className="commandline-spacer"/><button className="inline-command" onClick={onTools}>TOOLS</button><button className="inline-command" onClick={onMcp}>MCP</button><button className="inline-command" onClick={onDiff}>CHANGES</button><span className={`phase-chip ${running ? 'is-running' : ''}`}><i/>{running ? phase.toUpperCase() : phase.toUpperCase()}</span><span className="run-elapsed"><Icon name="clock"/> {running ? secs(elapsed) : '—'}</span></div>
     <div className="task-route" aria-label="Task execution phases">{steps.map((step, index) => <div className={`route-step ${index < currentStep ? 'done' : ''} ${index === currentStep ? 'current' : ''}`} key={step}><span className="route-node">{index < currentStep ? <Icon name="check"/> : `0${index + 1}`}</span><span>{step === 'Waiting for first token' ? 'Prefill / waiting' : step}</span></div>)}</div>
     <div className="session-main-grid">
       <section className="transcript-plane" aria-label="Conversation transcript">

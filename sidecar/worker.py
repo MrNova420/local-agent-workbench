@@ -27,7 +27,7 @@ if CORE_PATH.is_dir():
     sys.path.insert(0, str(CORE_PATH))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from desktop_engine import AgentEngine, OllamaRuntime, RequestCancelled  # noqa: E402
+from desktop_engine import AgentEngine, OllamaRuntime, RequestCancelled, ToolRegistry, Workspace  # noqa: E402
 from disposable_workspace import (  # noqa: E402
     apply_reviewed_changes,
     capture_manifest,
@@ -293,6 +293,34 @@ class AgentService:
                 "capabilities": capabilities, "tool_support": tool_support,
                 "provider": "ollama", "context_limit_known": context is not None,
             }
+        if command == "tool_catalog":
+            registry = ToolRegistry(Workspace(Path.home(), "plan"), lambda *_: False)
+            tools = [{"name": item["function"]["name"],
+                      "description": item["function"].get("description", ""),
+                      "source": "built-in",
+                      "permission": "read-only" if item["function"]["name"] in {"list_files", "search_files", "read_file", "git_diff", "update_plan", "skill"} else "approval-controlled"}
+                     for item in registry.schemas]
+            tools.extend({"name": item["function"]["name"],
+                          "description": item["function"].get("description", ""),
+                          "source": "mcp", "permission": "per-operation approval"}
+                         for item in self.mcp_tools)
+            mcp_servers = []
+            for name in sorted(self.mcp.servers):
+                if name in self.mcp.errors:
+                    mcp_servers.append({"name": name, "status": "error", "detail": self.mcp.errors[name]})
+                elif name in self.mcp.clients:
+                    mcp_servers.append({"name": name, "status": "connected"})
+                else:
+                    mcp_servers.append({"name": name, "status": "configured"})
+            return {"tools": tools, "mcpServers": mcp_servers, "integrations": [
+                {"name": "Project files and search", "status": "available", "detail": "Project-scoped list, search, read, create, exact edit, and patch tools."},
+                {"name": "Commands and Git review", "status": "available", "detail": "Approved argv commands, streamed output, Git diff, and explicit results."},
+                {"name": "Plans and project skills", "status": "available", "detail": "Structured plan updates and on-demand project/user skills."},
+                {"name": "Local MCP tools", "status": "available", "detail": f"{len(self.mcp.servers)} local stdio server(s) configured; add integrations through MCP settings. Each call uses the app approval flow."},
+                {"name": "Browser automation", "status": "planned", "detail": "No first-party browser driver is connected; compatible MCP tools can extend the agent."},
+                {"name": "LSP diagnostics and navigation", "status": "planned", "detail": "No language-server client is connected yet."},
+                {"name": "Debugger", "status": "planned", "detail": "No debugger adapter is connected yet."},
+            ]}
         if command == "hf_search":
             return self.hf.search(str(message.get("query", "")))
         if command == "hf_repo_files":
