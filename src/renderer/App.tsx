@@ -5,16 +5,18 @@ import remarkGfm from 'remark-gfm';
 import type { AccessMode, ApprovalMode, ModelInfo, ProjectFile, RunOptions, SessionSummary, WorkerCommand, WorkerEvent } from '../shared/protocol';
 import { nextRunPhase } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordStreamedText, type RunMetrics } from '../shared/run-metrics';
+import { buildTokenPresets, normalizeReasoningChoice } from '../shared/model-controls';
 
-type ChatMessage = { role: 'user' | 'assistant'; content: string; streaming?: boolean };
+type ChatMessage = { role: 'user' | 'assistant'; content: string; thinking?: string; streaming?: boolean };
 type Session = {
   session_id: string;
   workspace: string;
   model: string;
   context: number;
-  messages: Array<{ role: string; content?: string; tool_calls?: unknown[] }>;
+  messages: Array<{ role: string; content?: string; thinking?: string; tool_calls?: unknown[] }>;
   access?: AccessMode;
   approval_mode?: ApprovalMode;
+  reasoning?: boolean | string | null;
   max_tokens?: number;
   temperature?: number;
   keep_alive?: string;
@@ -24,6 +26,7 @@ type Session = {
 type TraceRow = { id: string; title: string; description?: string; kind: 'tool' | 'status' | 'plan'; time: number };
 type Approval = { actionId: string; name: string; arguments: unknown; workspace: string; mode: ApprovalMode };
 type Notice = { tone: 'good' | 'warn' | 'bad'; text: string };
+type AppliedSettings = { model: string; context: number; maxOutput: number; reasoning: boolean | string | null };
 
 const DEFAULT_MODEL = 'hf.co/mradermacher/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M';
 const initialOptions = {
@@ -33,6 +36,7 @@ const initialOptions = {
   keepAlive: '30m',
   access: 'ask' as AccessMode,
   approvalMode: 'per-action' as ApprovalMode,
+  reasoning: null as boolean | string | null,
 };
 
 function shortPath(value?: string) {
@@ -96,6 +100,7 @@ export default function App() {
   const [elapsed, setElapsed] = useState(0);
   const [runMetrics, setRunMetrics] = useState<RunMetrics>(emptyRunMetrics);
   const [snapshot, setSnapshot] = useState<Record<string, unknown>>({});
+  const [appliedSettings, setAppliedSettings] = useState<AppliedSettings | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [approval, setApproval] = useState<Approval | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -160,7 +165,7 @@ export default function App() {
       const loaded = await request<Session>({ command: 'session_resume', sessionId: id });
       const root = loaded.workspace;
       const rows: ChatMessage[] = loaded.messages.filter((row) => (row.role === 'user' || row.role === 'assistant') && row.content)
-        .map((row) => ({ role: row.role as ChatMessage['role'], content: row.content || '' }));
+        .map((row) => ({ role: row.role as ChatMessage['role'], content: row.content || '', thinking: typeof row.thinking === 'string' ? row.thinking : undefined }));
       setWorkspace(root);
       localStorage.setItem('agent-workspace', root);
       setSession(loaded);
@@ -172,6 +177,7 @@ export default function App() {
         keepAlive: loaded.keep_alive || '30m',
         access: loaded.access || 'ask',
         approvalMode: loaded.approval_mode || 'per-action',
+        reasoning: loaded.reasoning ?? null,
       });
       setContextTouched(true);
       setSettingsTouched(true);
@@ -203,6 +209,14 @@ export default function App() {
           return [...current, { role: 'assistant', content: chunk, streaming: true }];
         });
       }
+      if (event.type === 'thinking') {
+        const chunk = String(event.text || '');
+        setMessages((current) => {
+          const last = current.at(-1);
+          if (last?.role === 'assistant' && last.streaming) return [...current.slice(0, -1), { ...last, thinking: (last.thinking || '') + chunk }];
+          return [...current, { role: 'assistant', content: '', thinking: chunk, streaming: true }];
+        });
+      }
       if (event.type === 'tool_start') {
         setTrace((current) => [...current, { id: crypto.randomUUID(), title: `Using ${String(event.name || 'tool')}`, description: JSON.stringify(event.arguments || {}, null, 2), kind: 'tool', time: Date.now() }]);
       }
@@ -225,13 +239,16 @@ export default function App() {
         setPhase((current) => nextRunPhase(current, event));
       }
       if (event.type === 'generation_usage') setRunMetrics((current) => addGenerationUsage(current, event.usage));
+      if (event.type === 'inference_settings') setAppliedSettings({ model: String(event.model), context: Number(event.requested_context), maxOutput: Number(event.max_output_tokens), reasoning: event.reasoning_override == null ? null : event.reasoning_override as boolean | string });
       if (event.type === 'complete') {
         setRunning(false); setPhase((current) => nextRunPhase(current, event));
+        setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
         setRunMetrics((current) => endGeneration(current));
         setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
       }
       if (event.type === 'cancelled') {
         setRunning(false); setPhase((current) => nextRunPhase(current, event)); setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
+        setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
         setRunMetrics((current) => endGeneration(current));
         notify('This request was cancelled. Ollama and the model were left alone.', 'warn');
       }
@@ -330,7 +347,7 @@ export default function App() {
       const created = await request<Session>({ command: 'session_new', workspace, model: selectedModel, context: configuredContext });
       setSession(created); setMessages([]); setTrace([]); setPlan([]); setPrompt(''); setElapsed(0); setPhase('Ready'); setView('session');
       setRunMetrics(emptyRunMetrics());
-      setOptions((old) => ({ ...old, context: created.context }));
+      setOptions((old) => ({ ...old, context: created.context, approvalMode: 'per-action', reasoning: null }));
       void refreshWorkspace(workspace);
       window.setTimeout(() => promptRef.current?.focus(), 60);
     } catch (error) { notify(`Could not start a session: ${(error as Error).message}`, 'bad'); }
@@ -343,7 +360,9 @@ export default function App() {
       workspace, sessionId: session.session_id, prompt: task, model,
       context: options.context, maxTokens: options.maxTokens, temperature: options.temperature,
       access: options.access, approvalMode: options.approvalMode, keepAlive: options.keepAlive,
+      reasoning: normalizeReasoningChoice(options.reasoning, modelInfo?.reasoning ?? null),
     };
+    if (options.approvalMode === 'auto') setOptions((current) => ({ ...current, approvalMode: 'per-action' }));
     setMessages((current) => [...current, { role: 'user', content: task }]);
     setTrace([]); setPlan([]); setPrompt(''); setRunning(true); setPhase('Connecting to Ollama');
     setStartedAt(Date.now()); setElapsed(0); setRunMetrics(emptyRunMetrics());
@@ -403,7 +422,7 @@ export default function App() {
     }
     setSettingsOpen(false);
     if (session) {
-      setSession({ ...session, model, context: options.context, access: options.access, approval_mode: options.approvalMode, max_tokens: options.maxTokens, temperature: options.temperature, keep_alive: options.keepAlive });
+      setSession({ ...session, model, context: options.context, access: options.access, approval_mode: options.approvalMode, reasoning: options.reasoning, max_tokens: options.maxTokens, temperature: options.temperature, keep_alive: options.keepAlive });
     }
   }
 
@@ -450,12 +469,12 @@ export default function App() {
         elapsed={elapsed} running={running} prompt={prompt} setPrompt={setPrompt} promptRef={promptRef}
         options={options} setOptions={setOptions} files={availableFiles} telemetry={telemetry}
         runMetrics={runMetrics} onRun={startRun} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
-        onDiff={showDiff} onMcp={openMcp} onEnter={enter} endRef={endRef} model={model}
+        onDiff={showDiff} onMcp={openMcp} onEnter={enter} endRef={endRef} model={model} appliedSettings={appliedSettings}
       />}
     </main>
 
     <footer className="system-ribbon">
-      <div className="ribbon-left"><span className={`ribbon-state ${installed ? 'live' : 'dim'}`}/><span>{installed ? 'ENGINE BRIDGE READY' : 'STARTING LOCAL BRIDGE'}</span><span className="ribbon-sep">/</span><span>REASONING: MODEL DEFAULT</span></div>
+      <div className="ribbon-left"><span className={`ribbon-state ${installed ? 'live' : 'dim'}`}/><span>{installed ? 'ENGINE BRIDGE READY' : 'STARTING LOCAL BRIDGE'}</span><span className="ribbon-sep">/</span><span>REASONING: {options.reasoning == null ? 'MODEL DEFAULT' : String(options.reasoning).toUpperCase()}</span></div>
       <div className="ribbon-metrics"><span><Icon name="cpu"/> SYS {telemetry.cpu == null ? '—' : `${telemetry.cpu}%`}</span><span><Icon name="memory"/> RAM {telemetry.ram}</span><span className="gpu-readout">{telemetry.gpu}</span></div>
       <button className="ribbon-link" onClick={() => void request<Record<string, unknown>>({ command: 'system_snapshot' }).then(setSnapshot)}>DIAGNOSTICS <Icon name="arrow"/></button>
     </footer>
@@ -467,7 +486,7 @@ export default function App() {
       <textarea className="code-editor mcp-editor" value={mcpJson} onChange={(e) => setMcpJson(e.target.value)} spellCheck={false}/>
       <div className="modal-actions"><Button kind="quiet" onClick={() => setMcpOpen(false)}>Cancel</Button><Button kind="bright" onClick={() => void saveMcp()}>Save connections</Button></div>
     </Modal>}
-    {approval && <ApprovalModal approval={approval} onChoice={(yes) => void answerApproval(yes)} />}
+    {approval && <ApprovalModal approval={approval} onChoice={(yes) => void answerApproval(yes)} onCancelRun={() => void cancelRun()} />}
     {diffOpen && <Modal title={session?.access === 'copy' ? 'Review proposed changes' : 'Project changes'} eyebrow="CHANGE REVIEW" wide onClose={() => setDiffOpen(false)}>
       {session?.access === 'copy' ? <>
         <p className="modal-copy">These changes are in a disposable project copy. Select conflict-free files to apply them to the source workspace.</p>
@@ -546,13 +565,13 @@ function ProjectHome({ root, tab, setTab, files, sessions, onNew, onOpenSession,
   </section>;
 }
 
-function SessionRoom({ root, session, messages, trace, plan, phase, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onEnter, endRef, model }: {
+function SessionRoom({ root, session, messages, trace, plan, phase, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onEnter, endRef, model }: {
   root: string; session: Session | null; messages: ChatMessage[]; trace: TraceRow[]; plan: Array<{ title?: string; text?: string; status?: string }>;
   phase: string; elapsed: number; running: boolean; prompt: string; setPrompt: (value: string) => void;
   promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
   setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>; files: ProjectFile[];
   telemetry: { cpu: number | null; ram: string; gpu: string; loadedContext: number | null; contextMismatch: boolean; serviceRss: string; serviceCpu: number | null };
-  runMetrics: RunMetrics;
+  runMetrics: RunMetrics; appliedSettings: AppliedSettings | null;
   onRun: () => void; onCancel: () => void; onSettings: () => void; onBack: () => void; onDiff: () => void; onMcp: () => void;
   onEnter: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void; endRef: React.RefObject<HTMLDivElement | null>; model: string;
 }) {
@@ -567,22 +586,22 @@ function SessionRoom({ root, session, messages, trace, plan, phase, elapsed, run
         {!messages.length ? <div className="transcript-empty"><div className="empty-symbol"><Icon name="spark"/></div><span className="eyebrow-line">NEW WORK UNIT / {shortPath(root).toUpperCase()}</span><h2>What should we<br/>work through?</h2><p>The model sees selected, relevant project files as needed. You control any action that can change the workspace.</p><div className="starter-prompts"><button onClick={() => setPrompt('Inspect this project and explain its architecture and how to run it.')}>Map the project <Icon name="arrow"/></button><button onClick={() => setPrompt('Review this project for the highest-priority bug and propose a fix.')}>Find a bug <Icon name="arrow"/></button><button onClick={() => setPrompt('Add a focused feature to this project and verify it with the existing tests.')}>Build a feature <Icon name="arrow"/></button></div></div> : <div className="message-list">{messages.map((message, index) => <article className={`message-card message-${message.role}`} key={`${index}-${message.role}`}>
           <div className="message-meta"><span className={`speaker-mark ${message.role}`}>{message.role === 'user' ? 'YOU' : <Icon name="spark"/>}</span><strong>{message.role === 'user' ? 'Task brief' : 'Local agent'}</strong><span>{message.role === 'user' ? 'INPUT' : message.streaming ? 'LIVE OUTPUT' : 'RESPONSE'}</span>{message.streaming && <i className="stream-pulse"/>}</div>
           <div className="message-content"><Markdown content={message.content}/></div>
+          {message.thinking && <details className="reasoning-trace"><summary>Model reasoning · {message.thinking.length.toLocaleString()} characters</summary><div>{message.thinking}</div></details>}
         </article>)}<div ref={endRef}/></div>}
         <div className="composer-shell">
-          <div className="composer-profile"><span className={`profile-chip access-${options.access}`}>{options.access.toUpperCase()}</span><span className="profile-chip approval-chip">{options.approvalMode === 'per-task' ? 'PER TASK' : 'PER ACTION'}</span><span className="profile-hint">{fmt(options.context)} context · {fmt(options.maxTokens)} output</span><button onClick={onSettings}>Adjust run</button></div>
+          <div className="composer-profile"><span className={`profile-chip access-${options.access}`}>{options.access.toUpperCase()}</span><span className="profile-chip approval-chip">{options.approvalMode === 'auto' ? 'AUTO APPROVE · THIS RUN' : options.approvalMode === 'per-task' ? 'PER TASK' : 'PER ACTION'}</span><span className="profile-hint">{fmt(options.context)} context · {fmt(options.maxTokens)} output</span><button onClick={onSettings}>Adjust run</button></div>
           <textarea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={onEnter} placeholder="Describe the work. Use Shift + Enter to add detail…" rows={3} disabled={running} aria-label="Task prompt"/>
-          <div className="composer-bottom"><span><kbd>ENTER</kbd> to run <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> reasoning left at model default</span>{running ? <Button kind="danger" onClick={onCancel}><Icon name="stop"/> Cancel request</Button> : <Button kind="bright" onClick={onRun} disabled={!prompt.trim()}><Icon name="play"/> Run task</Button>}</div>
+          <div className="composer-bottom"><span><kbd>ENTER</kbd> to run <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> reasoning {options.reasoning == null ? 'model default' : String(options.reasoning)}</span>{running ? <Button kind="danger" onClick={onCancel}><Icon name="stop"/> Cancel request</Button> : <Button kind="bright" onClick={onRun} disabled={!prompt.trim()}><Icon name="play"/> Run task</Button>}</div>
         </div>
       </section>
       <aside className="run-sheet">
-        <div className="run-sheet-heading"><div><span className="eyebrow-line">LIVE WORK SHEET</span><h2>Task signals</h2></div><span className={`run-lamp ${running ? 'active' : ''}`}/></div>
-        <div className="signal-matrix"><div className={`signal-card signal-wide ${telemetry.contextMismatch ? 'signal-warning' : ''}`}><small>MODEL / CONTEXT</small><strong title={model}>{shortModel(model)}</strong><span>{telemetry.loadedContext ? `RUNTIME ${fmt(telemetry.loadedContext)} / ${fmt(options.context)} REQUESTED TOKENS` : `${fmt(options.context)} REQUESTED · NOT CURRENTLY LOADED`}</span></div><div className="signal-card"><small>ELAPSED</small><strong>{running ? secs(elapsed) : '—'}</strong><span>{running ? phase.toUpperCase() : 'NO ACTIVE RUN'}</span></div><div className="signal-card"><small>FILES IN VIEW</small><strong>{files.length}</strong><span>INDEXED / IGNORE AWARE</span></div></div>
+        <div className="run-sheet-heading"><div><span className="eyebrow-line">LIVE WORK SHEET</span><h2>Task signals</h2></div><Button kind="outline" className="sheet-inspect" onClick={onDiff}><Icon name="branch"/> Inspect changes</Button><span className={`run-lamp ${running ? 'active' : ''}`}/></div>
+        <div className="signal-matrix"><div className={`signal-card signal-wide ${telemetry.contextMismatch ? 'signal-warning' : ''}`}><small>MODEL / CONTEXT</small><strong title={model}>{shortModel(model)}</strong><span>{telemetry.loadedContext ? `RUNTIME ${fmt(telemetry.loadedContext)} / ${fmt(options.context)} REQUESTED TOKENS` : `${fmt(options.context)} REQUESTED · NOT CURRENTLY LOADED`}</span></div><div className="signal-card"><small>REQUEST SENT</small><strong>{appliedSettings && appliedSettings.model === model ? `${fmt(appliedSettings.context)} / ${fmt(appliedSettings.maxOutput)}` : '—'}</strong><span>CONTEXT / OUTPUT TOKENS</span></div><div className="signal-card"><small>REASONING OVERRIDE</small><strong>{appliedSettings && appliedSettings.model === model ? appliedSettings.reasoning == null ? 'DEFAULT' : String(appliedSettings.reasoning).toUpperCase() : '—'}</strong><span>EXACT SELECTED VALUE</span></div><div className="signal-card"><small>ELAPSED</small><strong>{running ? secs(elapsed) : '—'}</strong><span>{running ? phase.toUpperCase() : 'NO ACTIVE RUN'}</span></div><div className="signal-card"><small>FILES IN VIEW</small><strong>{files.length}</strong><span>INDEXED / IGNORE AWARE</span></div></div>
         <div className="run-metrics" aria-label="Ollama generation statistics"><div><small>FIRST TOKEN</small><strong>{tokenDelay(runMetrics.firstTokenMs)}</strong></div><div title={outputTokensAreEstimated(runMetrics) ? 'Live estimate from streamed text; Ollama reports the exact rate after generation.' : 'Exact rate reported by Ollama.'}><small>OUTPUT / SEC{outputTokensAreEstimated(runMetrics) ? ' · LIVE' : ''}</small><strong>{liveOutputTokensPerSecond(runMetrics)?.toFixed(1).replace(/^/, outputTokensAreEstimated(runMetrics) ? '~' : '') ?? '—'}</strong></div><div title={outputTokensAreEstimated(runMetrics) ? 'Live estimate from streamed text; replaced by Ollama’s exact token count after generation.' : 'Exact output token count reported by Ollama.'}><small>OUTPUT TOKENS{outputTokensAreEstimated(runMetrics) ? ' · LIVE' : ''}</small><strong>{outputTokensAreEstimated(runMetrics) ? '~' : ''}{fmt(estimateOutputTokens(runMetrics))}</strong></div></div>
         {telemetry.contextMismatch && <p className="context-warning" role="status">Ollama reports a smaller runtime context than requested. Available memory may limit allocation.</p>}
         <div className="sheet-section"><div className="sheet-heading"><h3>Plan</h3><span>{plan.length ? `${plan.length} steps` : 'Awaiting agent'}</span></div>{plan.length ? <ol className="plan-list">{plan.map((item, index) => <li key={`${index}-${item.title || item.text}`}><span>{String(index + 1).padStart(2, '0')}</span><b>{item.title || item.text || 'Work item'}</b><small>{item.status || 'pending'}</small></li>)}</ol> : <p className="sheet-empty">A task checklist appears here when the agent creates one.</p>}</div>
         <div className="sheet-section trace-section"><div className="sheet-heading"><h3>Activity trace</h3><span>{trace.length} events</span></div>{trace.length ? <div className="trace-list">{trace.slice(-8).reverse().map((row) => <div className="trace-item" key={row.id}><span className={`trace-dot ${row.kind}`}/><div><b>{row.title}</b><small>{row.description || ''}</small></div></div>)}</div> : <p className="sheet-empty">Reads, tool calls, and results will be grouped here.</p>}</div>
         <div className="resource-summary"><div className="resource-heading"><span>RESOURCE / SYSTEM</span><span>SIDECAR {telemetry.serviceRss}</span></div><div className="resource-row"><span>CPU</span><div className="meter"><i style={{ width: `${Math.min(100, telemetry.cpu ?? 0)}%` }}/></div><b>{telemetry.cpu == null ? '—' : `${telemetry.cpu}%`}</b></div><div className="resource-row"><span>RAM</span><div className="meter"><i style={{ width: `${memoryPct(telemetry.ram)}%` }}/></div><b>{telemetry.ram}</b></div><p>{telemetry.gpu}</p></div>
-        <div className="sheet-bottom"><button onClick={onDiff}><Icon name="branch"/> Inspect changes <Icon name="arrow"/></button></div>
       </aside>
     </div>
   </section>;
@@ -591,31 +610,36 @@ function SessionRoom({ root, session, messages, trace, plan, phase, elapsed, run
 function shortModel(value: string) { return value.split('/').at(-1) || value || 'No model selected'; }
 function memoryPct(value: string) { const match = value.match(/([\d.]+)\s*\/\s*([\d.]+)/); return match ? Math.min(100, Number(match[1]) / Number(match[2]) * 100) : 0; }
 
-function Modal({ title, eyebrow, children, onClose, wide = false }: { title: string; eyebrow: string; children: React.ReactNode; onClose: () => void; wide?: boolean }) {
-  return <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}><section className={`modal-card ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}><button className="modal-close" onClick={onClose} aria-label="Close"><Icon name="close"/></button><span className="eyebrow-line">{eyebrow}</span><h2>{title}</h2>{children}</section></div>;
+function Modal({ title, eyebrow, children, onClose, wide = false, dismissible = true }: { title: string; eyebrow: string; children: React.ReactNode; onClose: () => void; wide?: boolean; dismissible?: boolean }) {
+  return <div className="modal-backdrop" onMouseDown={(e) => { if (dismissible && e.target === e.currentTarget) onClose(); }} onKeyDown={(e) => { if (!dismissible && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); } }}><section className={`modal-card ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>{dismissible && <button className="modal-close" onClick={onClose} aria-label="Close"><Icon name="close"/></button>}<span className="eyebrow-line">{eyebrow}</span><h2>{title}</h2>{children}</section></div>;
 }
 
 function SettingsModal({ model, modelInfo, options, setOptions, onClose, onSave, onMcp }: {
   model: string; modelInfo: ModelInfo | null; options: typeof initialOptions; setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>;
   onClose: () => void; onSave: () => void; onMcp: () => void;
 }) {
+  const tokenPresets = buildTokenPresets({ contextLimit: modelInfo?.context ?? options.context, outputLimit: modelInfo?.max_output_tokens ?? null });
+  const reasoning = modelInfo?.reasoning;
+  const reasoningValues: Array<boolean | string | null> = [null, ...(reasoning?.support === 'toggle' || reasoning?.support === 'levels' ? reasoning.values : [])];
+  const selectedReasoningIndex = Math.max(0, reasoningValues.findIndex((value) => value === options.reasoning));
   const field = (label: string, value: number, key: 'context' | 'maxTokens' | 'temperature') => <label className="settings-field"><span>{label}</span><input type="number" value={value} min={key === 'context' ? 1024 : 1} max={key === 'temperature' ? 2 : undefined} step={key === 'temperature' ? 0.1 : 1} onChange={(e) => setOptions((old) => ({ ...old, [key]: key === 'temperature' ? Number(e.target.value) : Number.parseInt(e.target.value || '0', 10) }))}/></label>;
   return <Modal title="Run configuration" eyebrow="MODEL / EXECUTION" onClose={onClose}>
-    <div className="setting-model-strip"><span className="picker-symbol"><Icon name="spark"/></span><span><small>SELECTED MODEL</small><strong title={model}>{model}</strong><i>Reasoning: model default</i></span></div>
-    <div className="settings-fields">{field('Context tokens', options.context, 'context')}{field('Maximum output tokens', options.maxTokens, 'maxTokens')}{field('Temperature', options.temperature, 'temperature')}</div>
+    <div className="setting-model-strip"><span className="picker-symbol"><Icon name="spark"/></span><span><small>SELECTED MODEL</small><strong title={model}>{model}</strong><i>{reasoning?.support === 'levels' || reasoning?.support === 'toggle' ? 'Reasoning controls reported by model' : 'Reasoning controls unavailable; model default is preserved'}</i></span></div>
+    <div className="settings-fields"><label className="settings-field"><span>Context window preset</span><select value={tokenPresets.context.some((preset) => preset.value === options.context) ? String(options.context) : 'custom'} onChange={(e) => { if (e.target.value !== 'custom') setOptions((old) => ({ ...old, context: Number(e.target.value) })); }}><option value="custom">Custom value</option>{tokenPresets.context.map((preset) => <option key={preset.value} value={preset.value} disabled={preset.disabled}>{preset.label}{preset.disabled ? ' · exceeds model limit' : ''}</option>)}</select></label>{field('Context tokens · custom', options.context, 'context')}{<label className="settings-field"><span>Maximum output preset{tokenPresets.outputLimitKnown ? '' : ' · provider maximum unknown'}</span><select value={tokenPresets.output.some((preset) => preset.value === options.maxTokens) ? String(options.maxTokens) : 'custom'} onChange={(e) => { if (e.target.value !== 'custom') setOptions((old) => ({ ...old, maxTokens: Number(e.target.value) })); }}><option value="custom">Custom value</option>{tokenPresets.output.map((preset) => <option key={preset.value} value={preset.value} disabled={preset.disabled}>{preset.label}{preset.disabled ? ' · exceeds supported limit' : ''}</option>)}</select></label>}{field('Maximum output tokens · custom', options.maxTokens, 'maxTokens')}{field('Temperature', options.temperature, 'temperature')}</div>
+    <label className="settings-field"><span>Reasoning</span><select value={String(selectedReasoningIndex)} onChange={(e) => { const value = reasoningValues[Number(e.target.value)] ?? null; setOptions((old) => ({ ...old, reasoning: normalizeReasoningChoice(value, reasoning ?? null) })); }}><option value="0">Model default</option>{reasoningValues.slice(1).map((value, index) => <option key={`${typeof value}-${String(value)}-${index}`} value={index + 1}>{typeof value === 'boolean' ? value ? 'On' : 'Off' : value}</option>)}</select><small>{reasoning ? `Model default: ${String(reasoning.default ?? 'not reported')}` : 'The model did not report reasoning controls; no override will be sent.'}</small></label>
     <div className="context-facts"><span>Advertised context <b>{modelInfo ? fmt(modelInfo.context) : 'Unknown'}</b></span><span>Runtime allocation <b>Shown in the task signal panel</b></span></div>
     <label className="settings-field"><span>Keep model warm after a request</span><select value={options.keepAlive} onChange={(e) => setOptions((old) => ({ ...old, keepAlive: e.target.value }))}><option value="30m">30 minutes</option><option value="10m">10 minutes</option><option value="5m">5 minutes</option><option value="0">Unload when idle (Ollama setting)</option></select></label>
-    <div className="settings-fields select-fields"><label className="settings-field"><span>File access</span><select value={options.access} onChange={(e) => setOptions((old) => ({ ...old, access: e.target.value as AccessMode }))}><option value="copy">Copy workspace</option><option value="plan">Plan only</option><option value="ask">Ask before writes</option><option value="edit">Edit project</option></select></label><label className="settings-field"><span>Approval</span><select value={options.approvalMode} onChange={(e) => setOptions((old) => ({ ...old, approvalMode: e.target.value as ApprovalMode }))}><option value="per-action">Approve each action</option><option value="per-task">Approve for this task</option></select></label></div>
+    <div className="settings-fields select-fields"><label className="settings-field"><span>File access</span><select value={options.access} onChange={(e) => setOptions((old) => ({ ...old, access: e.target.value as AccessMode }))}><option value="copy">Copy workspace</option><option value="plan">Plan only</option><option value="ask">Ask before writes</option><option value="edit">Edit project</option></select></label><label className="settings-field"><span>Approval</span><select value={options.approvalMode} onChange={(e) => setOptions((old) => ({ ...old, approvalMode: e.target.value as ApprovalMode }))}><option value="per-action">Approve each action</option><option value="per-task">Approve for this task</option><option value="auto">Auto-approve actions · this run</option></select>{options.approvalMode === 'auto' && <small className="auto-approve-warning">Automatically approves project tool actions for this run. Workspace boundaries and access mode remain in force.</small>}</label></div>
     <div className="settings-bottom"><Button kind="outline" onClick={onMcp}>Configure local MCP</Button><span>Context is never silently reduced.</span></div>
     <div className="modal-actions"><Button kind="quiet" onClick={onClose}>Cancel</Button><Button kind="bright" onClick={onSave}>Apply to this session</Button></div>
   </Modal>;
 }
 
-function ApprovalModal({ approval, onChoice }: { approval: Approval; onChoice: (value: boolean) => void }) {
-  return <Modal title={approval.name.replaceAll('_', ' ')} eyebrow="ACTION NEEDS YOUR REVIEW" wide onClose={() => onChoice(false)}>
-    <p className="modal-copy">The agent requested an action under <b>{approval.mode === 'per-task' ? 'per-task' : 'per-action'} approval</b>. Review the exact arguments and selected workspace.</p>
+function ApprovalModal({ approval, onChoice, onCancelRun }: { approval: Approval; onChoice: (value: boolean) => void; onCancelRun: () => void }) {
+  return <Modal title={approval.name.replaceAll('_', ' ')} eyebrow="ACTION NEEDS YOUR REVIEW" wide dismissible={false} onClose={() => undefined}>
+    <p className="modal-copy">The agent requested an action under <b>{approval.mode === 'per-task' ? 'per-task' : 'per-action'} approval</b>. Review the exact arguments and selected workspace, then choose an action.</p>
     <div className="approval-context"><span>WORKSPACE</span><code>{approval.workspace}</code></div>
     <pre className="diff-view approval-preview">{JSON.stringify(approval.arguments, null, 2)}</pre>
-    <div className="modal-actions"><Button kind="quiet" onClick={() => onChoice(false)}>Deny action</Button><Button kind="bright" onClick={() => onChoice(true)}>Approve {approval.mode === 'per-task' ? 'task' : 'action'}</Button></div>
+    <div className="modal-actions"><Button kind="quiet" onClick={onCancelRun}>Cancel task</Button><Button kind="outline" onClick={() => onChoice(false)}>Deny action</Button><Button kind="bright" onClick={() => onChoice(true)}>Approve {approval.mode === 'per-task' ? 'task' : 'action'}</Button></div>
   </Modal>;
 }

@@ -19,6 +19,8 @@ describe('model capability controls', () => {
     expect(known.output.find((item) => item.value === 2_000_000)?.disabled).toBe(true);
     expect(unknown.outputLimitKnown).toBe(false);
     expect(unknown.output.some((item) => item.value === 32_768)).toBe(true);
+    expect(unknown.output.some((item) => item.value === 1_000_000 && !item.disabled)).toBe(true);
+    expect(unknown.output.some((item) => item.value === 10_000_000 && !item.disabled)).toBe(true);
   });
 
   it('keeps reasoning default when metadata is absent and accepts only advertised choices', () => {

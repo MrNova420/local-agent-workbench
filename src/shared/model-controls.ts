@@ -14,33 +14,30 @@ export type TokenPresetSet = {
   outputLimitKnown: boolean;
 };
 
-const BASE_TIERS = [4096, 8192, 16384, 32768, 65536, 100000, 131072, 200000, 262144, 300000, 500000, 750000, 1500000, 3000000];
+const BASE_TIERS = [4096, 8192, 16384, 32768, 65536, 100000, 131072, 200000, 262144, 300000, 500000, 750000, 1000000, 1500000, 2000000, 3000000, 5000000, 10000000];
 
-function buildTiers(limit: number): number[] {
+function buildTiers(): number[] {
   const values = new Set(BASE_TIERS);
-  for (const seed of [1_000_000, 2_000_000, 5_000_000, 10_000_000]) {
-    for (let value = seed; value <= Math.max(limit * 2, seed); value *= 2) values.add(value);
-  }
-  for (let value = 1 << 12; value <= Math.max(limit * 2, 4096); value *= 2) values.add(value);
-  return [...values].sort((a, b) => a - b).filter((value) => value <= Math.max(limit * 2, 4096));
+  for (let value = 4096; value <= 16_777_216; value *= 2) values.add(value);
+  return [...values].sort((a, b) => a - b);
 }
 
-function presetRows(limit: number, otherLimit: number, kind: 'context' | 'output', explicitLimit: boolean): TokenPreset[] {
-  const tiers = new Set([...buildTiers(Math.max(limit, otherLimit)), limit]);
+function presetRows(limit: number | null, kind: 'context' | 'output'): TokenPreset[] {
+  const tiers = new Set(buildTiers());
+  if (limit !== null) tiers.add(limit);
   return [...tiers].sort((a, b) => a - b).map((value) => ({
     value,
-    label: value === limit && explicitLimit ? `${value.toLocaleString()} · ${kind} maximum` : value.toLocaleString(),
-    disabled: value > limit,
+    label: value === limit ? `${value.toLocaleString()} · ${kind} maximum` : value.toLocaleString(),
+    disabled: limit !== null && value > limit,
   }));
 }
 
 export function buildTokenPresets({ contextLimit, outputLimit }: { contextLimit: number; outputLimit: number | null }): TokenPresetSet {
   const safeContext = Number.isSafeInteger(contextLimit) && contextLimit >= 1 ? contextLimit : 4096;
   const safeOutput = outputLimit !== null && Number.isSafeInteger(outputLimit) && outputLimit >= 1 ? outputLimit : null;
-  const outputCeiling = safeOutput ?? safeContext;
   return {
-    context: presetRows(safeContext, outputCeiling, 'context', true),
-    output: presetRows(outputCeiling, safeContext, 'output', safeOutput !== null),
+    context: presetRows(safeContext, 'context'),
+    output: presetRows(safeOutput, 'output'),
     outputLimitKnown: safeOutput !== null,
   };
 }

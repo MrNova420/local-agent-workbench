@@ -30,3 +30,5 @@
 .signal-card.signal-warning{border-color:rgba(231,126,143,.5);background:rgba(72,30,42,.28)}
 .context-warning{margin:0 11px 10px;padding:8px 10px;border:1px solid rgba(231,126,143,.3);border-radius:5px;background:rgba(72,30,42,.2);color:#e5a2aa;font:8px/1.5 var(--mono)}
 
+/* Model capability and approval controls */
+.sheet-inspect{min-height:30px;padding:6px 8px;font-size:8px;flex:none}.sheet-inspect .icon{width:12px;height:12px}.reasoning-trace{margin:8px 0 0 31px;border:1px solid rgba(145,180,238,.16);border-radius:5px;background:rgba(49,67,103,.12);color:#aebde0;font:8px var(--mono)}.reasoning-trace summary{padding:7px 9px;cursor:pointer}.reasoning-trace>div{padding:8px 10px;border-top:1px solid rgba(145,180,238,.12);white-space:pre-wrap;color:#b9c5d7;line-height:1.55}.auto-approve-warning{color:#e0b97a!important;line-height:1.45}.approval-preview{max-height:43vh}

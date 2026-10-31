@@ -259,16 +259,24 @@ class AgentService:
             raise ValueError(f"Model is not currently installed in Ollama: {model}")
         access = str(options.get("access", "ask"))
         approval_mode = str(options.get("approvalMode", "per-action"))
-        if access not in {"copy", "plan", "ask", "edit"} or approval_mode not in {"per-action", "per-task"}:
+        if access not in {"copy", "plan", "ask", "edit"} or approval_mode not in {"per-action", "per-task", "auto"}:
             raise ValueError("Invalid access or approval setting.")
+        reasoning = options.get("reasoning")
+        if reasoning is not None:
+            if not isinstance(reasoning, (str, bool)):
+                raise ValueError("Invalid reasoning choice.")
+            capabilities = self.handle("model_info", {"model": model}).get("reasoning", {})
+            if reasoning not in capabilities.get("values", []):
+                raise ValueError("The selected model does not advertise that reasoning choice.")
         session_id = options.get("sessionId")
         state = self.sessions.load(str(session_id)) if session_id else self.sessions.create(str(source), model, int(options["context"]))
         if Path(state["workspace"]).resolve(strict=True) != source:
             raise ValueError("Selected session belongs to a different project. Open that project's workspace explicitly first.")
         state.update(
             model=model, context=int(options["context"]), access=access,
-            approval_mode=approval_mode, max_tokens=int(options["maxTokens"]),
+            approval_mode="per-action" if approval_mode == "auto" else approval_mode, max_tokens=int(options["maxTokens"]),
             temperature=float(options["temperature"]), keep_alive=str(options.get("keepAlive", "30m")),
+            reasoning=reasoning,
         )
         if state["context"] < 1024 or state["max_tokens"] < 1 or not 0 <= state["temperature"] <= 2:
             raise ValueError("Context, output token, or temperature setting is outside the supported range.")
@@ -342,13 +350,14 @@ class AgentService:
                 mcp_call=lambda name, args: self.mcp.run(self.mcp.call(name, args), cancel_event=controller["cancel"]),
             )
             engine.runtime = RequestScopedOllama(engine.runtime)
+            engine.state["reasoning"] = state.get("reasoning")
             engine.state["keep_alive"] = state.get("keep_alive", "30m")
             controller["engine"] = engine
             if controller["cancel"].is_set():
                 engine.cancel()
             messages = engine.run(turn.prompt, state.get("messages", []))
             state["messages"] = messages
-            state.setdefault("turns", []).append({"prompt": turn.prompt, "started_at": time.time(), "workspace": str(turn.workspace)})
+            state.setdefault("turns", []).append({"prompt": turn.prompt, "started_at": time.time(), "workspace": str(turn.workspace), "approval_mode": turn.approval_mode})
             state["working_workspace"] = str(turn.workspace)
             if turn.access == "copy":
                 state["copy_manifest"] = state.get("copy_manifest") or capture_manifest(turn.workspace)
