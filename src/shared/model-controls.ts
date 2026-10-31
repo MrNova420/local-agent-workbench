@@ -15,6 +15,13 @@ export type TokenPresetSet = {
   outputLimitKnown: boolean;
 };
 
+export const DEFAULT_OLLAMA_MODEL = 'hf.co/mradermacher/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M';
+
+export function chooseDefaultModel(modelIds: string[], current = ''): string {
+  if (current && modelIds.includes(current)) return current;
+  return modelIds.includes(DEFAULT_OLLAMA_MODEL) ? DEFAULT_OLLAMA_MODEL : modelIds[0] || '';
+}
+
 export function buildModelLabels(modelIds: string[], overrides: Record<string, string> = {}): Record<string, string> {
   const rows = modelIds.map((id) => {
     const normalized = id.startsWith('gguf::') ? id.slice('gguf::'.length) : id;

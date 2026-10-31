@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import type { AccessMode, ApprovalMode, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, WorkerCommand, WorkerEvent } from '../shared/protocol';
 import { nextRunPhase } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordStreamedText, type RunMetrics } from '../shared/run-metrics';
-import { buildModelLabels, buildTokenPresets, normalizeReasoningChoice } from '../shared/model-controls';
+import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice } from '../shared/model-controls';
 import { normalizeGpuStats } from '../shared/resource-metrics';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; thinking?: string; streaming?: boolean };
@@ -142,7 +142,7 @@ export default function App() {
       setModels(rows);
       setModelLabels(Object.fromEntries(catalog.gguf.map((entry) => [entry.id, entry.label])));
       setConnected(catalog.ollama_error ? 'no' : 'yes');
-      setModel((current) => current && rows.includes(current) ? current : rows[0] || '');
+      setModel((current) => chooseDefaultModel(rows, current));
       if (catalog.ollama_error && !catalog.gguf.length) notify(`Ollama is not reachable: ${catalog.ollama_error}`, 'bad');
       else if (!catalog.ollama_error && !rows.length) notify('Ollama is connected, but no models are installed.', 'warn');
     } catch (error) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildModelLabels, buildTokenPresets, normalizeReasoningChoice, type ReasoningCapability } from '../src/shared/model-controls';
+import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice, type ReasoningCapability } from '../src/shared/model-controls';
 
 describe('model capability controls', () => {
   it('disambiguates installed models that share the same short display name', () => {
@@ -47,5 +47,10 @@ describe('model capability controls', () => {
     expect(normalizeReasoningChoice('off', capability)).toBe(null);
     expect(normalizeReasoningChoice('high', capability)).toBe('high');
     expect(normalizeReasoningChoice(false, { support: 'toggle', default: true, values: [false, true] })).toBe(false);
+  });
+  it('defaults to the approved exact mradermacher model instead of whichever Ollama lists first', () => {
+    expect(chooseDefaultModel(['hf.co/ressl/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M', 'hf.co/mradermacher/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M'])).toBe('hf.co/mradermacher/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M');
+    expect(chooseDefaultModel(['qwen3:0.6b'])).toBe('qwen3:0.6b');
+    expect(chooseDefaultModel(['hf.co/mradermacher/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M'], 'qwen3:0.6b')).toBe('hf.co/mradermacher/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M');
   });
 });
