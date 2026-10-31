@@ -722,7 +722,7 @@ export default function App() {
 
     <main className="main-stage">
       {view === 'landing' && <Landing
-        workspaces={workspaces} workspaceSearch={workspaceSearch} sessions={sessions} models={models} modelLabels={displayModelLabels} model={model} context={options.context}
+        workspaces={workspaces} workspaceSearch={workspaceSearch} sessions={sessions} models={models} modelLabels={displayModelLabels} model={model} modelPreloading={modelPreloading} context={options.context}
         connected={connected} telemetry={telemetry} onChoose={chooseWorkspace} onOpen={showProject}
         onModel={selectModel} onRefresh={() => { void refreshHome(); void refreshModels(); }}
         onModelInfo={(name) => request<ModelInfo>({ command: 'model_info', model: name })}
@@ -812,8 +812,8 @@ export default function App() {
   </div>;
 }
 
-function Landing({ workspaces, workspaceSearch, sessions, models, modelLabels, model, context, connected, telemetry, onChoose, onOpen, onModel, onModelInfo, onRefresh, onSearch, onPin, onRemove, onLibrary }: {
-  workspaces: WorkspaceHistoryEntry[]; workspaceSearch: string; sessions: SessionSummary[]; models: string[]; modelLabels: Record<string, string>; model: string; context: number; connected: string;
+function Landing({ workspaces, workspaceSearch, sessions, models, modelLabels, model, modelPreloading, context, connected, telemetry, onChoose, onOpen, onModel, onModelInfo, onRefresh, onSearch, onPin, onRemove, onLibrary }: {
+  workspaces: WorkspaceHistoryEntry[]; workspaceSearch: string; sessions: SessionSummary[]; models: string[]; modelLabels: Record<string, string>; model: string; modelPreloading: boolean; context: number; connected: string;
   telemetry: TelemetryView;
   onChoose: () => void; onOpen: (root: string) => void; onModel: (name: string) => void; onModelInfo: (name: string) => Promise<ModelInfo>; onRefresh: () => void;
   onSearch: (value: string) => void; onPin: (root: string, pinned: boolean) => void; onRemove: (root: string) => void; onLibrary: () => void;
@@ -846,7 +846,7 @@ function Landing({ workspaces, workspaceSearch, sessions, models, modelLabels, m
       </div>
       <div className="landing-column engine-column">
         <div className="section-heading"><div><span className="section-number">02</span><h2>Inference source</h2></div><span className={`source-status ${connected}`}>{connected === 'yes' ? 'REACHABLE' : connected === 'no' ? 'OFFLINE' : 'CHECKING'}</span></div>
-        <label className="model-picker-card"><span className="picker-symbol"><Icon name="spark"/></span><span className="picker-content"><small>LOCAL MODEL</small><select value={model} onChange={(e) => onModel(e.target.value)}>{!models.length && <option value="">No installed models</option>}{models.map((name) => <option key={name} value={name}>{modelLabels[name] || shortModel(name)}</option>)}</select><span>Choose Ollama models or add Hugging Face GGUF files.</span></span><Icon name="chevron"/></label>
+        <label className="model-picker-card"><span className="picker-symbol"><Icon name="spark"/></span><span className="picker-content"><small>LOCAL MODEL</small><select value={model} disabled={modelPreloading} onChange={(e) => onModel(e.target.value)}>{!models.length && <option value="">No installed models</option>}{models.map((name) => <option key={name} value={name}>{modelLabels[name] || shortModel(name)}</option>)}</select><span>{modelPreloading ? 'Model warming; selection returns when ready.' : 'Choose Ollama models or add Hugging Face GGUF files.'}</span></span><Icon name="chevron"/></label>
         <Button kind="outline" onClick={onLibrary}>Browse Hugging Face / add local models</Button>
         <div className="engine-foot"><span><Icon name="cpu"/> {telemetry.serviceCpu == null ? 'SERVICE READY' : `SERVICE ${telemetry.serviceCpu}% CPU`}</span><span><Icon name="memory"/> {telemetry.serviceRss} SIDECAR</span><span>{sessions.length} SAVED SESSIONS</span></div>
       </div>
