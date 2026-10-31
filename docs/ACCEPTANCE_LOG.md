@@ -222,5 +222,5 @@ A second visible check using the rebuilt package confirmed the final sidecar eve
 - Added remote MCP Streamable HTTP alongside stdio, with HTTPS required except loopback, redirects explicitly disabled in the HTTP client, environment-reference resolution for credentials, configurable connection/read timeouts, and per-tool approval retained. The config editor documents `${ENV:NAME}` usage. The stdio child now receives the SDK's default allow-listed environment plus only explicitly configured variables; the whole parent process environment is no longer forwarded.
 - Updated MCP dependencies to patched v1.30+ and below v2. This avoids the official SDK's affected HTTP redirect behavior (cross-origin redirects could forward custom headers in earlier versions). Direct credential literals in sensitive remote headers are rejected; use `${ENV:VARIABLE_NAME}`.
 - Updated the capability directory and parity register to show local/remote MCP support, with remote connection and auth acceptance still pending.
-- Commits: engine `5850163`; app `1ccad36`, then capability assertion `f06f5d8`.
+- Commits: engine `5850163`; app `1ccad36`, capability assertion `07f4c4d`, and documentation `4a2f943`.
 - Tests/build/package/visible acceptance remain queued for the final verification pass. No MCP server was launched and no model was loaded or requested during this change.
