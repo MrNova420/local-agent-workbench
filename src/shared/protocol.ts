@@ -42,9 +42,14 @@ export type WorkerCommand =
   | { command: 'system_snapshot' }
   | { command: 'workspace_files'; workspace: string }
   | { command: 'workspace_diff'; workspace: string }
+  | { command: 'workspaces_list'; query?: string }
+  | { command: 'workspace_record'; workspace: string }
+  | { command: 'workspace_remove'; workspace: string }
+  | { command: 'workspace_pin'; workspace: string; pinned: boolean }
+  | { command: 'workspace_track_sessions'; workspace: string; track: boolean }
   | { command: 'sessions_list'; workspace?: string }
   | { command: 'session_new'; workspace: string; model: string; context: number }
-  | { command: 'session_resume'; sessionId: string }
+  | { command: 'session_resume'; sessionId: string; workspace?: string; source?: 'app' | 'project' }
   | { command: 'mcp_config_get' }
   | { command: 'mcp_config_set'; config: unknown }
   | { command: 'run_start'; options: RunOptions }
@@ -97,6 +102,25 @@ export type SessionSummary = {
   provider_id?: 'ollama' | 'llama.cpp';
   model_id?: string;
   updated_at: number;
+  workspace_id?: string;
+  sync_conflict?: boolean;
+  recommended_source?: 'app' | 'project';
+  sources?: Array<'app' | 'project'>;
+};
+
+export type WorkspaceHistoryEntry = {
+  path: string;
+  workspace_id?: string | null;
+  pinned: boolean;
+  available: boolean;
+  first_opened_at?: number;
+  last_opened_at?: number;
+};
+
+export type SessionConflict = {
+  conflict: true;
+  recommended_source: 'project';
+  versions: Array<{ source: 'app' | 'project'; updated_at?: number }>;
 };
 
 export type ProjectFile = { path: string; size: number; text: boolean };

@@ -39,7 +39,7 @@ from mcp_support import MCPManager  # noqa: E402
 from project_knowledge import ProjectKnowledge  # noqa: E402
 from project_view import preview_files  # noqa: E402
 from project_diff import workspace_diff_text  # noqa: E402
-from sessions import SessionStore  # noqa: E402
+from persistence import MirroredSessionStore, WorkspaceHistory  # noqa: E402
 from telemetry import Telemetry  # noqa: E402
 from turn_context import TurnContext, validate_selected_workspace  # noqa: E402
 from ui_events import AgentEventRelay  # noqa: E402
@@ -84,7 +84,8 @@ class AgentService:
     """New app's stdio service adapter around the shared local agent engine."""
 
     def __init__(self) -> None:
-        self.sessions = SessionStore(APP_DATA / "sessions")
+        self.sessions = MirroredSessionStore(APP_DATA)
+        self.workspaces = WorkspaceHistory(APP_DATA)
         self.runtime = OllamaRuntime()
         self.telemetry = Telemetry()
         self.mcp = MCPManager(APP_DATA / "mcp.json")
@@ -242,6 +243,20 @@ class AgentService:
         if command == "workspace_files":
             root = validate_selected_workspace(True, message["workspace"])
             return preview_files(root, limit=2000)
+        if command == "workspaces_list":
+            return self.workspaces.list(str(message.get("query", "")))
+        if command == "workspace_record":
+            root = validate_selected_workspace(True, message["workspace"])
+            return self.workspaces.record(str(root))
+        if command == "workspace_remove":
+            self.workspaces.remove(str(message["workspace"]))
+            return {"removed": True}
+        if command == "workspace_pin":
+            self.workspaces.set_pinned(str(message["workspace"]), bool(message.get("pinned")))
+            return {"pinned": bool(message.get("pinned"))}
+        if command == "workspace_track_sessions":
+            root = validate_selected_workspace(True, message["workspace"])
+            return self.sessions.set_track_sessions(str(root), bool(message.get("track")))
         if command == "workspace_diff":
             root = validate_selected_workspace(True, message["workspace"])
             return {"text": workspace_diff_text(root)}
@@ -259,10 +274,16 @@ class AgentService:
             if not model or context < 1024:
                 raise ValueError("Choose an installed model and an explicit context of at least 1,024 tokens.")
             state = self.sessions.create(str(root), model, context)
-            self.sessions.save(state)
+            state["persistence"] = self.sessions.save(state)
             return state
         if command == "session_resume":
-            state = self.sessions.load(str(message["sessionId"]))
+            selected_workspace = str(message.get("workspace", "")) or None
+            if not selected_workspace:
+                selected_workspace = str(self.sessions.load(str(message["sessionId"]))["workspace"])
+            loaded = self.sessions.load(str(message["sessionId"]), selected_workspace, message.get("source"))
+            if loaded.get("conflict"):
+                return loaded
+            state = loaded["state"]
             source = validate_selected_workspace(True, state["workspace"])
             if state.get("access") == "copy":
                 expected = managed_copy_path(APP_DATA / "workspaces", state["session_id"], require_exists=True)
@@ -271,6 +292,10 @@ class AgentService:
                     raise ValueError("Saved disposable workspace is missing or invalid; refusing to resume it.")
                 state["working_workspace"] = str(saved)
             state["workspace"] = str(source)
+            state["activity_events"] = state.get("activity_events", []) if isinstance(state.get("activity_events", []), list) else []
+            state["plan"] = state.get("plan", []) if isinstance(state.get("plan", []), list) else []
+            if message.get("source"):
+                state["persistence"] = self.sessions.save(state)
             return state
         if command == "mcp_config_get":
             return {"mcpServers": self.mcp.servers}

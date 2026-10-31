@@ -77,6 +77,32 @@ def test_sessions_are_filtered_by_exact_project_root(service, tmp_path):
     service.handle("session_new", {"workspace": str(second), "model": "model-b:latest", "context": 8192})
     rows = service.handle("sessions_list", {"workspace": str(first)})
     assert [row["session_id"] for row in rows] == [a["session_id"]]
+    assert (first / ".agent-workbench" / "sessions" / f"{a['session_id']}.json").is_file()
+
+
+def test_workspace_history_and_session_conflict_resolution(service, tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    service.handle("workspace_record", {"workspace": str(project)})
+    workspaces = service.handle("workspaces_list", {})
+    assert workspaces[0]["path"] == str(project.resolve())
+    assert workspaces[0]["available"] is True
+
+    session = service.handle("session_new", {"workspace": str(project), "model": "model-a:latest", "context": 8192})
+    mirror = project / ".agent-workbench" / "sessions" / f"{session['session_id']}.json"
+    import json
+    state = json.loads(mirror.read_text(encoding="utf-8"))
+    state["messages"].append({"role": "user", "content": "project-only update"})
+    state["updated_at"] += 1
+    mirror.write_text(json.dumps(state), encoding="utf-8")
+
+    conflict = service.handle("session_resume", {"sessionId": session["session_id"], "workspace": str(project)})
+    resolved = service.handle("session_resume", {"sessionId": session["session_id"], "workspace": str(project), "source": "project"})
+
+    assert conflict["conflict"] is True
+    assert conflict["recommended_source"] == "project"
+    assert resolved["session_id"] == session["session_id"]
+    assert resolved["messages"][-1]["content"] == "project-only update"
 
 
 def test_resume_does_not_rebind_a_session_to_another_project(service, tmp_path, monkeypatch):
