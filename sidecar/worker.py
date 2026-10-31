@@ -38,6 +38,7 @@ from disposable_workspace import (  # noqa: E402
 from mcp_support import MCPManager  # noqa: E402
 from project_knowledge import ProjectKnowledge  # noqa: E402
 from project_view import preview_files  # noqa: E402
+from project_diff import workspace_diff_text  # noqa: E402
 from sessions import SessionStore  # noqa: E402
 from telemetry import Telemetry  # noqa: E402
 from turn_context import TurnContext, validate_selected_workspace  # noqa: E402
@@ -243,14 +244,7 @@ class AgentService:
             return preview_files(root, limit=2000)
         if command == "workspace_diff":
             root = validate_selected_workspace(True, message["workspace"])
-            import subprocess
-
-            result = subprocess.run(
-                ["git", "diff", "--no-ext-diff", "--"], cwd=root,
-                capture_output=True, text=True, timeout=15, check=False, shell=False,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            return {"text": (result.stdout + result.stderr).strip() or "No unstaged Git changes."}
+            return {"text": workspace_diff_text(root)}
         if command == "sessions_list":
             workspace = message.get("workspace")
             rows = self.sessions.list()
