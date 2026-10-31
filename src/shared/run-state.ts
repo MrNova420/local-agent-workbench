@@ -22,6 +22,11 @@ export function runStepProgress(phase: string, running: boolean): number {
 }
 
 export function nextRunPhase(previous: string, event: WorkerEvent): string {
+  if (event.type === 'service_exit') {
+    return /^(connecting|recovering|waiting|generating|finishing)/i.test(previous)
+      ? 'Interrupted · recovery required'
+      : previous;
+  }
   if (event.type === 'phase') {
     const phase = String(event.phase || 'working');
     if (phase === 'waiting') return 'Waiting for first token';

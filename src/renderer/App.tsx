@@ -286,6 +286,14 @@ export default function App() {
       if (event.type === 'service_ready') setInstalled(true);
       if (event.type === 'service_error' || event.type === 'service_exit') {
         setInstalled(false);
+        if (event.type === 'service_exit') {
+          setApproval(null);
+          setRunning(false);
+          setPhase((current) => nextRunPhase(current, event));
+          setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
+          setRunMetrics((current) => endGeneration(current));
+          setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
+        }
         notify(String(event.error || 'Agent service stopped.'), 'bad');
       }
       if (event.type === 'service_log') console.info('[agent service]', event.text);

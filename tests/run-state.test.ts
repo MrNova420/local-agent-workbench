@@ -40,4 +40,9 @@ describe('run status transitions', () => {
     expect(nextRunPhase('Cancelled', { type: 'run_idle' })).toBe('Cancelled');
     expect(nextRunPhase('Waiting', { type: 'error' })).toBe('Run failed');
   });
+
+  it('marks a lost sidecar during generation as interrupted and requiring recovery', () => {
+    expect(nextRunPhase('Generating', { type: 'service_exit' })).toBe('Interrupted · recovery required');
+    expect(nextRunPhase('Ready', { type: 'service_exit' })).toBe('Ready');
+  });
 });
