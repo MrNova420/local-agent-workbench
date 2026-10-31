@@ -46,6 +46,16 @@ The selected-value run is documented in [ACCEPTANCE_LOG.md](ACCEPTANCE_LOG.md). 
 - The Q4 model file is 5.23 GiB; Ollama's 16.8 GB `size` at 262,144 context is the loaded runtime footprint, not the GGUF file size. The 4 GB GTX 1650 SUPER had 3.28 GiB free at model fit. Ollama's log projected 13.4 GiB GPU need (4.81 GiB model + 8.24 GiB context + compute), then selected zero GPU layers. It logged `offloaded 0/33 layers to GPU` and an 8 GiB CPU KV cache. At the earlier 64,096 request / 64,256 effective load, Ollama fit 6/34 layers on GPU, with about 1.34 GiB of model buffers and 251 MiB of KV cache on GPU. This confirms the context increase is why text-layer GPU offload fell to zero. The user also observed a sustained 2–5 minute CPU-only interval. Record active-inference telemetry during the visible 64K/8K comparison; do not change runtime settings before that user-selected test.
 - Do not change context, reasoning, OpenCode settings, Ollama environment/configuration, or model files as part of this investigation without separate approval.
 
+### B-005: Verify adaptive model markers and persistent transcript appearance
+
+**Priority:** High; source and package checks pass, with visible acceptance still pending.
+
+- Show exactly one orbit marker for each installed local model; show none when the catalog is empty. Give the selected model a distinct marker and distribute larger catalogs cleanly over the existing rings.
+- Preserve Markdown structure and syntax highlighting when a saved session is resumed and after the app is relaunched. Keep user/model message content as the original Markdown string.
+- Run the visible check against one packaged instance after the user is finished using the desktop. Reopen a saved response containing headings, lists, and fenced code, then confirm it keeps its visual rendering after both session resume and app relaunch. Do not call the reported JSON regression fixed until reproduced or ruled out in that exact flow.
+
+Orbit marker generation and styling are implemented; tests cover 0, 3, and 27 installed models. Transcript restoration now has a renderer test for Markdown structure and highlighted code. The latest package includes the orbit styles and one Highlight.js theme stylesheet. Visible acceptance remains pending because the existing app window was minimized while the desktop was in use; it was not raised or replaced.
+
 ## Active acceptance blockers
 
 - A previous wrapper imposed an accidental 20-minute observation cap; that was a test-driver mistake, not an app limit. Do not use a fixed observation deadline for long model generation. The first numbered-list cancellation attempt ended before the user-requested forced stop and is inconclusive. The user's retry had reached 13 items after about 120 seconds; no cancellation was sent. The app was later observed minimized, so the retry's eventual completion/cancellation state remains unknown.
