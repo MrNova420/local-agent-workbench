@@ -6,6 +6,8 @@
 - Electron renderer: 42 Vitest passed; sidecar adapter: 35 pytest passed with the same upstream warning; TypeScript typecheck passed.
 - Built isolated package `out-core-acceptance-2026-10-31-small-model-cache` from the current app and engine source. The bundled worker answered JSONL `ping` with `ready` / version `0.1.0`.
 - The existing older app instance was left open, so this package was not launched for visual acceptance. The new Home button, profile persistence, plan-to-tool continuation, and cache display still need a visible test in one app instance.
+- Copied both full Git repositories to `C:\Users\kayde\Desktop\Local Agent Workbench\` as sibling `electron-agent-workbench` and `local-9b-dev-app` clones. Their pre-optimization checkpoints (`1b1b03b`, `7b21211`) were recreated as local branches; source worktrees were retained. The Desktop clone passed 42 renderer tests, 35 sidecar tests, 114 engine tests, and typecheck.
+- Built `C:\Users\kayde\Desktop\Local Agent Workbench\electron-agent-workbench\out\Local Agent Workbench-win32-x64` from the Desktop clones using sibling-engine discovery (no `LOCAL_AGENT_CORE_PATH` override); its bundled worker answered the JSONL `ping` successfully. No new app window was opened.
 
 Date: 2026-10-30  
 Build: Windows x64 Electron Forge package and Squirrel installer  
