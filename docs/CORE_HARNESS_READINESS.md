@@ -38,6 +38,13 @@ The references below were reviewed directly from the official OpenCode documenta
 
 Parity is verified feature-by-feature, not inferred from visual similarity. **The target is all rows, not only P0/P1 or the first release slice.** Sequencing may defer implementation, but a deferred row remains an open parity requirement and cannot be described as 1:1-ready. Every row must end as implemented + tested, or have a documented, user-visible local equivalent/incompatibility with its consequence. No row is declared complete on UI appearance alone.
 
+### Research cross-check and design implications
+
+- OpenCode documents built-in tools plus custom tools and MCP, with per-tool allow/ask/deny rules and wildcard matching. Workbench should adopt the discoverable, extensible surface and granular policy model, while retaining explicit approval for risky actions by default. It should not copy OpenCode's defaults as if they were automatically safe for a local Windows account.
+- OpenAI's documented tool surface includes function calling, web search, file search, tool search, remote MCP, skills, shell, and computer use. The managed Codex harness additionally covers sandboxed execution, event streams, approval, steering, compaction, durable sessions, and delegation. Workbench's equivalent should be an adapter/tool capability system: provider-specific features are advertised only when the runtime supports them; local integrations can extend tools through MCP; cloud-only services remain clearly identified as unavailable unless the user explicitly configures a compatible integration.
+- Microsoft's AppContainer documentation describes an OS-enforced isolation boundary with explicitly granted file, registry, network, and process access. The current Workbench command approval and project working directory do not provide that boundary. Before broad auto-approval, add a real Windows execution backend with measured filesystem/network containment and a host-mode explanation; do not relabel approval as sandboxing.
+- The practical target is extensibility rather than an impossible fixed inventory of “every tool”: versioned tool contracts, runtime/model capability discovery, dynamically loaded MCP definitions, tool-specific permission rules, and an integration directory that distinguishes available, configured, unsupported, and planned capabilities.
+
 ### Core task path
 
 ```mermaid
@@ -202,6 +209,10 @@ The app is core-ready only when the packaged visible path passes and no known P0
 - OpenCode keybindings and keyboard navigation: <https://docs.opencode.ai/docs/keybinds/>
 - OpenCode LSP integration and diagnostics: <https://docs.opencode.ai/docs/lsp/>
 - OpenAI Agents API overview of sessions, turns, environments, events, MCP, tools, resume: <https://developers.openai.com/api/docs/guides/agents-api/overview>
+- OpenAI API tools catalog (function calling, web search, file search, tool search, remote MCP, shell, computer use, image generation): <https://developers.openai.com/api/docs/guides/tools>
+- OpenAI MCP integration and approval guidance: <https://developers.openai.com/api/docs/guides/tools-connectors-mcp>
+- Microsoft AppContainer isolation and per-resource access: <https://learn.microsoft.com/en-us/windows/win32/secauthz/appcontainer-isolation>
+- Microsoft Create Process in Sandbox API: <https://learn.microsoft.com/en-us/windows/win32/secauthz/createprocessinsandbox>
 - Ollama structured tool calling: <https://docs.ollama.com/capabilities/tool-calling>
 - Ollama thinking capabilities and exact supported values: <https://docs.ollama.com/capabilities/thinking>
 - Ollama chat request fields and generation usage: <https://docs.ollama.com/api/chat>

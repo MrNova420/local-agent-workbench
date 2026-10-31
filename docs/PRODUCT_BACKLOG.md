@@ -96,13 +96,15 @@ The complete app and engine have independent Desktop Git clones with their own h
 
 ### B-012: Capability discovery, universal development tools, and safe execution boundaries
 
-**Priority:** Critical for full-product readiness; audit completed, phased design and implementation remain.
+**Priority:** Critical for full-product readiness; official cross-provider research is recorded in `CORE_HARNESS_READINESS.md`; implementation remains phased. The tool directory is now being added to expose actual available and missing capabilities.
 
 - Maintain a capability registry across provider/model/runtime, platform, project, and installed MCP integrations. Show supported/unsupported/unknown tool-call and modality capabilities; never infer a feature from an endpoint accepting a schema.
 - Expand integrations by need: searchable project tools, structured test/build profiles, browser automation, LSP diagnostics/navigation, debugger, Git/review, local MCP, and extensible custom tools. Keep discovery and permission approval host-controlled.
 - Make large-repository enumeration/search resumable, cancellable, and progressive, with configurable budgets and visible partial-result status. Do not remove safeguards in a way that permits uninterruptible scans.
 - Add per-server MCP health/deadline/environment policy. Approval must describe the exact target and scope.
 - Design Windows command/MCP process containment before treating project root, copy mode, or auto-approval as a sandbox. Current approved subprocesses run as the Windows user and can touch locations beyond the selected workspace; consent does not provide OS isolation.
+- Compare Microsoft's AppContainer/Windows sandbox APIs with the app's Python and MCP process model, then implement and fault-test a real opt-in contained executor before broad unattended command permission. Preserve an explicit host-execution mode for tools that require full developer-machine access.
+- Keep browser, LSP, debugger, web access, remote MCP, computer control, and multimodal support as distinct adapters with declared prerequisites and per-tool permission rules; MCP extensibility does not mean every configured service is trustworthy or available.
 - Maintain a parity register with upstream references, local equivalent, status, evidence tier, and incompatibilities for every Codex/OpenCode user-facing capability.
 
 ## Active acceptance blockers
