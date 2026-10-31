@@ -22,6 +22,8 @@ describe('home model orbit slots', () => {
     const markup = renderToStaticMarkup(createElement(LocalModelOrbit, { models, labels: {}, selectedModel: 'llama3:8b' }));
     expect(markup.match(/class="visual-orbit orbit-[abc]" data-model-count="1"/g)).toHaveLength(3);
     expect(markup.match(/class="model-orbit-dot/g)).toHaveLength(3);
+    expect(markup.match(/aria-haspopup="dialog"/g)).toHaveLength(3);
+    expect(markup.match(/<button/g)).toHaveLength(3);
     expect(markup).toContain('model-orbit-dot ring-2 selected');
   });
 

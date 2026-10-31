@@ -39,6 +39,7 @@ def test_dynamic_models_and_full_advertised_context(service):
     info = service.handle("model_info", {"model": "model-a:latest"})
     assert info == {
         "model": "model-a:latest", "context": 262144, "max_output_tokens": None,
+        "family": None, "parameter_size": None, "quantization": None,
         "reasoning": {"support": "unknown", "default": None, "values": []},
         "provider": "ollama", "context_limit_known": True,
     }
@@ -46,13 +47,14 @@ def test_dynamic_models_and_full_advertised_context(service):
 
 def test_model_info_exposes_exact_ollama_reasoning_values(service):
     service.runtime.info = {
-        "model_info": {"test.context_length": 262144},
+        "model_info": {"test.context_length": 262144, "general.family": "qwen", "general.parameter_size": "9B", "general.quantization_level": "Q4_K_M"},
         "thinking": {"default": "medium", "values": ["low", "medium", "high", False]},
     }
     result = service.handle("model_info", {"model": "model-a:latest"})
     assert result["reasoning"] == {
         "support": "levels", "default": "medium", "values": ["low", "medium", "high", False],
     }
+    assert (result["family"], result["parameter_size"], result["quantization"]) == ("qwen", "9B", "Q4_K_M")
 
 
 def test_gguf_registration_is_stable_and_uses_unknown_training_context(service, tmp_path):

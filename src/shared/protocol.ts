@@ -122,6 +122,9 @@ export type DesktopApi = {
 
 export type ModelInfo = {
   model: string;
+  family?: string | null;
+  parameter_size?: string | null;
+  quantization?: string | null;
   context: number | null;
   effective_context?: number | null;
   context_limit_known?: boolean;

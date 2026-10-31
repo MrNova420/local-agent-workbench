@@ -268,6 +268,7 @@ class AgentService:
                                       "values": [False, True, "minimal", "low", "medium", "high", "xhigh", "max"]}}
             info = self.runtime.model_info(str(message["model"]))
             details = info.get("model_info", {})
+            tags = info.get("details", {}) if isinstance(info.get("details"), dict) else {}
             context = max(
                 (value for key, value in details.items() if key.endswith(".context_length") and isinstance(value, int)),
                 default=None,
@@ -281,6 +282,9 @@ class AgentService:
             support = "levels" if any(isinstance(value, str) for value in values) else "toggle" if True in values and False in values else "none" if values == [False] else "unknown"
             return {
                 "model": message["model"], "context": context, "max_output_tokens": None,
+                "family": tags.get("family") or next((value for key, value in details.items() if key.endswith(".family") and isinstance(value, str)), None),
+                "parameter_size": tags.get("parameter_size") or next((value for key, value in details.items() if key.endswith(".parameter_size") and isinstance(value, str)), None),
+                "quantization": tags.get("quantization_level") or next((value for key, value in details.items() if key.endswith(".quantization_level") and isinstance(value, str)), None),
                 "reasoning": {"support": support, "default": default, "values": values},
                 "provider": "ollama", "context_limit_known": context is not None,
             }

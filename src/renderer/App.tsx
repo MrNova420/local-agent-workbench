@@ -9,6 +9,7 @@ import { restoreTranscriptMessages } from '../shared/transcript';
 import { LocalModelOrbit } from './ModelOrbit';
 import { ActivityFeed } from './ActivityFeed';
 import { applyActivityEvent } from '../shared/activity';
+import { DEFAULT_RUN_SHEET_LAYOUT, moveRunSheetPanel, normalizeRunSheetLayout, resizeRunSheetPanel, type RunSheetLayout, type RunSheetPanel } from '../shared/run-sheet-layout';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; thinking?: string; streaming?: boolean; recoveredPartial?: boolean };
 type Session = {
@@ -85,6 +86,15 @@ function Icon({ name }: { name: 'spark' | 'folder' | 'arrow' | 'close' | 'play' 
 
 function Button({ children, onClick, kind = 'quiet', disabled, title, className = '' }: { children: React.ReactNode; onClick?: () => void; kind?: 'quiet' | 'bright' | 'outline' | 'danger'; disabled?: boolean; title?: string; className?: string }) {
   return <button className={`button button-${kind} ${className}`} onClick={onClick} disabled={disabled} title={title}>{children}</button>;
+}
+
+function SheetPanelControls({ panel, layout, onMove, onResize }: { panel: RunSheetPanel; layout: RunSheetLayout; onMove: (panel: RunSheetPanel, direction: -1 | 1) => void; onResize: (panel: RunSheetPanel, direction: -1 | 1) => void }) {
+  return <div className="sheet-panel-controls" aria-label={`${panel} panel layout`}>
+    <button onClick={() => onMove(panel, -1)} disabled={layout.order[0] === panel} aria-label={`Move ${panel} panel up`} title="Move panel up">↑</button>
+    <button onClick={() => onMove(panel, 1)} disabled={layout.order.at(-1) === panel} aria-label={`Move ${panel} panel down`} title="Move panel down">↓</button>
+    <button onClick={() => onResize(panel, -1)} disabled={layout.heights[panel] <= 90} aria-label={`Make ${panel} panel shorter`} title="Make panel shorter">−</button>
+    <button onClick={() => onResize(panel, 1)} disabled={layout.heights[panel] >= 520} aria-label={`Make ${panel} panel taller`} title="Make panel taller">+</button>
+  </div>;
 }
 
 export default function App() {
@@ -632,6 +642,7 @@ export default function App() {
         workspaces={workspaces} workspaceSearch={workspaceSearch} sessions={sessions} models={models} modelLabels={displayModelLabels} model={model} context={options.context}
         connected={connected} telemetry={telemetry} onChoose={chooseWorkspace} onOpen={showProject}
         onModel={(name) => { setModel(name); setContextTouched(false); setSettingsTouched(false); }} onRefresh={() => { void refreshHome(); void refreshModels(); }}
+        onModelInfo={(name) => request<ModelInfo>({ command: 'model_info', model: name })}
         onSearch={(value) => { setWorkspaceSearch(value); void refreshWorkspaceHistory(value); }}
         onPin={(root, pinned) => void request({ command: 'workspace_pin', workspace: root, pinned }).then(() => refreshWorkspaceHistory(workspaceSearch)).catch((error) => notify((error as Error).message, 'warn'))}
         onRemove={(root) => void request({ command: 'workspace_remove', workspace: root }).then(() => refreshWorkspaceHistory(workspaceSearch)).catch((error) => notify((error as Error).message, 'warn'))}
@@ -706,10 +717,10 @@ export default function App() {
   </div>;
 }
 
-function Landing({ workspaces, workspaceSearch, sessions, models, modelLabels, model, context, connected, telemetry, onChoose, onOpen, onModel, onRefresh, onSearch, onPin, onRemove, onLibrary }: {
+function Landing({ workspaces, workspaceSearch, sessions, models, modelLabels, model, context, connected, telemetry, onChoose, onOpen, onModel, onModelInfo, onRefresh, onSearch, onPin, onRemove, onLibrary }: {
   workspaces: WorkspaceHistoryEntry[]; workspaceSearch: string; sessions: SessionSummary[]; models: string[]; modelLabels: Record<string, string>; model: string; context: number; connected: string;
   telemetry: TelemetryView;
-  onChoose: () => void; onOpen: (root: string) => void; onModel: (name: string) => void; onRefresh: () => void;
+  onChoose: () => void; onOpen: (root: string) => void; onModel: (name: string) => void; onModelInfo: (name: string) => Promise<ModelInfo>; onRefresh: () => void;
   onSearch: (value: string) => void; onPin: (root: string, pinned: boolean) => void; onRemove: (root: string) => void; onLibrary: () => void;
 }) {
   return <section className="landing-view">
@@ -721,8 +732,8 @@ function Landing({ workspaces, workspaceSearch, sessions, models, modelLabels, m
         <div className="launch-actions"><Button kind="bright" onClick={onChoose}><Icon name="folder"/> Open a project <Icon name="arrow"/></Button><span className="launch-note"><kbd>CTRL</kbd> <b>+</b> <kbd>O</kbd> to switch workspaces</span></div>
         <div className="landing-stats"><div><small>INSTALLED MODELS</small><strong>{String(models.length).padStart(2, '0')}</strong></div><div><small>ACTIVE CONTEXT</small><strong>{fmt(context)} <i>tokens</i></strong></div><div><small>LOCAL ENGINE</small><strong className={connected === 'yes' ? 'text-mint' : connected === 'no' ? 'text-rose' : ''}>{connected === 'yes' ? 'ONLINE' : connected === 'no' ? 'OFFLINE' : 'CHECKING'}</strong></div></div>
       </div>
-      <div className="landing-visual" aria-hidden="true">
-        <LocalModelOrbit models={models} labels={modelLabels} selectedModel={model} />
+      <div className="landing-visual" aria-label="Installed local models arranged around the local AI workspace">
+        <LocalModelOrbit models={models} labels={modelLabels} selectedModel={model} onModelInfo={onModelInfo} />
         <div className="visual-core"><span>LOCAL</span><strong>AI</strong><small>WORKS IN YOUR SPACE</small></div>
         <div className="orbit-label label-tl"><i/> PRIVATE BY DEFAULT</div><div className="orbit-label label-br"><i/> NO REMOTE ROUTING</div>
         <div className="visual-coordinate">[LOCATION REMOVED]<br/>[LOCATION REMOVED]</div>
@@ -787,6 +798,14 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
   onRun: () => void; onCancel: () => void; onSettings: () => void; onBack: () => void; onDiff: () => void; onMcp: () => void;
   onEnter: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void; endRef: React.RefObject<HTMLDivElement | null>; model: string;
 }) {
+  const [sheetLayout, setSheetLayout] = useState<RunSheetLayout>(() => {
+    try { return normalizeRunSheetLayout(JSON.parse(localStorage.getItem('agent-run-sheet-layout') || 'null')); }
+    catch { return DEFAULT_RUN_SHEET_LAYOUT; }
+  });
+  useEffect(() => { localStorage.setItem('agent-run-sheet-layout', JSON.stringify(sheetLayout)); }, [sheetLayout]);
+  const movePanel = (panel: RunSheetPanel, direction: -1 | 1) => setSheetLayout((layout) => moveRunSheetPanel(layout, panel, direction));
+  const resizePanel = (panel: RunSheetPanel, direction: -1 | 1) => setSheetLayout((layout) => resizeRunSheetPanel(layout, panel, direction));
+  const panelStyle = (panel: RunSheetPanel) => ({ order: sheetLayout.order.indexOf(panel) + 1, height: `${sheetLayout.heights[panel]}px` });
   const steps = ['Ready', 'Waiting for first token', 'Generating', phase === 'Turn complete' ? 'Turn complete' : 'Finishing turn'];
   const currentStep = runStepProgress(phase, running);
   return <section className="session-view">
@@ -807,13 +826,17 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
       </section>
       <aside className="run-sheet">
         <div className="run-sheet-heading"><div><span className="eyebrow-line">LIVE WORK SHEET</span><h2>Task signals</h2></div><Button kind="outline" className="sheet-inspect" onClick={onDiff}><Icon name="branch"/> Inspect changes</Button><span className={`run-lamp ${running ? 'active' : ''}`}/></div>
-        <div className="signal-matrix"><div className={`signal-card signal-wide ${telemetry.contextMismatch ? 'signal-warning' : ''}`}><small>MODEL / CONTEXT</small><strong title={model}>{shortModel(model)}</strong><span>{telemetry.loadedContext ? `RUNTIME ${fmt(telemetry.loadedContext)} / ${fmt(options.context)} REQUESTED TOKENS` : `${fmt(options.context)} REQUESTED · NOT CURRENTLY LOADED`}</span></div><div className="signal-card"><small>REQUEST SENT</small><strong>{appliedSettings && appliedSettings.model === model ? `${fmt(appliedSettings.context)} / ${fmt(appliedSettings.maxOutput)}` : '—'}</strong><span>CONTEXT / OUTPUT TOKENS</span></div><div className="signal-card"><small>REASONING OVERRIDE</small><strong>{appliedSettings && appliedSettings.model === model ? appliedSettings.reasoning == null ? 'DEFAULT' : String(appliedSettings.reasoning).toUpperCase() : '—'}</strong><span>EXACT SELECTED VALUE</span></div><div className="signal-card"><small>ELAPSED</small><strong>{running ? secs(elapsed) : '—'}</strong><span>{running ? phase.toUpperCase() : 'NO ACTIVE RUN'}</span></div><div className="signal-card"><small>FILES IN VIEW</small><strong>{files.length}</strong><span>INDEXED / IGNORE AWARE</span></div></div>
-        <div className="run-metrics" aria-label="Ollama generation statistics"><div><small>FIRST TOKEN</small><strong>{tokenDelay(runMetrics.firstTokenMs)}</strong></div><div title={outputTokensAreEstimated(runMetrics) ? 'Live estimate from streamed text; Ollama reports the exact rate after generation.' : 'Exact rate reported by Ollama.'}><small>OUTPUT / SEC{outputTokensAreEstimated(runMetrics) ? ' · LIVE' : ''}</small><strong>{liveOutputTokensPerSecond(runMetrics)?.toFixed(1).replace(/^/, outputTokensAreEstimated(runMetrics) ? '~' : '') ?? '—'}</strong></div><div title={outputTokensAreEstimated(runMetrics) ? 'Live estimate from streamed text; replaced by Ollama’s exact token count after generation.' : 'Exact output token count reported by Ollama.'}><small>OUTPUT TOKENS{outputTokensAreEstimated(runMetrics) ? ' · LIVE' : ''}</small><strong>{outputTokensAreEstimated(runMetrics) ? '~' : ''}{fmt(estimateOutputTokens(runMetrics))}</strong></div></div>
-        {telemetry.contextMismatch && <p className="context-warning" role="status">Ollama reports a smaller runtime context than requested. Available memory may limit allocation.</p>}
-        <div className="sheet-section"><div className="sheet-heading"><h3>Plan</h3><span>{plan.length ? `${plan.length} steps` : 'Awaiting agent'}</span></div>{plan.length ? <ol className="plan-list">{plan.map((item, index) => <li key={`${index}-${item.title || item.text}`}><span>{String(index + 1).padStart(2, '0')}</span><b>{item.title || item.text || 'Work item'}</b><small>{item.status || 'pending'}</small></li>)}</ol> : <p className="sheet-empty">A task checklist appears here when the agent creates one.</p>}</div>
-        <div className="sheet-section trace-section"><div className="sheet-heading"><h3>Activity trace</h3><span>{activities.length} events</span></div><ActivityFeed entries={activities} mode={activityMode} surface="sidebar"/></div>
-        <div className="resource-summary">
-          <div className="resource-heading"><span>RESOURCE / SYSTEM</span><span>SIDECAR {telemetry.serviceRss}</span></div>
+        <section className="sheet-panel" style={panelStyle('signals')} aria-label="Run signals and generation metrics">
+          <div className="sheet-panel-heading"><span>MODEL &amp; GENERATION</span><SheetPanelControls panel="signals" layout={sheetLayout} onMove={movePanel} onResize={resizePanel}/></div>
+          <div className="signal-matrix"><div className={`signal-card signal-wide ${telemetry.contextMismatch ? 'signal-warning' : ''}`}><small>MODEL / CONTEXT</small><strong title={model}>{shortModel(model)}</strong><span>{telemetry.loadedContext ? `RUNTIME ${fmt(telemetry.loadedContext)} / ${fmt(options.context)} REQUESTED TOKENS` : `${fmt(options.context)} REQUESTED · NOT CURRENTLY LOADED`}</span></div><div className="signal-card"><small>REQUEST SENT</small><strong>{appliedSettings && appliedSettings.model === model ? `${fmt(appliedSettings.context)} / ${fmt(appliedSettings.maxOutput)}` : '—'}</strong><span>CONTEXT / OUTPUT TOKENS</span></div><div className="signal-card"><small>REASONING OVERRIDE</small><strong>{appliedSettings && appliedSettings.model === model ? appliedSettings.reasoning == null ? 'DEFAULT' : String(appliedSettings.reasoning).toUpperCase() : '—'}</strong><span>EXACT SELECTED VALUE</span></div><div className="signal-card"><small>ELAPSED</small><strong>{running ? secs(elapsed) : '—'}</strong><span>{running ? phase.toUpperCase() : 'NO ACTIVE RUN'}</span></div><div className="signal-card"><small>FILES IN VIEW</small><strong>{files.length}</strong><span>INDEXED / IGNORE AWARE</span></div></div>
+          <div className="run-metrics" aria-label="Ollama generation statistics"><div><small>FIRST TOKEN</small><strong>{tokenDelay(runMetrics.firstTokenMs)}</strong></div><div title={outputTokensAreEstimated(runMetrics) ? 'Live estimate from streamed text; Ollama reports the exact rate after generation.' : 'Exact rate reported by Ollama.'}><small>OUTPUT / SEC{outputTokensAreEstimated(runMetrics) ? ' · LIVE' : ''}</small><strong>{liveOutputTokensPerSecond(runMetrics)?.toFixed(1).replace(/^/, outputTokensAreEstimated(runMetrics) ? '~' : '') ?? '—'}</strong></div><div title={outputTokensAreEstimated(runMetrics) ? 'Live estimate from streamed text; replaced by Ollama’s exact token count after generation.' : 'Exact output token count reported by Ollama.'}><small>OUTPUT TOKENS{outputTokensAreEstimated(runMetrics) ? ' · LIVE' : ''}</small><strong>{outputTokensAreEstimated(runMetrics) ? '~' : ''}{fmt(estimateOutputTokens(runMetrics))}</strong></div></div>
+          {telemetry.contextMismatch && <p className="context-warning" role="status">Ollama reports a smaller runtime context than requested. Available memory may limit allocation.</p>}
+        </section>
+        <div className="sheet-section sheet-panel" style={panelStyle('plan')}><div className="sheet-heading"><h3>Plan</h3><span>{plan.length ? `${plan.length} steps` : 'Awaiting agent'}</span><SheetPanelControls panel="plan" layout={sheetLayout} onMove={movePanel} onResize={resizePanel}/></div>{plan.length ? <ol className="plan-list">{plan.map((item, index) => <li key={`${index}-${item.title || item.text}`}><span>{String(index + 1).padStart(2, '0')}</span><b>{item.title || item.text || 'Work item'}</b><small>{item.status || 'pending'}</small></li>)}</ol> : <p className="sheet-empty">A task checklist appears here when the agent creates one.</p>}</div>
+        <div className="sheet-section trace-section sheet-panel" style={panelStyle('activity')}><div className="sheet-heading"><h3>Activity trace</h3><span>{activities.length} events</span><SheetPanelControls panel="activity" layout={sheetLayout} onMove={movePanel} onResize={resizePanel}/></div><ActivityFeed entries={activities} mode={activityMode} surface="sidebar"/></div>
+        <div className="resource-summary sheet-panel" style={panelStyle('resources')}>
+          <div className="resource-heading"><span>RESOURCE / SYSTEM</span><SheetPanelControls panel="resources" layout={sheetLayout} onMove={movePanel} onResize={resizePanel}/></div>
+          <div className="resource-heading"><span>SIDECAR {telemetry.serviceRss}</span></div>
           <div className="resource-grid">
             <div className="resource-tile"><small>CPU</small><strong>{telemetry.cpu == null ? '—' : `${telemetry.cpu}%`}</strong><div className="meter"><i style={{ width: `${Math.min(100, telemetry.cpu ?? 0)}%` }}/></div></div>
             <div className="resource-tile"><small>RAM</small><strong>{telemetry.ram}</strong><div className="meter"><i style={{ width: `${memoryPct(telemetry.ram)}%` }}/></div></div>
