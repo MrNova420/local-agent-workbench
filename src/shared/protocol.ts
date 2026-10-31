@@ -83,6 +83,8 @@ export type ActivityRecord = {
   kind: 'operation' | 'approval' | 'plan' | 'context' | 'error';
   name?: string;
   status: string;
+  approvalStatus?: 'waiting' | 'approved' | 'denied' | 'cancelled';
+  approvalMode?: 'per-action' | 'per-task';
   timestamp?: number;
   startedAt?: number;
   completedAt?: number;

@@ -927,13 +927,17 @@ class AgentService:
                 with self.active_lock:
                     controller["pending"][action_id] = (condition, result)
                 operation_id = controller.get("current_operation_id")
-                activity = {"id": action_id, "operationId": operation_id, "turnId": controller["turn_id"],
-                            "sessionId": state["session_id"], "workspace": str(turn.workspace), "kind": "approval",
-                            "name": name, "arguments": copy.deepcopy(args), "status": "waiting", "timestamp": time.time()}
                 with controller["checkpoint_lock"]:
-                    state.setdefault("activity_events", []).append(activity)
+                    rows = state.setdefault("activity_events", [])
+                    activity = next((item for item in rows if item.get("operationId") == operation_id and item.get("kind") == "operation"), None)
+                    if activity is None:
+                        activity = {"id": str(operation_id or action_id), "operationId": operation_id, "turnId": controller["turn_id"],
+                                    "sessionId": state["session_id"], "workspace": str(turn.workspace), "kind": "operation",
+                                    "name": name, "arguments": copy.deepcopy(args), "status": "running", "timestamp": time.time(), "output": {}, "result": "", "affectedFiles": []}
+                        rows.append(activity)
+                    activity.update(approvalStatus="waiting", approvalMode=turn.approval_mode)
                     self.sessions.save(state)
-                self.emit({"type": "activity_event", "activity": activity, "activityPhase": "start", "sessionId": state["session_id"], "turnId": controller["turn_id"]})
+                self.emit({"type": "activity_event", "activity": copy.deepcopy(activity), "activityPhase": "start", "sessionId": state["session_id"], "turnId": controller["turn_id"]})
                 self.emit({"type": "approval_request", "actionId": action_id, "operationId": operation_id, "turnId": controller["turn_id"], "name": name,
                            "arguments": args, "workspace": str(turn.workspace),
                            "mode": turn.approval_mode, "sessionId": state["session_id"]})
@@ -942,9 +946,10 @@ class AgentService:
                         condition.wait(0.25)
                 with self.active_lock:
                     controller["pending"].pop(action_id, None)
-                activity["status"] = "cancelled" if controller["cancel"].is_set() else "approved" if result["approved"] else "denied"
-                activity["completedAt"] = time.time()
+                approval_status = "cancelled" if controller["cancel"].is_set() else "approved" if result["approved"] else "denied"
                 with controller["checkpoint_lock"]:
+                    activity["approvalStatus"] = approval_status
+                    activity["completedAt"] = time.time()
                     self.sessions.save(state)
                 self.emit({"type": "activity_event", "activity": copy.deepcopy(activity), "sessionId": state["session_id"], "turnId": controller["turn_id"]})
                 return bool(result["approved"])

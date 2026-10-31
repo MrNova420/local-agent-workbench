@@ -35,6 +35,26 @@ describe('durable live activity state', () => {
     expect(updated[1].result).toBe('ok');
   });
 
+  it('keeps approval state on the operation row instead of rendering a duplicate action', () => {
+    const operation: ActivityRecord = {
+      id: 'op-1', operationId: 'op-1', sessionId: 's-1', turnId: 't-1', kind: 'operation',
+      name: 'write_file', status: 'running', arguments: { path: 'index.html' },
+    };
+    const started = applyActivityEvent([], { type: 'activity_event', activity: operation });
+    const waiting = applyActivityEvent(started, {
+      type: 'activity_event', activity: { ...operation, approvalStatus: 'waiting', approvalMode: 'per-action' },
+    });
+    const approved = applyActivityEvent(waiting, {
+      type: 'activity_event', activity: { ...operation, approvalStatus: 'approved', approvalMode: 'per-action' },
+    });
+    const markup = renderToStaticMarkup(createElement(ActivityFeed, { entries: approved, mode: 'compact', surface: 'chat' }));
+
+    expect(approved).toHaveLength(1);
+    expect(approved[0].approvalStatus).toBe('approved');
+    expect(markup).toContain('approval approved');
+    expect(markup.match(/<details class="activity-card/g)).toHaveLength(1);
+  });
+
   it('renders compact, sidebar-only, and inline modes from the same activity records', () => {
     const record: ActivityRecord = {
       id: 'op-1', sessionId: 's-1', turnId: 't-1', kind: 'operation', name: 'run_command',

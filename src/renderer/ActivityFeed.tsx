@@ -13,7 +13,7 @@ function ActivityCard({ row, expanded }: { row: ActivityRecord; expanded: boolea
   const title = row.name?.replaceAll('_', ' ') || (row.kind === 'plan' ? 'Plan updated' : row.kind === 'approval' ? 'Action approval' : row.kind === 'context' ? 'Request context compacted' : 'Activity');
   const output = row.output || {};
   return <details className={`activity-card activity-${row.kind} activity-${row.status}`} open={expanded}>
-    <summary><span className={`activity-state-dot state-${row.status}`}/><strong>{title}</strong><span className="activity-status">{row.status.replaceAll('_', ' ')}</span>{row.affectedFiles?.length ? <span className="activity-file-count">{row.affectedFiles.length} file{row.affectedFiles.length === 1 ? '' : 's'}</span> : null}</summary>
+    <summary><span className={`activity-state-dot state-${row.status}`}/><strong>{title}</strong><span className="activity-status">{row.status.replaceAll('_', ' ')}</span>{row.approvalStatus && <span className={`activity-approval activity-approval-${row.approvalStatus}`}>approval {row.approvalStatus.replaceAll('_', ' ')}</span>}{row.affectedFiles?.length ? <span className="activity-file-count">{row.affectedFiles.length} file{row.affectedFiles.length === 1 ? '' : 's'}</span> : null}</summary>
     <div className="activity-card-details">
       {row.affectedFiles?.length ? <div className="activity-files">{row.affectedFiles.map((file) => <code key={file}>{file}</code>)}</div> : null}
       {row.arguments !== undefined && <details className="activity-subdetails"><summary>Arguments</summary><ProgressiveText value={JSON.stringify(row.arguments, null, 2)}/></details>}

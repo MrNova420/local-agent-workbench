@@ -541,3 +541,55 @@ def test_approval_reply_signals_only_matching_pending_action(service):
     assert service.approval_reply("missing", True) is False
     assert service.approval_reply("action-1", True) is True
     assert result == {"done": True, "approved": True}
+
+
+def test_approval_state_is_recorded_on_the_operation_without_a_duplicate_trace_row(service, tmp_path, monkeypatch):
+    events = []
+    service.emit = events.append
+
+    class ApprovalEngine:
+        def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
+            self.event = event
+            self.approve = approve
+            self.state = {}
+            self.runtime = object()
+
+        def run(self, prompt, messages):
+            self.event({"type": "tool_start", "operationId": "op-1", "toolCallId": "call-1", "name": "write_file",
+                        "arguments": {"path": "index.html"}, "startedAt": 1})
+            assert self.approve("write_file", {"path": "index.html"}) is True
+            self.event({"type": "tool_done", "operationId": "op-1", "toolCallId": "call-1", "status": "completed",
+                        "result": "wrote index.html", "affectedFiles": ["index.html"], "completedAt": 2})
+            return messages
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(worker, "AgentEngine", ApprovalEngine)
+    project = tmp_path / "approval-project"
+    project.mkdir()
+    service.handle("run_start", {"options": {
+        "workspace": str(project), "prompt": "create a page", "model": "model-a:latest",
+        "context": 4096, "maxTokens": 128, "temperature": 0.2,
+        "access": "ask", "approvalMode": "per-action",
+    }})
+    controller = service.active
+    assert controller is not None
+
+    deadline = time.monotonic() + 2
+    request = None
+    while time.monotonic() < deadline:
+        request = next((item for item in events if item.get("type") == "approval_request"), None)
+        if request:
+            break
+        time.sleep(0.01)
+    assert request is not None
+    assert service.approval_reply(request["actionId"], True) is True
+    controller["thread"].join(3)
+
+    saved = service.sessions.load(controller["session"]["session_id"])
+    operations = [item for item in saved["activity_events"] if item.get("operationId") == "op-1"]
+    assert len(operations) == 1
+    assert operations[0]["kind"] == "operation"
+    assert operations[0]["approvalStatus"] == "approved"
+    assert operations[0]["status"] == "completed"
