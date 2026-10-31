@@ -1,5 +1,11 @@
 export type AccessMode = 'copy' | 'plan' | 'ask' | 'edit';
-export type ApprovalMode = 'per-action' | 'per-task';
+export type ApprovalMode = 'per-action' | 'per-task' | 'auto';
+export type ReasoningChoice = boolean | string | null;
+export type ReasoningCapability = {
+  support: 'toggle' | 'levels' | 'unknown' | 'none';
+  default: boolean | string | null;
+  values: Array<boolean | string>;
+};
 
 export type RunOptions = {
   workspace: string;
@@ -12,6 +18,7 @@ export type RunOptions = {
   access: AccessMode;
   approvalMode: ApprovalMode;
   keepAlive: string;
+  reasoning: ReasoningChoice;
 };
 
 export type WorkerCommand =
@@ -57,7 +64,8 @@ export type DesktopApi = {
 export type ModelInfo = {
   model: string;
   context: number;
-  reasoning: 'model-default';
+  max_output_tokens?: number | null;
+  reasoning: ReasoningCapability;
 };
 
 export type SessionSummary = {

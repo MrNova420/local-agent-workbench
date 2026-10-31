@@ -124,7 +124,17 @@ class AgentService:
                 (value for key, value in details.items() if key.endswith(".context_length") and isinstance(value, int)),
                 default=CONTEXT_MAX if message["model"] == MODEL else 8192,
             )
-            return {"model": message["model"], "context": context, "reasoning": "model-default"}
+            raw_thinking = info.get("thinking")
+            values = raw_thinking.get("values", []) if isinstance(raw_thinking, dict) else []
+            values = [value for value in values if isinstance(value, (str, bool))] if isinstance(values, list) else []
+            default = raw_thinking.get("default") if isinstance(raw_thinking, dict) else None
+            if not isinstance(default, (str, bool)) or default not in values:
+                default = None
+            support = "levels" if any(isinstance(value, str) for value in values) else "toggle" if True in values and False in values else "none" if values == [False] else "unknown"
+            return {
+                "model": message["model"], "context": context, "max_output_tokens": None,
+                "reasoning": {"support": support, "default": default, "values": values},
+            }
         if command == "system_snapshot":
             loaded = self.runtime.loaded()
             result = self.telemetry.snapshot(loaded)

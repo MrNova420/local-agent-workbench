@@ -33,7 +33,21 @@ def service(tmp_path, monkeypatch):
 def test_dynamic_models_and_full_advertised_context(service):
     assert service.handle("models", {}) == ["model-a:latest", "model-b:latest"]
     info = service.handle("model_info", {"model": "model-a:latest"})
-    assert info == {"model": "model-a:latest", "context": 262144, "reasoning": "model-default"}
+    assert info == {
+        "model": "model-a:latest", "context": 262144, "max_output_tokens": None,
+        "reasoning": {"support": "unknown", "default": None, "values": []},
+    }
+
+
+def test_model_info_exposes_exact_ollama_reasoning_values(service):
+    service.runtime.info = {
+        "model_info": {"test.context_length": 262144},
+        "thinking": {"default": "medium", "values": ["low", "medium", "high", False]},
+    }
+    result = service.handle("model_info", {"model": "model-a:latest"})
+    assert result["reasoning"] == {
+        "support": "levels", "default": "medium", "values": ["low", "medium", "high", False],
+    }
 
 
 def test_sessions_are_filtered_by_exact_project_root(service, tmp_path):
