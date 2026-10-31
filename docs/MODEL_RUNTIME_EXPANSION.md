@@ -1,6 +1,6 @@
 # Proposed Model Runtime and Hugging Face Support
 
-**Status: Proposed for review. No implementation is authorized by this document.**
+**Status: Queued for review. Plan/documentation only; implementation has not been authorized.**
 
 ## Goal
 
@@ -21,6 +21,9 @@ The workbench is currently runtime-limited to Ollama. It already runs many model
 7. Keep input context and maximum output as distinct settings. Show advertised model context, requested input window, and effective runtime allocation. Pass requested values unchanged; if the runtime cannot allocate them, show the actual limit/error instead of silently lowering it.
 8. Persist provider, model reference, reasoning selection, context, output limit, and runtime settings with the session. Capture those values at run start so switching projects or models cannot alter an active run.
 9. Keep one app-managed model runtime active at a time. Never unload or stop a model/runtime the app did not start. Explicitly report ownership for any server process the app launches. Cancellation interrupts only the current request.
+10. Make approval requests decision-required: clicking the backdrop, pressing Escape, or using a close control must not dismiss a pending approval. The user must explicitly approve, deny, or cancel the run.
+11. Add an explicit `Auto-approve actions` choice to run configuration. It is opt-in for that run, off by default, visibly summarized before starting, and captured with the task. It bypasses approval prompts for the task's otherwise-approvable project tool actions; it does not widen the captured workspace boundary or change access mode.
+12. Reorganize the Live Work Sheet so `Inspect changes` is near the top of the panel and does not overlap resource/status text at common window sizes.
 
 ## Runtime coverage
 
@@ -58,6 +61,9 @@ The optional llama.cpp executable should be installed or selected through an exp
 - Session resume restores provider, model, reasoning selection, context, and output-token limit.
 - The UI distinguishes requested context from effective runtime context and never hides a lower allocation.
 - The app does not start a model on launch, unload externally loaded models, or kill a runtime process it did not create.
+- A pending approval cannot disappear through backdrop click, Escape, or a close affordance; explicit approve/deny/cancel choices remain available.
+- Auto-approve is an explicit per-run option, off by default, and serialized into the captured task/session state.
+- `Inspect changes` is reachable near the top of the Live Work Sheet and remains legible at supported window sizes.
 - Mocked coverage includes provider discovery/failure, reasoning capability mapping, context preservation, model import/download cancellation, session migration/isolation, tool/stream usage, request cancellation, and process ownership.
 - Visible packaged-app acceptance exercises the existing Ollama model plus one supported Hugging Face GGUF in a disposable project. A Safetensors path is accepted only after a compatible model is available for the check.
 

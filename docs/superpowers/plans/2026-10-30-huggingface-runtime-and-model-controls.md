@@ -8,6 +8,8 @@
 
 **Tech Stack:** Electron, React, TypeScript, Python sidecar, existing Python agent engine, Ollama API, optional llama.cpp server API, Hugging Face Hub references.
 
+**Status:** Queued plan only. Do not implement until the user explicitly asks to start execution.
+
 **Spec:** `docs/MODEL_RUNTIME_EXPANSION.md`
 
 ## Global Constraints
@@ -21,6 +23,9 @@
 - Do not execute remote repository model code.
 - Keep project/session capture and workspace isolation intact.
 - Do not change OpenCode configuration.
+- A pending approval requires an explicit approve, deny, or run-cancel decision; backdrop click, Escape, and close controls cannot dismiss it.
+- Auto-approve is opt-in per run and off by default; it approves only otherwise-approvable actions within the captured workspace/access policy.
+- Keep `Inspect changes` near the top of the Live Work Sheet, with no overlap at supported window sizes.
 
 ## Review Focus
 
@@ -122,7 +127,41 @@
 - [ ] Run mocked import tests, renderer tests, typecheck, and package build.
 - [ ] Commit `feat: import compatible Safetensors models into Ollama`.
 
-### Task 5: Lock settings to sessions and validate end-to-end behavior
+### Task 5: Make approvals decision-required and add per-run auto-approve
+
+**Files:**
+- Modify: `src/shared/protocol.ts`
+- Modify: `src/renderer/App.tsx`
+- Modify: `src/renderer/styles.css`
+- Modify: `sidecar/worker.py`
+- Modify: `../local-9b-dev-app/desktop_engine.py`
+- Test: `tests/test_worker.py`, `tests/approval-ui.test.ts`, and provider/engine approval tests
+
+**Interfaces:**
+- `ApprovalMode` becomes `per-action | per-task | auto`.
+- `auto` is an explicit run-scoped choice, defaults to per-action, and is frozen into `TurnContext` and session state for the active run.
+- Pending approval UI has no backdrop, Escape, or close-to-dismiss behavior; only explicit Deny/Approve choices or the separate Cancel request action resolve the wait.
+
+- [ ] Test that backdrop click, Escape, and close controls do not resolve or dismiss a pending approval; Deny and Approve do resolve it with the selected result.
+- [ ] Test that `auto` approves ordinary otherwise-approvable calls for this task without calling the approval callback, while preserving access-mode checks and captured-workspace validation.
+- [ ] Test that auto-approve is off for new and migrated sessions unless explicitly selected for that run.
+- [ ] Implement the approval mode and the non-dismissible decision dialog with accessible focus handling and explicit deny/approve actions.
+- [ ] Run worker/engine and renderer tests and confirm normal per-action/per-task flows are unchanged.
+- [ ] Commit `feat: add explicit run-scoped auto approval`.
+
+### Task 6: Reorganize the Live Work Sheet changes control
+
+**Files:**
+- Modify: `src/renderer/App.tsx`
+- Modify: `src/renderer/styles.css`
+- Test: `tests/live-work-sheet.test.ts` and packaged visual acceptance
+
+- [ ] Test that the Inspect Changes action renders in the Live Work Sheet header/action row, not underneath the resource readouts.
+- [ ] Move and style the action near the top of the sheet without changing its existing review/apply behavior.
+- [ ] Verify the layout at the default window size and a narrower supported size; confirm it does not overlap panel text or resource values.
+- [ ] Commit `fix: keep inspect changes clear of live resource status`.
+
+### Task 7: Lock settings to sessions and validate end-to-end behavior
 
 **Files:**
 - Modify: `../local-9b-dev-app/sessions.py`
@@ -140,4 +179,4 @@
 
 ## Handoff
 
-This plan has not been executed. Review `docs/MODEL_RUNTIME_EXPANSION.md` and choose whether to approve the full scope, approve Tasks 1–2 only, or queue it without implementation.
+This plan has not been executed. Queue order is Tasks 1–4 for runtime/model support, Tasks 5–6 for approval and Live Work Sheet UX, then Task 7 for integration and acceptance. Native Transformers support remains a later, separately scoped backlog item. Wait for an explicit implementation go-ahead before starting any task.
