@@ -19,6 +19,8 @@
 - Do not stop or unload a model/runtime not started by the app.
 - Cancel only the active request; do not kill Ollama or an unrelated runtime.
 - Preserve requested context and output-token settings; surface effective allocation and errors.
+- Treat context as total prompt-plus-generation capacity; expose it separately from maximum response tokens.
+- Build context and output presets dynamically from model/runtime limits, including every supported standard tier, exact maximum, and custom values.
 - Use model default reasoning unless the user selects an advertised supported value.
 - Do not execute remote repository model code.
 - Keep project/session capture and workspace isolation intact.
@@ -32,6 +34,7 @@
 - Unknown/missing reasoning metadata must leave default behavior intact, never infer that reasoning should be off.
 - A model switch or resumed session must not carry settings that the new provider does not support.
 - Context larger than runtime capacity must produce an explicit effective-limit/error state, not a hidden clamp.
+- A context/output preset must produce the same values in the saved session and provider request; no preset may silently substitute a different limit.
 - Cancellation during Hub download, model load, generation, and app shutdown must not kill unrelated processes or leave a falsely-ready provider.
 - A Hugging Face model/filename or provider error must not leak credentials or make the source project available to the runtime.
 
@@ -79,8 +82,11 @@
 - [ ] Test model-default requests omit `think`; test `false`, `true`, and exact string settings are passed only when supported.
 - [ ] Test missing/unsupported metadata exposes no invented effort choices and sends no reasoning override.
 - [ ] Test thinking stream chunks remain separate from answer text and session serialization can resume them without confusing tool-call messages.
+- [ ] Test dynamic context presets include each supported standard tier and the exact model maximum, omit unsupported tiers, and retain a custom value.
+- [ ] Test output-token presets respect known provider/model ceilings, stay distinct from context size, and pass the exact selected value to generation.
+- [ ] Test that the computed prompt/input budget subtracts output reservation and system overhead without mutating the selected context window.
 - [ ] Implement the Ollama capability mapping and add settings UI options `Model default`, `Off`, and exact advertised values. Add a separate show/hide control for returned reasoning text.
-- [ ] Add explicit input-context and max-output-token labels and expose advertised/requested/effective context separately.
+- [ ] Implement dynamic context and output preset selectors plus custom values; label total context, response-token cap, input budget, requested context, and effective allocation distinctly.
 - [ ] Run adapter, worker, renderer, and typecheck checks.
 - [ ] Commit this task in both the shared-engine repository and app repository.
 
