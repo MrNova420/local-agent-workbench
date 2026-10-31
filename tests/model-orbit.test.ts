@@ -29,6 +29,9 @@ describe('home model orbit slots', () => {
       const top = Number.parseFloat(slot.top);
       return Number.isFinite(left) && Number.isFinite(top) && left >= 0 && left <= 100 && top >= 0 && top <= 100;
     })).toBe(true);
+    const verticalPositions = slots.map((slot) => Number.parseFloat(slot.top));
+    expect(Math.min(...verticalPositions)).toBeGreaterThan(12);
+    expect(Math.max(...verticalPositions)).toBeLessThan(88);
     expect(slots.find((slot) => slot.selected)?.id).toBe('model-26');
   });
 });

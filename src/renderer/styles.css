@@ -52,3 +52,5 @@
 .model-orbit-dot.selected{z-index:1;width:10px;height:10px;border:2px solid #f4fff9;background:var(--mint);box-shadow:0 0 0 3px rgba(125,232,192,.22),0 0 17px rgba(125,232,192,.96),0 0 30px rgba(125,232,192,.46)}
 .orbit-a:before,.orbit-b:before,.orbit-c:before{content:none}
 .orbit-label{z-index:2}
+.label-tl{top:4%;left:3%}
+.label-br{bottom:4%;right:3%}
