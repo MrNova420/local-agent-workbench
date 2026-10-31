@@ -9,7 +9,7 @@
   "scripts": {
     "start": "electron-forge start",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run && python -m pytest -q",
+    "test": "vitest run && python -m pytest -q tests",
     "test:watch": "vitest",
     "sidecar:build": "powershell -ExecutionPolicy Bypass -File scripts/build-sidecar.ps1",
     "package": "npm run sidecar:build && electron-forge package",
