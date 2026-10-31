@@ -70,10 +70,11 @@ Design the local-retention and export controls first. Record provider-exact coun
 
 ### B-009: Core small-model workflow reliability and measured runtime optimization
 
-**Source status:** workflow-profile, plan-to-tool continuation, and provider cache telemetry are implemented in source and automated tests pass. A fresh isolated Electron package now contains the updated sidecar and returns a successful JSONL `ping`; full visible interaction acceptance remains open.
+**Source status:** workflow-profile, plan-to-tool continuation, provider cache telemetry, and removal of the hidden 16-action/32-turn ceilings are implemented in source and automated tests pass. The Desktop package was last built before the ceiling removal, so rebuild and repeat the bundled-worker check before visible acceptance.
 
 - The Small-model workflow is an explicit setting, captured in run settings/session history. It instructs the agent to work in short sequential tool operations and inspect results. Standard remains available. Neither profile changes model/runtime, context, output cap, reasoning, temperature, approvals, or access.
 - An explicit implementation request that returns only a plan/progress note can receive one follow-up model call requesting structured tool use. Plan-only/read-only work is excluded, and normal approvals still gate actions. Validate for false positives and avoid claiming completion when the follow-up reports a blocker.
+- The engine no longer drops actions after a fixed 16-action batch or terminates a run at 32 model/tool iterations. The task remains user-cancellable; stress-test long loops and verify progress/checkpoint behavior for large batches.
 - Capture prompt-evaluation count/duration and provider-reported cached prompt tokens along with generation/load usage; display cache-hit rate only when supported fields are present.
 - Keep provider prompt prefixes stable and benchmark runtime cache flags only via repeatable A/B runs. Current source does not turn on cache-reuse or change Ollama/KV settings.
 - Rebuild from pinned app and engine commits; in one visible packaged instance, test a concise request, an explicit project build that first returns a plan, plan-only request, settings persistence, exact inference options, cache metrics when available, Home navigation, session resume, and project isolation.

@@ -45,10 +45,13 @@ The Python executable is placed under `sidecar/dist/agent-worker.exe` and packag
 - The Model Library can search Hugging Face, pin a repository revision, select files, download GGUF, register local GGUF, choose a llama.cpp server executable, and explicitly load/stop the app-owned runtime. It can also import local or downloaded Safetensors directories into Ollama where that Ollama build supports their architecture.
 - The app does not load a model on launch. It never stops an externally owned llama.cpp process and does not unload Ollama models as part of request cancellation or app shutdown.
 - Reasoning defaults are preserved unless the selected model/runtime offers controls and the user chooses an override. Returned reasoning text can be inspected separately from the reasoning generation setting.
+- The optional Small-model workflow gives smaller local models more explicit, adaptive work guidance. It can group independent reads, choose action sizes suited to the task, and continue through full implementation and verification; it does not impose a fixed tool-call count or change inference settings.
+- Prompt-cache measurements are shown when Ollama reports exact cached and total prompt counts. Cache/KV runtime tuning is not enabled automatically and must be benchmarked without changing selected context, output, reasoning, or warm-model settings.
 - Context and maximum output token caps are independent. Presets cover common binary and decimal sizes through 16,777,216 tokens plus exact model maxima when known; custom values are preserved exactly. Unknown model limits remain explicitly unknown. The selected values pass to inference unchanged, with requested and effective context reported separately.
 - Model generation has no application-level response deadline. Cancel interrupts the active request without stopping Ollama or killing a runtime the app did not start.
 - Saved sessions live under `%LOCALAPPDATA%\\LocalAgentWorkbench\\sessions`; local MCP configuration and model downloads live in the same app-data directory. Disposable workspace copies are stored under `workspaces` there.
 - Each run captures its selected project and session. The sidecar validates the session against that project.
+- Project Home includes a direct Home navigation control; the selected workspace remains in recent history.
 - File access defaults to ask-before-write. Shell commands and MCP actions require approval. Use copy mode to review a disposable workspace before applying changes to the source project. Auto-approve is an explicit per-run setting and off by default.
 
 ## Security boundaries
