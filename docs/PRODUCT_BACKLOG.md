@@ -10,7 +10,7 @@ The product target is full 1:1 user-facing feature and workflow parity with Code
 
 - Fresh app windows now default to the previously selected 65,536 context / 8,192 output, persist saved choices, and no longer substitute a model's advertised maximum when creating a session.
 - Explicitly selecting another Ollama model starts a background warm request; a PRELOAD control supports reselecting the current model. The request preserves the chosen context and keep-alive and sends no prompt, output-token limit, or reasoning override.
-- Do not load on app launch. If another model is already loaded, or the selected model is loaded with a different context, skip and explain rather than unloading or resizing it.
+- Do not load on app launch. If another model is already loaded, the selected model is loaded with a different context, or Keep Alive is set to immediate unload, skip and explain rather than unloading/resizing a model or wasting a preload.
 - Verify packaged selection, warm-up status, repeat preload, context persistence, unchanged reasoning default, and safe skip with an externally loaded model before calling the feature complete.
 
 ## Active development order: core project work

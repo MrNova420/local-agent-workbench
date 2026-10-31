@@ -105,6 +105,20 @@ def test_new_task_cannot_start_while_ollama_preload_is_in_flight(service):
     service.ollama_preload_thread.join(2)
 
 
+def test_ollama_preload_respects_immediate_unload_setting(service):
+    events = []
+    service.emit = events.append
+
+    result = service.handle("ollama_preload", {
+        "model": "model-a:latest", "context": 65536, "keepAlive": "0",
+    })
+
+    assert result["accepted"] is False
+    assert "unload the model immediately" in result["reason"]
+    assert not hasattr(service.runtime, "preloaded")
+    assert events[-1]["type"] == "ollama_preload_skipped"
+
+
 def test_model_info_exposes_exact_ollama_reasoning_values(service):
     service.runtime.info = {
         "model_info": {"test.context_length": 262144, "general.family": "qwen", "general.parameter_size": "9B", "general.quantization_level": "Q4_K_M"},

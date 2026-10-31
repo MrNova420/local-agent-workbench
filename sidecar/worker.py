@@ -263,6 +263,10 @@ class AgentService:
             raise ValueError("Preload context must be an integer of at least 1,024 tokens.")
         if not keep_alive:
             raise ValueError("Keep-alive must match the selected model setting.")
+        if keep_alive == "0":
+            reason = "Keep-alive is set to 0, so Ollama would unload the model immediately; the setting was left unchanged and preload was skipped."
+            self.emit({"type": "ollama_preload_skipped", "model": model, "reason": reason})
+            return {"accepted": False, "reason": reason}
         if self.active or self.run_lock.locked():
             raise RuntimeError("Cannot preload a model while a task is running.")
         if not self.ollama_preload_lock.acquire(blocking=False):
