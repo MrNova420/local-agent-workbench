@@ -721,8 +721,8 @@ export default function App() {
     {notice && <div className={`toast toast-${notice.tone}`} role="status"><span>{notice.text}</span><button onClick={() => setNotice(null)}><Icon name="close"/></button></div>}
     {settingsOpen && <SettingsModal model={model} modelLabel={displayModelLabels[model] || shortModel(model)} modelInfo={modelInfo} options={options} setOptions={setOptions} activityDefault={activityDefault} setActivityDefault={setActivityDefault} activityMode={activityMode} setActivityMode={setActivityMode} askActivityChoice={askActivityChoice} setAskActivityChoice={setAskActivityChoice} hasSession={!!session} onClose={() => setSettingsOpen(false)} onSave={saveSettings} onMcp={openMcp} />}
     {modelLibraryOpen && <ModelLibraryModal model={model} models={models} modelLabels={displayModelLabels} context={options.context} reasoning={options.reasoning} downloadedDirectory={downloadedModelDirectory} onModel={setModel} onRefresh={refreshModels} onClose={() => setModelLibraryOpen(false)} notify={notify}/>}
-    {mcpOpen && <Modal title="Local MCP connections" eyebrow="TOOL BRIDGE" onClose={() => setMcpOpen(false)}>
-      <p className="modal-copy">Each server starts as a local stdio process. Add only commands you trust. Tool calls require approval.</p>
+    {mcpOpen && <Modal title="MCP connections" eyebrow="EXTEND THE TOOLSET" onClose={() => setMcpOpen(false)}>
+      <p className="modal-copy">Connect local stdio or remote Streamable HTTP servers. Every tool call requires approval. Use HTTPS for remote servers; reference credentials as <code>${'{ENV:VARIABLE_NAME}'}</code> so secrets stay out of this file. MCP servers can access whatever their own process/account permits.</p>
       <textarea className="code-editor mcp-editor" value={mcpJson} onChange={(e) => setMcpJson(e.target.value)} spellCheck={false}/>
       <div className="modal-actions"><Button kind="quiet" onClick={() => setMcpOpen(false)}>Cancel</Button><Button kind="bright" onClick={() => void saveMcp()}>Save connections</Button></div>
     </Modal>}

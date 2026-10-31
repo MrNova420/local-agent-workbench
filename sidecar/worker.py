@@ -316,7 +316,7 @@ class AgentService:
                 {"name": "Project files and search", "status": "available", "detail": "Project-scoped list, search, read, create, exact edit, and patch tools."},
                 {"name": "Commands and Git review", "status": "available", "detail": "Approved argv commands, streamed output, Git diff, and explicit results."},
                 {"name": "Plans and project skills", "status": "available", "detail": "Structured plan updates and on-demand project/user skills."},
-                {"name": "Local MCP tools", "status": "available", "detail": f"{len(self.mcp.servers)} local stdio server(s) configured; add integrations through MCP settings. Each call uses the app approval flow."},
+                {"name": "Local and remote MCP tools", "status": "available", "detail": f"{len(self.mcp.servers)} server(s) configured. Supports local stdio and remote Streamable HTTP; each tool call uses the app approval flow."},
                 {"name": "Browser automation", "status": "planned", "detail": "No first-party browser driver is connected; compatible MCP tools can extend the agent."},
                 {"name": "LSP diagnostics and navigation", "status": "planned", "detail": "No language-server client is connected yet."},
                 {"name": "Debugger", "status": "planned", "detail": "No debugger adapter is connected yet."},
