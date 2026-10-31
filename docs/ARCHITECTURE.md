@@ -61,3 +61,5 @@ The development shell uses Python from `AGENT_PYTHON` (or `python`) and imports 
 - One live exact-tag coding measurement after the visible workflow passes. Capture first-token delay, generation rate, effective context, and peak RAM/VRAM. Read and preserve Ollama's pre-existing loaded-model state; never unload a model the app did not start.
 - Verify install/uninstall on a clean Windows profile and inspect the signed/release package later.
 - Keep native Transformers checkpoints, cloud providers, the TypeScript engine rewrite, KV-cache experiments, and subagents in the deferred backlog.
+
+Product-level follow-up work, including local lifetime/session/model analytics, richer Live Work Sheet telemetry, 64K/8K context-control verification, and process-correlated GPU investigation, is tracked in [PRODUCT_BACKLOG.md](PRODUCT_BACKLOG.md).
