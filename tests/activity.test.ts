@@ -1,0 +1,34 @@
+import { describe, expect, it } from 'vitest';
+import { applyActivityEvent, type ActivityRecord } from '../src/shared/activity';
+
+describe('durable live activity state', () => {
+  it('merges streamed chunks and completion by operation identity without dropping output', () => {
+    const started: ActivityRecord = {
+      id: 'op-1', operationId: 'op-1', sessionId: 's-1', turnId: 't-1', kind: 'operation',
+      name: 'run_command', status: 'running', startedAt: 1, output: { stdout: '' }, result: '', affectedFiles: [],
+    };
+    const initial = applyActivityEvent([], { type: 'activity_event', activity: started });
+    const streamed = applyActivityEvent(initial, {
+      type: 'activity_event', activity: null, activityPhase: 'progress', activityId: 'op-1',
+      stream: 'stdout', chunk: '雪'.repeat(20_000),
+    });
+    const completed = applyActivityEvent(streamed, {
+      type: 'activity_event', activity: { ...started, status: 'completed', result: 'complete'.repeat(3000), completedAt: 2 },
+    });
+
+    expect(completed).toHaveLength(1);
+    expect(completed[0].output?.stdout).toHaveLength(20_000);
+    expect(completed[0].result).toBe('complete'.repeat(3000));
+    expect(completed[0].status).toBe('completed');
+  });
+
+  it('updates a restored activity record in place and preserves chronological order', () => {
+    const older = { id: 'old', sessionId: 's', turnId: 't', kind: 'plan' as const, status: 'updated', timestamp: 1 };
+    const current = { id: 'current', sessionId: 's', turnId: 't', kind: 'operation' as const, status: 'running', timestamp: 2 };
+    const updated = applyActivityEvent([older, current], {
+      type: 'activity_event', activity: { ...current, status: 'completed', result: 'ok' },
+    });
+    expect(updated.map((row) => row.id)).toEqual(['old', 'current']);
+    expect(updated[1].result).toBe('ok');
+  });
+});

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell, Tray } from 'electron';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -18,9 +18,14 @@ class AgentWorker {
   private pending = new Map<string, Pending>();
   private listeners = new Set<(event: WorkerEvent) => void>();
   private starting?: Promise<void>;
+  private runActive = false;
+  private idleWaiters = new Set<() => void>();
 
   onEvent(listener: (event: WorkerEvent) => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   private emit(event: WorkerEvent) { for (const listener of this.listeners) listener(event); }
+  isRunActive() { return this.runActive; }
+  private markIdle() { this.runActive = false; for (const resolve of this.idleWaiters) resolve(); this.idleWaiters.clear(); }
+  waitForRunIdle() { return this.runActive ? new Promise<void>((resolve) => this.idleWaiters.add(resolve)) : Promise.resolve(); }
 
   start() {
     if (this.child) return Promise.resolve();
@@ -70,7 +75,9 @@ class AgentWorker {
               response.ok ? entry.resolve(response.data) : entry.reject(new Error(response.error || 'Agent service request failed.'));
             }
           } else if (message.type === 'event') {
-            this.emit(message.event as WorkerEvent);
+            const agentEvent = message.event as WorkerEvent;
+            if (agentEvent.type === 'run_idle') this.markIdle();
+            this.emit(agentEvent);
           }
         }
       });
@@ -80,12 +87,12 @@ class AgentWorker {
         if (text) this.emit({ type: 'service_log', text: text.slice(0, 2000) });
       });
       child.once('error', (error) => {
-        clearTimeout(launchTimer); this.child = undefined;
+        clearTimeout(launchTimer); this.child = undefined; this.markIdle();
         for (const entry of this.pending.values()) entry.reject(error);
         this.pending.clear(); reject(error);
       });
       child.once('exit', (code, signal) => {
-        clearTimeout(launchTimer); this.child = undefined;
+        clearTimeout(launchTimer); this.child = undefined; this.markIdle();
         const exitLabel = signal || (code ?? 'unknown');
         const error = new Error(`Agent service exited (${exitLabel}).`);
         for (const entry of this.pending.values()) entry.reject(error);
@@ -100,9 +107,10 @@ class AgentWorker {
     await this.start();
     if (!this.child?.stdin.writable) throw new Error('Agent service is not available.');
     const id = randomUUID();
+    if (command.command === 'run_start') this.runActive = true;
     const promise = new Promise<T>((resolve, reject) => this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject }));
     this.child.stdin.write(`${JSON.stringify({ id, ...command })}\n`);
-    return promise;
+    return promise.catch((error) => { if (command.command === 'run_start') this.markIdle(); throw error; });
   }
 
   async shutdown() {
@@ -117,6 +125,27 @@ class AgentWorker {
 const service = new AgentWorker();
 let mainWindow: BrowserWindow | undefined;
 let quitting = false;
+let closeDecisionPending = false;
+let tray: Tray | undefined;
+
+function requestCloseDecision() {
+  if (!mainWindow || closeDecisionPending) return;
+  closeDecisionPending = true;
+  mainWindow.webContents.send('app:close-decision-required');
+}
+
+async function ensureTray() {
+  if (tray) return;
+  const icon = await app.getFileIcon(process.execPath, { size: 'small' });
+  tray = new Tray(icon);
+  tray.setToolTip('Local Agent Workbench · task continues in background');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Show Local Agent Workbench', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
+    { type: 'separator' },
+    { label: 'Quit', click: () => { if (service.isRunActive()) requestCloseDecision(); else app.quit(); } },
+  ]));
+  tray.on('double-click', () => { mainWindow?.show(); mainWindow?.focus(); });
+}
 
 function trustedSender(frame: Electron.WebFrameMain | null) {
   if (!frame || !mainWindow || frame !== mainWindow.webContents.mainFrame) return false;
@@ -140,6 +169,11 @@ function createWindow() {
     },
   });
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.on('close', (event) => {
+    if (quitting || !service.isRunActive()) return;
+    event.preventDefault();
+    requestCloseDecision();
+  });
   mainWindow.webContents.on('will-navigate', (event, url) => {
     const allowed = MAIN_WINDOW_VITE_DEV_SERVER_URL && url.startsWith(MAIN_WINDOW_VITE_DEV_SERVER_URL);
     if (!allowed && !url.startsWith('agent-workbench://app/')) event.preventDefault();
@@ -188,6 +222,19 @@ app.whenReady().then(async () => {
     if (typeof value !== 'string' || !path.isAbsolute(value)) throw new Error('Expected an absolute path.');
     await shell.openPath(value);
   });
+  ipcMain.handle('app:resolve-close-choice', async (event, choice: unknown) => {
+    assertTrusted(event);
+    if (choice !== 'keep' && choice !== 'hide' && choice !== 'cancel-close') throw new Error('Invalid close choice.');
+    closeDecisionPending = false;
+    if (choice === 'keep') return;
+    if (choice === 'hide') { await ensureTray(); mainWindow?.hide(); return; }
+    if (service.isRunActive()) {
+      try { await service.request({ command: 'run_cancel' }); } catch { /* the sidecar may have exited already */ }
+      await service.waitForRunIdle();
+    }
+    quitting = true;
+    void service.shutdown().finally(() => app.exit(0));
+  });
   createWindow();
   void service.start().catch((error: Error) => mainWindow?.webContents.send('agent:event', { type: 'service_error', error: error.message }));
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
@@ -195,6 +242,7 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', (event) => {
   if (quitting) return;
+  if (service.isRunActive()) { event.preventDefault(); requestCloseDecision(); return; }
   event.preventDefault();
   quitting = true;
   void service.shutdown().finally(() => app.exit(0));

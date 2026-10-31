@@ -237,7 +237,8 @@ class MirroredSessionStore:
             state = max(versions, key=lambda row: row["state"].get("updated_at", 0))["state"]
             conflict = len(versions) > 1 and self._fingerprint(versions[0]["state"]) != self._fingerprint(versions[1]["state"])
             rows.append({key: state.get(key) for key in ("session_id", "workspace", "workspace_id", "model", "provider_id", "model_id", "updated_at")}
-                        | {"sync_conflict": conflict, "recommended_source": "project" if conflict else ("project" if any(row["source"] == "project" for row in versions) else "app"), "sources": [row["source"] for row in versions]})
+                        | {"sync_conflict": conflict, "recommended_source": "project" if conflict else ("project" if any(row["source"] == "project" for row in versions) else "app"), "sources": [row["source"] for row in versions],
+                           "recovery_status": (state.get("run_state") or {}).get("status"), "uncertain_operation": ((state.get("run_state") or {}).get("active_operation") or {}).get("name")})
         return sorted(rows, key=lambda row: row.get("updated_at") or 0, reverse=True)
 
 

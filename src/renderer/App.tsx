@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
-import type { AccessMode, ApprovalMode, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, WorkerCommand, WorkerEvent } from '../shared/protocol';
+import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, ApprovalMode, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
 import { nextRunPhase } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordStreamedText, type RunMetrics } from '../shared/run-metrics';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice } from '../shared/model-controls';
 import { normalizeGpuStats } from '../shared/resource-metrics';
 import { restoreTranscriptMessages } from '../shared/transcript';
 import { LocalModelOrbit } from './ModelOrbit';
+import { ActivityFeed } from './ActivityFeed';
+import { applyActivityEvent } from '../shared/activity';
 
-type ChatMessage = { role: 'user' | 'assistant'; content: string; thinking?: string; streaming?: boolean };
+type ChatMessage = { role: 'user' | 'assistant'; content: string; thinking?: string; streaming?: boolean; recoveredPartial?: boolean };
 type Session = {
   session_id: string;
   workspace: string;
@@ -26,6 +28,10 @@ type Session = {
   working_workspace?: string;
   copy_manifest?: Record<string, string>;
   last_error?: { message: string; occurred_at: number };
+  activity_mode?: ActivityMode;
+  activity_events?: ActivityRecord[];
+  plan?: Array<{ title?: string; text?: string; status?: string }>;
+  run_state?: Record<string, unknown> | null;
 };
 type TraceRow = { id: string; title: string; description?: string; kind: 'tool' | 'status' | 'plan' | 'error'; time: number };
 type Approval = { actionId: string; name: string; arguments: unknown; workspace: string; mode: ApprovalMode };
@@ -90,8 +96,19 @@ export default function App() {
   const [workspace, setWorkspace] = useState(localStorage.getItem('agent-workspace') || '');
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [workspaces, setWorkspaces] = useState<WorkspaceHistoryEntry[]>([]);
+  const [workspaceSearch, setWorkspaceSearch] = useState('');
   const [session, setSession] = useState<Session | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [activities, setActivities] = useState<ActivityRecord[]>([]);
+  const [activityMode, setActivityMode] = useState<ActivityMode>(() => ['sidebar', 'inline'].includes(sessionStorage.getItem('agent-activity-mode') || '') ? sessionStorage.getItem('agent-activity-mode') as ActivityMode : 'compact');
+  const [activityDefault, setActivityDefault] = useState<ActivityMode>(() => ['sidebar', 'inline'].includes(localStorage.getItem('agent-activity-default') || '') ? localStorage.getItem('agent-activity-default') as ActivityMode : 'compact');
+  const [askActivityChoice, setAskActivityChoice] = useState(() => localStorage.getItem('agent-ask-activity') === 'true');
+  const [activityChoiceOpen, setActivityChoiceOpen] = useState(false);
+  const [sessionConflict, setSessionConflict] = useState<{ id: string; workspace: string; versions: Array<{ source: 'app' | 'project'; updated_at?: number }> } | null>(null);
+  const [recoverySession, setRecoverySession] = useState<Session | null>(null);
+  const [cancelChoiceOpen, setCancelChoiceOpen] = useState(false);
+  const [closeChoiceOpen, setCloseChoiceOpen] = useState(false);
   const [trace, setTrace] = useState<TraceRow[]>([]);
   const [plan, setPlan] = useState<Array<{ title?: string; text?: string; status?: string }>>([]);
   const [diff, setDiff] = useState('');
@@ -159,30 +176,59 @@ export default function App() {
     setSessions(sessionRows);
   }, [request]);
 
+  const refreshWorkspaceHistory = useCallback(async (query = '') => {
+    setWorkspaces(await request<WorkspaceHistoryEntry[]>({ command: 'workspaces_list', query }));
+  }, [request]);
+
+  const refreshHome = useCallback(async () => {
+    const [history, rows] = await Promise.all([
+      request<WorkspaceHistoryEntry[]>({ command: 'workspaces_list', query: '' }),
+      request<SessionSummary[]>({ command: 'sessions_list' }),
+    ]);
+    setWorkspaces(history);
+    setSessions(rows);
+  }, [request]);
+
   const showProject = useCallback(async (root: string) => {
     try {
       const filesResult = await request<ProjectFile[]>({ command: 'workspace_files', workspace: root });
+      await request({ command: 'workspace_record', workspace: root });
       setWorkspace(root);
       localStorage.setItem('agent-workspace', root);
       setFiles(filesResult);
       setSessions(await request<SessionSummary[]>({ command: 'sessions_list', workspace: root }));
+      await refreshWorkspaceHistory('');
       setSession(null);
       setMessages([]);
       setView('project');
       setProjectTab('overview');
     } catch (error) { notify(`Could not open project: ${(error as Error).message}`, 'bad'); }
-  }, [notify, request]);
+  }, [notify, refreshWorkspaceHistory, request]);
 
-  const loadSession = useCallback(async (id: string) => {
+  const loadSession = useCallback(async (id: string, selectedWorkspace = workspace, source?: 'app' | 'project') => {
     try {
-      const loaded = await request<Session>({ command: 'session_resume', sessionId: id });
+      const response = await request<Session | { conflict: true; recommended_source: 'project'; versions: Array<{ source: 'app' | 'project'; updated_at?: number }> }>({ command: 'session_resume', sessionId: id, workspace: selectedWorkspace || undefined, source });
+      if ('conflict' in response && response.conflict) {
+        setSessionConflict({ id, workspace: selectedWorkspace, versions: response.versions });
+        return;
+      }
+      const loaded = response as Session;
+      setSessionConflict(null);
       const root = loaded.workspace;
       setModel(loaded.model);
       const rows: ChatMessage[] = restoreTranscriptMessages(loaded.messages);
       setWorkspace(root);
       localStorage.setItem('agent-workspace', root);
       setSession(loaded);
+      const partial = typeof loaded.run_state?.partial_content === 'string' ? loaded.run_state.partial_content : '';
+      const partialThinking = typeof loaded.run_state?.partial_thinking === 'string' ? loaded.run_state.partial_thinking : '';
+      if (loaded.run_state?.status === 'interrupted' && (partial || partialThinking)) rows.push({ role: 'assistant', content: partial, thinking: partialThinking, recoveredPartial: true });
       setMessages(rows);
+      setActivities(Array.isArray(loaded.activity_events) ? loaded.activity_events : []);
+      setPlan(Array.isArray(loaded.plan) ? loaded.plan : []);
+      const nextMode: ActivityMode = loaded.activity_mode === 'sidebar' || loaded.activity_mode === 'inline' ? loaded.activity_mode : 'compact';
+      setActivityMode(nextMode);
+      sessionStorage.setItem('agent-activity-mode', nextMode);
       setTrace(loaded.last_error ? [{ id: `last-error-${loaded.last_error.occurred_at}`, title: 'Previous run failed', description: loaded.last_error.message, kind: 'error', time: loaded.last_error.occurred_at * 1000 }] : []);
       setOptions({
         context: loaded.context || modelInfo?.context || 8192,
@@ -196,12 +242,44 @@ export default function App() {
       setContextTouched(true);
       setSettingsTouched(true);
       setView('session');
+      setRecoverySession(loaded.run_state?.status === 'interrupted' ? loaded : null);
       setSessions(await request<SessionSummary[]>({ command: 'sessions_list', workspace: root }));
+      await refreshWorkspaceHistory('');
     } catch (error) { notify(`Could not resume session: ${(error as Error).message}`, 'bad'); }
-  }, [modelInfo?.context, notify, request]);
+  }, [modelInfo?.context, notify, refreshWorkspaceHistory, request, workspace]);
+
+  async function recoverInterruptedRun(action: 'resume' | 'retry' | 'restore') {
+    if (!recoverySession) return;
+    const recovered = await request<{ state: Session; prompt?: string; action: string }>({ command: 'session_recover', sessionId: recoverySession.session_id, action });
+    setRecoverySession(null);
+    setSession(recovered.state);
+    const restored: ChatMessage[] = restoreTranscriptMessages(recovered.state.messages);
+    const partial = typeof recovered.state.run_state?.partial_content === 'string' ? recovered.state.run_state.partial_content : '';
+    const partialThinking = typeof recovered.state.run_state?.partial_thinking === 'string' ? recovered.state.run_state.partial_thinking : '';
+    if (partial || partialThinking) restored.push({ role: 'assistant', content: partial, thinking: partialThinking, recoveredPartial: true });
+    setMessages(restored);
+    setActivities(Array.isArray(recovered.state.activity_events) ? recovered.state.activity_events : []);
+    if (action === 'restore' || !recovered.prompt) return;
+    const settings = (recovered.state.run_state?.settings || {}) as Record<string, unknown>;
+    const run: RunOptions = {
+      workspace: recovered.state.workspace, sessionId: recovered.state.session_id,
+      providerId: recovered.state.provider_id === 'llama.cpp' ? 'llama.cpp' : 'ollama',
+      prompt: recovered.prompt, model: String(settings.model || recovered.state.model),
+      context: Number(settings.context || recovered.state.context),
+      maxTokens: Number(settings.max_tokens || recovered.state.max_tokens || 4096),
+      temperature: Number(recovered.state.temperature ?? 0.2),
+      access: recovered.state.access || 'ask', approvalMode: recovered.state.approval_mode || 'per-action',
+      keepAlive: recovered.state.keep_alive || '30m',
+      reasoning: (settings.reasoning ?? recovered.state.reasoning ?? null) as boolean | string | null,
+    };
+    setPrompt(''); setRunning(true); setPhase('Recovering interrupted task'); setStartedAt(Date.now()); setElapsed(0);
+    try { await request({ command: 'run_start', options: run }); }
+    catch (error) { setRunning(false); setPhase('Recovery failed'); notify(`Could not continue the interrupted task: ${(error as Error).message}`, 'bad'); }
+  }
 
   useEffect(() => {
     void refreshModels();
+    void refreshHome().catch((error) => notify(`Could not load saved workspace history: ${(error as Error).message}`, 'warn'));
     void request({ command: 'ping' }).then(() => setInstalled(true)).catch(() => setInstalled(false));
     const unsubscribe = window.agent.onEvent((event) => {
       if (event.type === 'service_ready') setInstalled(true);
@@ -210,6 +288,8 @@ export default function App() {
         notify(String(event.error || 'Agent service stopped.'), 'bad');
       }
       if (event.type === 'service_log') console.info('[agent service]', event.text);
+      if (event.type === 'activity_event') setActivities((current) => applyActivityEvent(current, event as unknown as ActivityEventEnvelope));
+      if (event.type === 'session_mirror_error') notify(`The app copy is saved, but the project mirror failed: ${String(event.error || 'unavailable')}`, 'warn');
       if (event.type === 'model_registered') {
         setModelLabels((current) => ({ ...current, [String(event.model)]: String(event.label || shortModel(String(event.model))) }));
         setModel(String(event.model));
@@ -243,16 +323,9 @@ export default function App() {
           return [...current, { role: 'assistant', content: '', thinking: chunk, streaming: true }];
         });
       }
-      if (event.type === 'tool_start') {
-        setTrace((current) => [...current, { id: crypto.randomUUID(), title: `Using ${String(event.name || 'tool')}`, description: JSON.stringify(event.arguments || {}, null, 2), kind: 'tool', time: Date.now() }]);
-      }
-      if (event.type === 'tool_done') {
-        setTrace((current) => [...current, { id: crypto.randomUUID(), title: `${String(event.name || 'Tool')} returned`, description: String(event.result || '').slice(0, 1000), kind: 'tool', time: Date.now() }]);
-      }
       if (event.type === 'plan') {
         const items = Array.isArray(event.items) ? event.items as typeof plan : [];
         setPlan(items);
-        setTrace((current) => [...current, { id: crypto.randomUUID(), title: 'Plan updated', description: `${items.length} steps`, kind: 'plan', time: Date.now() }]);
       }
       if (event.type === 'approval_request') {
         setApproval({ actionId: String(event.actionId), name: String(event.name), arguments: event.arguments, workspace: String(event.workspace), mode: event.mode === 'per-task' ? 'per-task' : 'per-action' });
@@ -260,6 +333,7 @@ export default function App() {
       if (event.type === 'session_saved') {
         const root = String(event.workspace || workspace);
         if (root) void request<SessionSummary[]>({ command: 'sessions_list', workspace: root }).then(setSessions).catch(() => undefined);
+        void refreshWorkspaceHistory('').catch(() => undefined);
       }
       if (event.type === 'generation_complete') {
         setPhase((current) => nextRunPhase(current, event));
@@ -278,6 +352,11 @@ export default function App() {
         setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
         setRunMetrics((current) => endGeneration(current));
         notify('This request was cancelled. Runtime processes and model state were left alone.', 'warn');
+      }
+      if (event.type === 'stopped_after_operation') {
+        setApproval(null); setRunning(false); setPhase('Stopped after active operation'); setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
+        setRunMetrics((current) => endGeneration(current));
+        notify('The active operation was saved. No further model or tool calls were started.', 'warn');
       }
       if (event.type === 'error') {
         setApproval(null);
@@ -299,8 +378,9 @@ export default function App() {
       if (event.type === 'load_warn') notify(String(event.text), 'warn');
       if (event.type === 'context_limit') notify(String(event.error), 'bad');
     });
-    return unsubscribe;
-  }, [notify, refreshModels, request, workspace]);
+    const unsubscribeClose = window.agent.onCloseDecision(() => setCloseChoiceOpen(true));
+    return () => { unsubscribe(); unsubscribeClose(); };
+  }, [notify, refreshHome, refreshModels, refreshWorkspaceHistory, request, workspace]);
 
   useEffect(() => {
     const onShortcut = (event: KeyboardEvent) => {
@@ -378,15 +458,18 @@ export default function App() {
     if (selected) await showProject(selected);
   }
 
-  async function newSession() {
+  async function newSession(selectedActivityMode?: ActivityMode) {
     if (!workspace) { await chooseWorkspace(); return; }
+    if (!selectedActivityMode && askActivityChoice) { setActivityChoiceOpen(true); return; }
     try {
       const selectedModel = model;
       if (!selectedModel) { notify('Add or install a local model from Model Library before starting a session.', 'warn'); setModelLibraryOpen(true); return; }
       const selectedInfo = await request<ModelInfo>({ command: 'model_info', model: selectedModel });
       const configuredContext = !contextTouched && !settingsTouched ? selectedInfo.context ?? options.context : options.context;
-      const created = await request<Session>({ command: 'session_new', workspace, model: selectedModel, context: configuredContext });
+      const chosenMode = selectedActivityMode || activityDefault;
+      const created = await request<Session>({ command: 'session_new', workspace, model: selectedModel, context: configuredContext, activityMode: chosenMode });
       setSession(created); setMessages([]); setTrace([]); setPlan([]); setPrompt(''); setElapsed(0); setPhase('Ready'); setView('session');
+      setActivities([]); setActivityMode(chosenMode); sessionStorage.setItem('agent-activity-mode', chosenMode);
       setRunMetrics(emptyRunMetrics());
       setOptions((old) => ({ ...old, context: created.context, approvalMode: 'per-action', reasoning: null }));
       void refreshWorkspace(workspace);
@@ -421,9 +504,15 @@ export default function App() {
     catch (error) { setRunning(false); setPhase('Run failed'); notify((error as Error).message, 'bad'); }
   }
 
-  async function cancelRun() {
-    try { await request({ command: 'run_cancel' }); setPhase('Cancelling request'); }
-    catch (error) { notify(`Could not cancel: ${(error as Error).message}`, 'bad'); }
+  async function cancelRun() { setCancelChoiceOpen(true); }
+
+  async function chooseCancelAction(action: 'continue' | 'cancel' | 'finish') {
+    setCancelChoiceOpen(false);
+    if (action === 'continue') return;
+    try {
+      if (action === 'cancel') { await request({ command: 'run_cancel' }); setPhase('Cancelling request'); }
+      else { await request({ command: 'run_stop_after_operation' }); setPhase('Finishing active operation'); }
+    } catch (error) { notify(`Could not update the run: ${(error as Error).message}`, 'bad'); }
   }
 
   async function answerApproval(approved: boolean) {
@@ -486,9 +575,14 @@ export default function App() {
     if (!Number.isInteger(options.context) || options.context < 1024 || !Number.isInteger(options.maxTokens) || options.maxTokens < 1 || options.temperature < 0 || options.temperature > 2) {
       notify('Check the context, output-token, and temperature values.', 'bad'); return;
     }
+    localStorage.setItem('agent-activity-default', activityDefault);
+    localStorage.setItem('agent-ask-activity', String(askActivityChoice));
+    sessionStorage.setItem('agent-activity-mode', activityMode);
     setSettingsOpen(false);
     if (session) {
-      setSession({ ...session, model, model_id: model, provider_id: model.startsWith('gguf::') ? 'llama.cpp' : 'ollama', context: options.context, access: options.access, approval_mode: options.approvalMode === 'auto' ? 'per-action' : options.approvalMode, reasoning: options.reasoning, max_tokens: options.maxTokens, temperature: options.temperature, keep_alive: options.keepAlive });
+      try { await request({ command: 'session_activity_mode', sessionId: session.session_id, activityMode }); }
+      catch (error) { notify(`Run settings saved, but activity display could not be saved to this session: ${(error as Error).message}`, 'warn'); }
+      setSession({ ...session, activity_mode: activityMode, model, model_id: model, provider_id: model.startsWith('gguf::') ? 'llama.cpp' : 'ollama', context: options.context, access: options.access, approval_mode: options.approvalMode === 'auto' ? 'per-action' : options.approvalMode, reasoning: options.reasoning, max_tokens: options.maxTokens, temperature: options.temperature, keep_alive: options.keepAlive });
     }
   }
 
@@ -522,18 +616,21 @@ export default function App() {
 
     <main className="main-stage">
       {view === 'landing' && <Landing
-        workspace={workspace} sessions={sessions} models={models} modelLabels={displayModelLabels} model={model} context={options.context}
+        workspaces={workspaces} workspaceSearch={workspaceSearch} sessions={sessions} models={models} modelLabels={displayModelLabels} model={model} context={options.context}
         connected={connected} telemetry={telemetry} onChoose={chooseWorkspace} onOpen={showProject}
-        onResume={loadSession} onModel={(name) => { setModel(name); setContextTouched(false); setSettingsTouched(false); }} onRefresh={() => { void refreshModels(); }}
+        onModel={(name) => { setModel(name); setContextTouched(false); setSettingsTouched(false); }} onRefresh={() => { void refreshHome(); void refreshModels(); }}
+        onSearch={(value) => { setWorkspaceSearch(value); void refreshWorkspaceHistory(value); }}
+        onPin={(root, pinned) => void request({ command: 'workspace_pin', workspace: root, pinned }).then(() => refreshWorkspaceHistory(workspaceSearch)).catch((error) => notify((error as Error).message, 'warn'))}
+        onRemove={(root) => void request({ command: 'workspace_remove', workspace: root }).then(() => refreshWorkspaceHistory(workspaceSearch)).catch((error) => notify((error as Error).message, 'warn'))}
         onLibrary={() => setModelLibraryOpen(true)}
       />}
       {view === 'project' && <ProjectHome
         root={workspace} tab={projectTab} setTab={setProjectTab} files={availableFiles} sessions={currentSessions}
-        onNew={newSession} onOpenSession={loadSession} onFiles={() => void refreshWorkspace(workspace)}
+        onNew={() => void newSession()} onOpenSession={(id) => void loadSession(id, workspace)} onFiles={() => void refreshWorkspace(workspace)}
         onDiff={showDiff} onMcp={openMcp} running={running}
       />}
       {view === 'session' && <SessionRoom
-        root={workspace} session={session} messages={messages} trace={trace} plan={plan} phase={phase}
+        root={workspace} session={session} messages={messages} activities={activities} activityMode={activityMode} plan={plan} phase={phase}
         elapsed={elapsed} running={running} prompt={prompt} setPrompt={setPrompt} promptRef={promptRef}
         options={options} setOptions={setOptions} files={availableFiles} telemetry={telemetry}
         runMetrics={runMetrics} onRun={startRun} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
@@ -554,7 +651,7 @@ export default function App() {
     </footer>
 
     {notice && <div className={`toast toast-${notice.tone}`} role="status"><span>{notice.text}</span><button onClick={() => setNotice(null)}><Icon name="close"/></button></div>}
-    {settingsOpen && <SettingsModal model={model} modelLabel={displayModelLabels[model] || shortModel(model)} modelInfo={modelInfo} options={options} setOptions={setOptions} onClose={() => setSettingsOpen(false)} onSave={saveSettings} onMcp={openMcp} />}
+    {settingsOpen && <SettingsModal model={model} modelLabel={displayModelLabels[model] || shortModel(model)} modelInfo={modelInfo} options={options} setOptions={setOptions} activityDefault={activityDefault} setActivityDefault={setActivityDefault} activityMode={activityMode} setActivityMode={setActivityMode} askActivityChoice={askActivityChoice} setAskActivityChoice={setAskActivityChoice} hasSession={!!session} onClose={() => setSettingsOpen(false)} onSave={saveSettings} onMcp={openMcp} />}
     {modelLibraryOpen && <ModelLibraryModal model={model} models={models} modelLabels={displayModelLabels} context={options.context} reasoning={options.reasoning} downloadedDirectory={downloadedModelDirectory} onModel={setModel} onRefresh={refreshModels} onClose={() => setModelLibraryOpen(false)} notify={notify}/>}
     {mcpOpen && <Modal title="Local MCP connections" eyebrow="TOOL BRIDGE" onClose={() => setMcpOpen(false)}>
       <p className="modal-copy">Each server starts as a local stdio process. Add only commands you trust. Tool calls require approval.</p>
@@ -562,6 +659,27 @@ export default function App() {
       <div className="modal-actions"><Button kind="quiet" onClick={() => setMcpOpen(false)}>Cancel</Button><Button kind="bright" onClick={() => void saveMcp()}>Save connections</Button></div>
     </Modal>}
     {approval && <ApprovalModal approval={approval} onChoice={(yes) => void answerApproval(yes)} onCancelRun={() => void cancelRun()} />}
+    {activityChoiceOpen && <Modal title="Choose live activity display" eyebrow="NEW SESSION" dismissible={false} onClose={() => undefined}>
+      <p className="modal-copy">Choose how tool calls, file changes, and command output should appear while the model works. This session’s choice can be changed later.</p>
+      <div className="activity-mode-choices">{([['compact', 'Compact cards', 'Show concise operation cards with expandable details.'], ['sidebar', 'Activity sidebar only', 'Keep the conversation focused and show operations in the trace.'], ['inline', 'Full inline output', 'Expand tool output directly in the conversation.']] as const).map(([mode, title, detail]) => <button key={mode} className={`activity-mode-choice ${activityDefault === mode ? 'recommended' : ''}`} onClick={() => { setActivityChoiceOpen(false); void newSession(mode); }}><b>{title}{activityDefault === mode ? ' · DEFAULT' : ''}</b><small>{detail}</small></button>)}</div>
+    </Modal>}
+    {sessionConflict && <Modal title="Session copies have diverged" eyebrow="CHOOSE WHICH VERSION TO KEEP" wide dismissible={false} onClose={() => undefined}>
+      <p className="modal-copy">Both copies are preserved. Choose the version to load and synchronize; the project copy is recommended because it travels with this workspace.</p>
+      <div className="activity-mode-choices">{sessionConflict.versions.map((version) => <button key={version.source} className={`activity-mode-choice ${version.source === 'project' ? 'recommended' : ''}`} onClick={() => { const conflict = sessionConflict; setSessionConflict(null); void loadSession(conflict.id, conflict.workspace, version.source); }}><b>{version.source === 'project' ? 'Project folder copy · recommended' : 'App-wide library copy'}</b><small>Last saved {version.updated_at ? new Date(version.updated_at * 1000).toLocaleString() : 'time unknown'}</small></button>)}</div>
+    </Modal>}
+    {recoverySession && <Modal title="An interrupted task was found" eyebrow="RECOVER SESSION" wide dismissible={false} onClose={() => undefined}>
+      <p className="modal-copy">The app recovered the latest safe checkpoint. Partial model text is marked in the transcript. An in-flight tool operation may have partly completed and will not be replayed automatically.</p>
+      {typeof recoverySession.run_state?.uncertain_operation === 'object' && <div className="approval-context"><span>REVIEW BEFORE RETRYING</span><code>{JSON.stringify(recoverySession.run_state.uncertain_operation)}</code></div>}
+      <div className="activity-mode-choices"><button className="activity-mode-choice recommended" onClick={() => void recoverInterruptedRun('resume').catch((error) => notify(`Recovery failed: ${(error as Error).message}`, 'bad'))}><b>Continue from safe checkpoint</b><small>Inspect any uncertain effect before proposing another action.</small></button><button className="activity-mode-choice" onClick={() => void recoverInterruptedRun('retry').catch((error) => notify(`Recovery failed: ${(error as Error).message}`, 'bad'))}><b>Retry interrupted task</b><small>The model is explicitly warned to inspect before repeating uncertain work.</small></button><button className="activity-mode-choice" onClick={() => void recoverInterruptedRun('restore').catch((error) => notify(`Recovery failed: ${(error as Error).message}`, 'bad'))}><b>Restore history only</b><small>Keep the transcript and activity without continuing the task.</small></button></div>
+    </Modal>}
+    {cancelChoiceOpen && <Modal title="What should happen to this run?" eyebrow="RUN IS ACTIVE" dismissible={false} onClose={() => undefined}>
+      <p className="modal-copy">Choose how to stop. Received text and completed tool results are saved before the run ends.</p>
+      <div className="activity-mode-choices"><button className="activity-mode-choice" onClick={() => void chooseCancelAction('continue')}><b>Keep it running</b><small>Close this prompt and let the current task continue.</small></button><button className="activity-mode-choice danger-choice" onClick={() => void chooseCancelAction('cancel')}><b>Cancel now</b><small>Interrupt the current request and save output already received.</small></button><button className="activity-mode-choice recommended" onClick={() => void chooseCancelAction('finish')}><b>Finish the active operation, then stop</b><small>Save the current tool result and stop before the next model or tool call.</small></button></div>
+    </Modal>}
+    {closeChoiceOpen && <Modal title="A task is still running" eyebrow="CLOSE WORKBENCH" dismissible={false} onClose={() => undefined}>
+      <p className="modal-copy">The task is still active. Choose whether to keep the window open, hide it while work continues, or cancel and close.</p>
+      <div className="activity-mode-choices"><button className="activity-mode-choice" onClick={() => { setCloseChoiceOpen(false); void window.agent.resolveCloseChoice('keep'); }}><b>Keep the app open</b><small>Return to the live task.</small></button><button className="activity-mode-choice recommended" onClick={() => { setCloseChoiceOpen(false); void window.agent.resolveCloseChoice('hide'); }}><b>Hide to background and continue</b><small>The workbench keeps running in the system tray.</small></button><button className="activity-mode-choice danger-choice" onClick={() => { setCloseChoiceOpen(false); void window.agent.resolveCloseChoice('cancel-close'); }}><b>Cancel the run and close</b><small>Wait for the current request to stop and save its received output.</small></button></div>
+    </Modal>}
     {diffOpen && <Modal title={session?.access === 'copy' ? 'Review proposed changes' : 'Project changes'} eyebrow="CHANGE REVIEW" wide onClose={() => setDiffOpen(false)}>
       {diffLoading ? <div className="empty-state" role="status">Loading changes from the selected project…</div> : diffError ? <div className="empty-state" role="alert">Could not load project changes: {diffError}</div> : session?.access === 'copy' ? <>
         <p className="modal-copy">These changes are in a disposable project copy. Select conflict-free files to apply them to the source workspace.</p>
@@ -575,12 +693,12 @@ export default function App() {
   </div>;
 }
 
-function Landing({ workspace, sessions, models, modelLabels, model, context, connected, telemetry, onChoose, onOpen, onResume, onModel, onRefresh, onLibrary }: {
-  workspace: string; sessions: SessionSummary[]; models: string[]; modelLabels: Record<string, string>; model: string; context: number; connected: string;
+function Landing({ workspaces, workspaceSearch, sessions, models, modelLabels, model, context, connected, telemetry, onChoose, onOpen, onModel, onRefresh, onSearch, onPin, onRemove, onLibrary }: {
+  workspaces: WorkspaceHistoryEntry[]; workspaceSearch: string; sessions: SessionSummary[]; models: string[]; modelLabels: Record<string, string>; model: string; context: number; connected: string;
   telemetry: TelemetryView;
-  onChoose: () => void; onOpen: (root: string) => void; onResume: (id: string) => void; onModel: (name: string) => void; onRefresh: () => void; onLibrary: () => void;
+  onChoose: () => void; onOpen: (root: string) => void; onModel: (name: string) => void; onRefresh: () => void;
+  onSearch: (value: string) => void; onPin: (root: string, pinned: boolean) => void; onRemove: (root: string) => void; onLibrary: () => void;
 }) {
-  const recentProjects = useMemo(() => [...new Set([workspace, ...sessions.map((row) => row.workspace)].filter(Boolean))].slice(0, 4), [sessions, workspace]);
   return <section className="landing-view">
     <div className="landing-grid">
       <div className="landing-copy">
@@ -600,7 +718,12 @@ function Landing({ workspace, sessions, models, modelLabels, model, context, con
     <div className="landing-lower">
       <div className="landing-column">
         <div className="section-heading"><div><span className="section-number">01</span><h2>Recent workspaces</h2></div><button onClick={onRefresh}><Icon name="refresh"/> Refresh</button></div>
-        {recentProjects.length ? <div className="project-tiles">{recentProjects.map((root) => <button key={root} className="project-tile" onClick={() => onOpen(root)}><span className="tile-glyph"><Icon name="folder"/></span><span><strong>{shortPath(root)}</strong><small>{root}</small></span><Icon name="arrow"/></button>)}</div> : <div className="empty-inline"><span className="empty-art"><Icon name="folder"/></span><span><b>No workspace has been opened here yet.</b><small>Choose a project folder to create your first local work session.</small></span></div>}
+        <input className="workspace-history-search" value={workspaceSearch} onChange={(event) => onSearch(event.target.value)} placeholder="Search workspace history…" aria-label="Search workspace history"/>
+        {workspaces.length ? <div className="project-tiles workspace-history-list">{workspaces.map((entry) => <div key={`${entry.path}-${entry.first_opened_at}`} className={`workspace-history-row ${entry.available ? '' : 'unavailable'}`}>
+          <button className="project-tile-main" disabled={!entry.available} onClick={() => onOpen(entry.path)}><span className="tile-glyph"><Icon name="folder"/></span><span><strong>{shortPath(entry.path)}{entry.pinned ? ' · PINNED' : ''}</strong><small>{entry.path}</small><em>{entry.available ? 'AVAILABLE' : 'FOLDER UNAVAILABLE'}</em></span><Icon name="arrow"/></button>
+          <button className="workspace-history-action" title={entry.pinned ? 'Unpin workspace' : 'Pin workspace'} onClick={() => onPin(entry.path, !entry.pinned)}>{entry.pinned ? 'Unpin' : 'Pin'}</button>
+          <button className="workspace-history-action remove" title="Remove from workspace history" onClick={() => onRemove(entry.path)}>Remove</button>
+        </div>)}</div> : <div className="empty-inline"><span className="empty-art"><Icon name="folder"/></span><span><b>{workspaceSearch ? 'No workspaces match this search.' : 'No workspace has been opened here yet.'}</b><small>Open a project folder to add it to persistent local history.</small></span></div>}
       </div>
       <div className="landing-column engine-column">
         <div className="section-heading"><div><span className="section-number">02</span><h2>Inference source</h2></div><span className={`source-status ${connected}`}>{connected === 'yes' ? 'REACHABLE' : connected === 'no' ? 'OFFLINE' : 'CHECKING'}</span></div>
@@ -631,18 +754,18 @@ function ProjectHome({ root, tab, setTab, files, sessions, onNew, onOpenSession,
         <div className="workspace-facts"><div><small>VISIBLE FILES</small><strong>{fmt(files.length)}</strong></div><div><small>TEXT FILES</small><strong>{fmt(textFiles)}</strong></div><div><small>SAVED SESSIONS</small><strong>{fmt(sessions.length)}</strong></div></div>
       </div>
       <div className="recent-session-card"><div className="section-heading"><div><span className="section-number">03</span><h2>Recent sessions</h2></div><button onClick={() => setTab('sessions')}>All sessions <Icon name="arrow"/></button></div>
-        {sessions.slice(0, 5).map((row, index) => <button className="session-tile" key={row.session_id} onClick={() => onOpenSession(row.session_id)}><span className="session-index">{String(index + 1).padStart(2, '0')}</span><span><strong>Session {row.session_id.slice(-8)}</strong><small>{row.model}</small></span><time>{new Date(row.updated_at * 1000).toLocaleDateString()}</time><Icon name="arrow"/></button>)}
+        {sessions.slice(0, 5).map((row, index) => <button className="session-tile" key={row.session_id} onClick={() => onOpenSession(row.session_id)}><span className="session-index">{String(index + 1).padStart(2, '0')}</span><span><strong>Session {row.session_id.slice(-8)}</strong><small>{row.model}</small>{row.sync_conflict && <small className="session-conflict-note">Copies differ · project version recommended</small>}</span><time>{new Date(row.updated_at * 1000).toLocaleDateString()}</time><Icon name="arrow"/></button>)}
         {!sessions.length && <div className="empty-inline compact"><span><b>No sessions for this folder yet.</b><small>Your first task will create a resumable session.</small></span></div>}
       </div>
       <div className="project-capabilities"><div><Icon name="branch"/><span><b>Project boundary</b><small>File tools stay under this root.</small></span></div><div><Icon name="terminal"/><span><b>Reviewable actions</b><small>Commands and risky writes ask first.</small></span></div><div><Icon name="clock"/><span><b>Local history</b><small>Sessions can be resumed at any time.</small></span></div></div>
     </div>}
     {tab === 'files' && <div className="project-file-list"><div className="section-heading"><div><span className="section-number">04</span><h2>Indexed project files</h2></div><span>{files.length} entries</span></div>{files.map((file) => <div className="file-row" key={file.path}><span className={`file-glyph ${file.text ? 'text-file' : ''}`}>{file.text ? 'Aa' : '▧'}</span><code>{file.path}</code><small>{file.size > 1024 ? `${(file.size / 1024).toFixed(1)} KB` : `${file.size} B`}</small></div>)}</div>}
-    {tab === 'sessions' && <div className="project-file-list"><div className="section-heading"><div><span className="section-number">05</span><h2>Saved sessions</h2></div><span>{sessions.length} sessions</span></div>{sessions.map((row) => <button className="session-tile full-session" key={row.session_id} onClick={() => onOpenSession(row.session_id)}><span className="session-index"><Icon name="clock"/></span><span><strong>Session {row.session_id}</strong><small>{row.model}</small></span><time>{new Date(row.updated_at * 1000).toLocaleString()}</time><Icon name="arrow"/></button>)}</div>}
+    {tab === 'sessions' && <div className="project-file-list"><div className="section-heading"><div><span className="section-number">05</span><h2>Saved sessions</h2></div><span>{sessions.length} sessions</span></div>{sessions.map((row) => <button className="session-tile full-session" key={row.session_id} onClick={() => onOpenSession(row.session_id)}><span className="session-index"><Icon name="clock"/></span><span><strong>Session {row.session_id}</strong><small>{row.model}</small>{row.sync_conflict && <small className="session-conflict-note">Copies differ · project version recommended</small>}</span><time>{new Date(row.updated_at * 1000).toLocaleString()}</time><Icon name="arrow"/></button>)}</div>}
   </section>;
 }
 
-function SessionRoom({ root, session, messages, trace, plan, phase, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onEnter, endRef, model }: {
-  root: string; session: Session | null; messages: ChatMessage[]; trace: TraceRow[]; plan: Array<{ title?: string; text?: string; status?: string }>;
+function SessionRoom({ root, session, messages, activities, activityMode, plan, phase, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onEnter, endRef, model }: {
+  root: string; session: Session | null; messages: ChatMessage[]; activities: ActivityRecord[]; activityMode: ActivityMode; plan: Array<{ title?: string; text?: string; status?: string }>;
   phase: string; elapsed: number; running: boolean; prompt: string; setPrompt: (value: string) => void;
   promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
   setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>; files: ProjectFile[];
@@ -660,10 +783,10 @@ function SessionRoom({ root, session, messages, trace, plan, phase, elapsed, run
     <div className="session-main-grid">
       <section className="transcript-plane" aria-label="Conversation transcript">
         {!messages.length ? <div className="transcript-empty"><div className="empty-symbol"><Icon name="spark"/></div><span className="eyebrow-line">NEW WORK UNIT / {shortPath(root).toUpperCase()}</span><h2>What should we<br/>work through?</h2><p>The model sees selected, relevant project files as needed. You control any action that can change the workspace.</p><div className="starter-prompts"><button onClick={() => setPrompt('Inspect this project and explain its architecture and how to run it.')}>Map the project <Icon name="arrow"/></button><button onClick={() => setPrompt('Review this project for the highest-priority bug and propose a fix.')}>Find a bug <Icon name="arrow"/></button><button onClick={() => setPrompt('Add a focused feature to this project and verify it with the existing tests.')}>Build a feature <Icon name="arrow"/></button></div></div> : <div className="message-list">{messages.map((message, index) => <article className={`message-card message-${message.role}`} key={`${index}-${message.role}`}>
-          <div className="message-meta"><span className={`speaker-mark ${message.role}`}>{message.role === 'user' ? 'YOU' : <Icon name="spark"/>}</span><strong>{message.role === 'user' ? 'Task brief' : 'Local agent'}</strong><span>{message.role === 'user' ? 'INPUT' : message.streaming ? 'LIVE OUTPUT' : 'RESPONSE'}</span>{message.streaming && <i className="stream-pulse"/>}</div>
+          <div className="message-meta"><span className={`speaker-mark ${message.role}`}>{message.role === 'user' ? 'YOU' : <Icon name="spark"/>}</span><strong>{message.role === 'user' ? 'Task brief' : 'Local agent'}</strong><span>{message.recoveredPartial ? 'PARTIAL · INTERRUPTED' : message.role === 'user' ? 'INPUT' : message.streaming ? 'LIVE OUTPUT' : 'RESPONSE'}</span>{message.streaming && <i className="stream-pulse"/>}</div>
           <div className="message-content"><Markdown content={message.content}/></div>
           {message.thinking && <details className="reasoning-trace"><summary>Model reasoning · {message.thinking.length.toLocaleString()} characters</summary><div>{message.thinking}</div></details>}
-        </article>)}<div ref={endRef}/></div>}
+        </article>)}<ActivityFeed entries={activities} mode={activityMode} surface="chat"/><div ref={endRef}/></div>}
         <div className="composer-shell">
           <div className="composer-profile"><span className={`profile-chip access-${options.access}`}>{options.access.toUpperCase()}</span><span className="profile-chip approval-chip">{options.approvalMode === 'auto' ? 'AUTO APPROVE · THIS RUN' : options.approvalMode === 'per-task' ? 'PER TASK' : 'PER ACTION'}</span><span className="profile-hint">{fmt(options.context)} context · {fmt(options.maxTokens)} output</span><button onClick={onSettings}>Adjust run</button></div>
           <textarea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={onEnter} placeholder="Describe the work. Use Shift + Enter to add detail…" rows={3} disabled={running} aria-label="Task prompt"/>
@@ -676,7 +799,7 @@ function SessionRoom({ root, session, messages, trace, plan, phase, elapsed, run
         <div className="run-metrics" aria-label="Ollama generation statistics"><div><small>FIRST TOKEN</small><strong>{tokenDelay(runMetrics.firstTokenMs)}</strong></div><div title={outputTokensAreEstimated(runMetrics) ? 'Live estimate from streamed text; Ollama reports the exact rate after generation.' : 'Exact rate reported by Ollama.'}><small>OUTPUT / SEC{outputTokensAreEstimated(runMetrics) ? ' · LIVE' : ''}</small><strong>{liveOutputTokensPerSecond(runMetrics)?.toFixed(1).replace(/^/, outputTokensAreEstimated(runMetrics) ? '~' : '') ?? '—'}</strong></div><div title={outputTokensAreEstimated(runMetrics) ? 'Live estimate from streamed text; replaced by Ollama’s exact token count after generation.' : 'Exact output token count reported by Ollama.'}><small>OUTPUT TOKENS{outputTokensAreEstimated(runMetrics) ? ' · LIVE' : ''}</small><strong>{outputTokensAreEstimated(runMetrics) ? '~' : ''}{fmt(estimateOutputTokens(runMetrics))}</strong></div></div>
         {telemetry.contextMismatch && <p className="context-warning" role="status">Ollama reports a smaller runtime context than requested. Available memory may limit allocation.</p>}
         <div className="sheet-section"><div className="sheet-heading"><h3>Plan</h3><span>{plan.length ? `${plan.length} steps` : 'Awaiting agent'}</span></div>{plan.length ? <ol className="plan-list">{plan.map((item, index) => <li key={`${index}-${item.title || item.text}`}><span>{String(index + 1).padStart(2, '0')}</span><b>{item.title || item.text || 'Work item'}</b><small>{item.status || 'pending'}</small></li>)}</ol> : <p className="sheet-empty">A task checklist appears here when the agent creates one.</p>}</div>
-        <div className="sheet-section trace-section"><div className="sheet-heading"><h3>Activity trace</h3><span>{trace.length} events</span></div>{trace.length ? <div className="trace-list">{trace.slice(-8).reverse().map((row) => <div className="trace-item" key={row.id}><span className={`trace-dot ${row.kind}`}/><div><b>{row.title}</b><small>{row.description || ''}</small></div></div>)}</div> : <p className="sheet-empty">Reads, tool calls, and results will be grouped here.</p>}</div>
+        <div className="sheet-section trace-section"><div className="sheet-heading"><h3>Activity trace</h3><span>{activities.length} events</span></div><ActivityFeed entries={activities} mode={activityMode} surface="sidebar"/></div>
         <div className="resource-summary">
           <div className="resource-heading"><span>RESOURCE / SYSTEM</span><span>SIDECAR {telemetry.serviceRss}</span></div>
           <div className="resource-grid">
@@ -832,8 +955,10 @@ function Modal({ title, eyebrow, children, onClose, wide = false, dismissible = 
   return <div className="modal-backdrop" onMouseDown={(e) => { if (dismissible && e.target === e.currentTarget) onClose(); }} onKeyDown={(e) => { if (!dismissible && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); } }}><section className={`modal-card ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>{dismissible && <button className="modal-close" onClick={onClose} aria-label="Close"><Icon name="close"/></button>}<span className="eyebrow-line">{eyebrow}</span><h2>{title}</h2>{children}</section></div>;
 }
 
-function SettingsModal({ model, modelLabel, modelInfo, options, setOptions, onClose, onSave, onMcp }: {
+function SettingsModal({ model, modelLabel, modelInfo, options, setOptions, activityDefault, setActivityDefault, activityMode, setActivityMode, askActivityChoice, setAskActivityChoice, hasSession, onClose, onSave, onMcp }: {
   model: string; modelLabel: string; modelInfo: ModelInfo | null; options: typeof initialOptions; setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>;
+  activityDefault: ActivityMode; setActivityDefault: (mode: ActivityMode) => void; activityMode: ActivityMode; setActivityMode: (mode: ActivityMode) => void;
+  askActivityChoice: boolean; setAskActivityChoice: (ask: boolean) => void; hasSession: boolean;
   onClose: () => void; onSave: () => void; onMcp: () => void;
 }) {
   const tokenPresets = buildTokenPresets({ contextLimit: modelInfo?.context ?? null, contextLimitKnown: modelInfo?.context_limit_known ?? false, outputLimit: modelInfo?.max_output_tokens ?? null });
@@ -848,6 +973,8 @@ function SettingsModal({ model, modelLabel, modelInfo, options, setOptions, onCl
     <div className="context-facts"><span>Advertised maximum <b>{modelInfo?.context_limit_known ? fmt(modelInfo.context ?? undefined) : 'Unknown'}</b></span><span>Runtime context <b>{modelInfo?.effective_context ? fmt(modelInfo.effective_context) : modelInfo?.provider === 'llama.cpp' ? 'Not loaded / allocation unverified' : 'Shown in the task signal panel'}</b></span></div>
     <label className="settings-field"><span>Keep model warm after a request</span><select value={options.keepAlive} onChange={(e) => setOptions((old) => ({ ...old, keepAlive: e.target.value }))}><option value="30m">30 minutes</option><option value="10m">10 minutes</option><option value="5m">5 minutes</option><option value="0">Unload when idle (Ollama setting)</option></select></label>
     <div className="settings-fields select-fields"><label className="settings-field"><span>File access</span><select value={options.access} onChange={(e) => setOptions((old) => ({ ...old, access: e.target.value as AccessMode }))}><option value="copy">Copy workspace</option><option value="plan">Plan only</option><option value="ask">Ask before writes</option><option value="edit">Edit project</option></select></label><label className="settings-field"><span>Approval</span><select value={options.approvalMode} onChange={(e) => setOptions((old) => ({ ...old, approvalMode: e.target.value as ApprovalMode }))}><option value="per-action">Approve each action</option><option value="per-task">Approve for this task</option><option value="auto">Auto-approve actions · this run</option></select>{options.approvalMode === 'auto' && <small className="auto-approve-warning">Automatically approves project tool actions for this run. Workspace boundaries and access mode remain in force.</small>}</label></div>
+    <div className="settings-fields select-fields"><label className="settings-field"><span>App-wide activity default</span><select value={activityDefault} onChange={(event) => setActivityDefault(event.target.value as ActivityMode)}><option value="compact">Compact cards · expandable</option><option value="sidebar">Activity sidebar only</option><option value="inline">Full inline output</option></select></label>{hasSession && <label className="settings-field"><span>This session activity view</span><select value={activityMode} onChange={(event) => setActivityMode(event.target.value as ActivityMode)}><option value="compact">Compact cards · expandable</option><option value="sidebar">Activity sidebar only</option><option value="inline">Full inline output</option></select></label>}</div>
+    <label className="activity-choice-toggle"><input type="checkbox" checked={askActivityChoice} onChange={(event) => setAskActivityChoice(event.target.checked)}/><span><b>Choose an activity view for each new session</b><small>When off, new sessions use the app-wide default.</small></span></label>
     <div className="settings-bottom"><Button kind="outline" onClick={onMcp}>Configure local MCP</Button><span>Context is never silently reduced.</span></div>
     <div className="modal-actions"><Button kind="quiet" onClick={onClose}>Cancel</Button><Button kind="bright" onClick={onSave}>Apply to this session</Button></div>
   </Modal>;

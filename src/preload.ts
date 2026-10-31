@@ -8,6 +8,12 @@ const api: DesktopApi = {
     ipcRenderer.on('agent:event', handler);
     return () => ipcRenderer.removeListener('agent:event', handler);
   },
+  onCloseDecision: (listener) => {
+    const handler = () => listener();
+    ipcRenderer.on('app:close-decision-required', handler);
+    return () => ipcRenderer.removeListener('app:close-decision-required', handler);
+  },
+  resolveCloseChoice: (choice) => ipcRenderer.invoke('app:resolve-close-choice', choice) as Promise<void>,
   chooseWorkspace: () => ipcRenderer.invoke('app:choose-workspace') as Promise<string | null>,
   chooseModelFile: () => ipcRenderer.invoke('app:choose-model-file') as Promise<string | null>,
   chooseLlamaBinary: () => ipcRenderer.invoke('app:choose-llama-binary') as Promise<string | null>,

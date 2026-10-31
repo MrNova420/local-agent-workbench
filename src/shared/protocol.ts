@@ -48,12 +48,15 @@ export type WorkerCommand =
   | { command: 'workspace_pin'; workspace: string; pinned: boolean }
   | { command: 'workspace_track_sessions'; workspace: string; track: boolean }
   | { command: 'sessions_list'; workspace?: string }
-  | { command: 'session_new'; workspace: string; model: string; context: number }
+  | { command: 'session_new'; workspace: string; model: string; context: number; activityMode?: ActivityMode }
+  | { command: 'session_activity_mode'; sessionId: string; activityMode: ActivityMode }
+  | { command: 'session_recover'; sessionId: string; action: 'resume' | 'retry' | 'restore' }
   | { command: 'session_resume'; sessionId: string; workspace?: string; source?: 'app' | 'project' }
   | { command: 'mcp_config_get' }
   | { command: 'mcp_config_set'; config: unknown }
   | { command: 'run_start'; options: RunOptions }
   | { command: 'run_cancel' }
+  | { command: 'run_stop_after_operation' }
   | { command: 'approval_reply'; actionId: string; approved: boolean }
   | { command: 'copy_review'; sessionId: string }
   | { command: 'copy_apply'; sessionId: string; paths: string[] }
@@ -63,6 +66,38 @@ export type WorkerEvent = {
   type: string;
   requestId?: string;
   [key: string]: unknown;
+};
+
+export type ActivityMode = 'compact' | 'sidebar' | 'inline';
+export type ActivityRecord = {
+  id: string;
+  operationId?: string | null;
+  turnId: string;
+  sessionId: string;
+  workspace?: string;
+  kind: 'operation' | 'approval' | 'plan' | 'error';
+  name?: string;
+  status: string;
+  timestamp?: number;
+  startedAt?: number;
+  completedAt?: number;
+  arguments?: unknown;
+  output?: Record<string, string>;
+  result?: string;
+  affectedFiles?: string[];
+  items?: Array<{ title?: string; text?: string; status?: string }>;
+};
+
+export type ActivityEventEnvelope = {
+  type: 'activity_event';
+  activity: ActivityRecord | null;
+  activityId?: string;
+  activityPhase?: 'start' | 'progress';
+  stream?: 'stdout' | 'stderr';
+  chunk?: string;
+  sessionId?: string;
+  turnId?: string;
+  timestamp?: number;
 };
 
 export type WorkerResponse = {
@@ -75,6 +110,8 @@ export type WorkerResponse = {
 export type DesktopApi = {
   request: <T = unknown>(command: WorkerCommand) => Promise<T>;
   onEvent: (listener: (event: WorkerEvent) => void) => () => void;
+  onCloseDecision: (listener: () => void) => () => void;
+  resolveCloseChoice: (choice: 'keep' | 'hide' | 'cancel-close') => Promise<void>;
   chooseWorkspace: () => Promise<string | null>;
   chooseModelFile: () => Promise<string | null>;
   chooseLlamaBinary: () => Promise<string | null>;
@@ -106,6 +143,8 @@ export type SessionSummary = {
   sync_conflict?: boolean;
   recommended_source?: 'app' | 'project';
   sources?: Array<'app' | 'project'>;
+  recovery_status?: string | null;
+  uncertain_operation?: string | null;
 };
 
 export type WorkspaceHistoryEntry = {

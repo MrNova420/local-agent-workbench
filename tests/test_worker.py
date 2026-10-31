@@ -2,6 +2,7 @@ import io
 import json
 import threading
 import time
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -103,6 +104,100 @@ def test_workspace_history_and_session_conflict_resolution(service, tmp_path):
     assert conflict["recommended_source"] == "project"
     assert resolved["session_id"] == session["session_id"]
     assert resolved["messages"][-1]["content"] == "project-only update"
+
+
+def test_activity_events_checkpoint_complete_results_and_unstarted_calls(service, tmp_path, monkeypatch):
+    project = tmp_path / "checkpoint-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    state["messages"].append({"role": "user", "content": "do work"})
+    state["run_state"] = {"status": "running", "turn_id": "turn-1", "safe_messages": list(state["messages"]),
+                          "partial_content": "", "partial_thinking": "", "active_operation": None,
+                          "tool_batch": None, "completed_tool_results": {}}
+    service.sessions.save(state)
+    controller = {"session": state, "turn_id": "turn-1", "checkpoint_lock": threading.RLock(),
+                  "last_checkpoint": time.monotonic() - 3}
+    emitted = []
+    monkeypatch.setattr(service, "emit", emitted.append)
+    turn = SimpleNamespace(workspace=project)
+    batch_message = {"role": "assistant", "content": "", "tool_calls": [
+        {"id": "call-a", "function": {"name": "run_command", "arguments": {}}},
+        {"id": "call-b", "function": {"name": "write_file", "arguments": {}}},
+    ]}
+
+    service._publish_run_event(controller, turn, {"type": "tool_batch", "assistantMessage": batch_message,
+                                 "calls": [{"id": "call-a", "name": "run_command"}, {"id": "call-b", "name": "write_file"}]})
+    service._publish_run_event(controller, turn, {"type": "tool_start", "operationId": "op-a", "toolCallId": "call-a",
+                                 "name": "run_command", "arguments": {"argv": ["python"]}, "startedAt": 1})
+    service._publish_run_event(controller, turn, {"type": "operation_output", "operationId": "op-a", "stream": "stdout", "text": "full log " * 3000})
+    service._publish_run_event(controller, turn, {"type": "tool_done", "operationId": "op-a", "toolCallId": "call-a",
+                                 "name": "run_command", "result": "complete result " * 2000, "affectedFiles": [], "completedAt": 2})
+    service._publish_run_event(controller, turn, {"type": "tool_done", "operationId": "op-b", "toolCallId": "call-b",
+                                 "name": "write_file", "result": "second result", "affectedFiles": ["src/a.py"], "completedAt": 3})
+
+    saved = service.sessions.load(state["session_id"])
+    activity = next(item for item in saved["activity_events"] if item["operationId"] == "op-a")
+    checkpoint_tools = [message for message in saved["run_state"]["safe_messages"] if message.get("role") == "tool"]
+    assert len(activity["output"]["stdout"]) > 12000
+    assert len(activity["result"]) > 12000
+    assert checkpoint_tools[0]["content"] == "complete result " * 2000
+    assert checkpoint_tools[1]["content"] == "second result"
+    assert sum(message.get("role") == "assistant" and bool(message.get("tool_calls")) for message in saved["run_state"]["safe_messages"]) == 1
+    assert any(event["type"] == "activity_event" for event in emitted)
+
+
+def test_run_errors_are_persisted_as_rehydratable_activity(service, tmp_path, monkeypatch):
+    project = tmp_path / "error-activity-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    controller = {"session": state, "turn_id": "turn-error", "checkpoint_lock": threading.RLock(),
+                  "last_checkpoint": time.monotonic() - 3}
+    emitted = []
+    monkeypatch.setattr(service, "emit", emitted.append)
+
+    service._publish_run_event(controller, SimpleNamespace(workspace=project),
+                               {"type": "error", "error": "Provider headers timed out"})
+
+    saved = service.sessions.load(state["session_id"])
+    error = next(item for item in saved["activity_events"] if item["kind"] == "error")
+    envelope = next(event for event in emitted if event["type"] == "activity_event")
+    assert error["status"] == "failed"
+    assert error["result"] == "Provider headers timed out"
+    assert error["turnId"] == "turn-error"
+    assert envelope["activity"] == error
+
+
+def test_crash_recovery_marks_inflight_write_uncertain_and_never_replays_it(service, tmp_path):
+    project = tmp_path / "interrupted-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    state["messages"].append({"role": "user", "content": "update config"})
+    state["activity_events"] = [{"id": "op-1", "operationId": "op-1", "kind": "operation", "name": "write_file", "status": "running", "arguments": {"path": "config.json"}}]
+    state["run_state"] = {"status": "running", "turn_id": "turn-1", "prompt": "update config",
+                          "safe_messages": list(state["messages"]), "partial_content": "partial reply",
+                          "partial_thinking": "", "active_operation": {"operationId": "op-1", "toolCallId": "call-1", "name": "write_file", "arguments": {"path": "config.json"}},
+                          "tool_batch": {"assistant_message": {"role": "assistant", "tool_calls": [{"id": "call-0"}, {"id": "call-1"}, {"id": "call-2"}]},
+                                         "calls": [{"id": "call-0"}, {"id": "call-1"}, {"id": "call-2"}],
+                                         "base_messages": list(state["messages"])},
+                          "completed_tool_results": {"call-0": "finished"}}
+    service.sessions.save(state)
+
+    loaded = service.handle("session_resume", {"sessionId": state["session_id"], "workspace": str(project)})
+    recovered = service.handle("session_recover", {"sessionId": state["session_id"], "action": "resume"})
+
+    assert loaded["run_state"]["status"] == "interrupted"
+    assert loaded["run_state"]["uncertain_operation"]["name"] == "write_file"
+    assert loaded["activity_events"][0]["status"] == "uncertain"
+    assert recovered["action"] == "resume"
+    assert "inspect its current effect" in recovered["prompt"]
+    assert any(message.get("role") == "user" and message.get("content") == "update config" for message in recovered["state"]["messages"])
+    assert recovered["state"]["last_recovery"]["action"] == "resume"
+    tools = [message for message in loaded["run_state"]["safe_messages"] if message.get("role") == "tool"]
+    assert [message["content"] for message in tools] == [
+        "finished",
+        "Uncertain: this operation was interrupted and may have partially or fully completed. Inspect the workspace before retrying.",
+        "Not executed: the process was interrupted before this operation started.",
+    ]
 
 
 def test_resume_does_not_rebind_a_session_to_another_project(service, tmp_path, monkeypatch):

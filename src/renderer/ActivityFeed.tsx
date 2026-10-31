@@ -1,0 +1,35 @@
+import { useState } from 'react';
+import type { ActivityMode, ActivityRecord } from '../shared/protocol';
+
+function ProgressiveText({ value }: { value: string }) {
+  const [visible, setVisible] = useState(16_000);
+  if (!value) return null;
+  const shown = value.slice(0, visible);
+  const remaining = value.length - shown.length;
+  return <div className="activity-output-block"><pre>{shown}</pre>{remaining > 0 && <button className="activity-show-more" onClick={() => setVisible((count) => count + 16_000)}>Show next {Math.min(16_000, remaining).toLocaleString()} characters · {remaining.toLocaleString()} remaining</button>}</div>;
+}
+
+function ActivityCard({ row, expanded }: { row: ActivityRecord; expanded: boolean }) {
+  const title = row.name?.replaceAll('_', ' ') || (row.kind === 'plan' ? 'Plan updated' : row.kind === 'approval' ? 'Action approval' : 'Activity');
+  const output = row.output || {};
+  return <details className={`activity-card activity-${row.kind} activity-${row.status}`} open={expanded}>
+    <summary><span className={`activity-state-dot state-${row.status}`}/><strong>{title}</strong><span className="activity-status">{row.status.replaceAll('_', ' ')}</span>{row.affectedFiles?.length ? <span className="activity-file-count">{row.affectedFiles.length} file{row.affectedFiles.length === 1 ? '' : 's'}</span> : null}</summary>
+    <div className="activity-card-details">
+      {row.affectedFiles?.length ? <div className="activity-files">{row.affectedFiles.map((file) => <code key={file}>{file}</code>)}</div> : null}
+      {row.arguments !== undefined && <details className="activity-subdetails"><summary>Arguments</summary><ProgressiveText value={JSON.stringify(row.arguments, null, 2)}/></details>}
+      {Object.entries(output).map(([stream, value]) => value ? <details className="activity-subdetails" key={stream}><summary>{stream} · {value.length.toLocaleString()} characters</summary><ProgressiveText value={value}/></details> : null)}
+      {row.result ? <details className="activity-subdetails"><summary>Result · {row.result.length.toLocaleString()} characters</summary><ProgressiveText value={row.result}/></details> : null}
+      {row.items?.map((item, index) => <div className="activity-plan-item" key={`${row.id}-${index}`}><b>{item.title || item.text || 'Work item'}</b><span>{item.status || 'pending'}</span></div>)}
+      {row.kind === 'approval' && <div className="activity-plan-item"><b>{String(row.arguments || '')}</b></div>}
+      {row.startedAt && <time>{new Date(row.startedAt * 1000).toLocaleTimeString()}</time>}
+    </div>
+  </details>;
+}
+
+export function ActivityFeed({ entries, mode, surface }: { entries: ActivityRecord[]; mode: ActivityMode; surface: 'chat' | 'sidebar' }) {
+  if (surface === 'chat' && mode === 'sidebar') return null;
+  if (!entries.length) return surface === 'sidebar' ? <p className="sheet-empty">Reads, tool calls, and results will appear here as they happen.</p> : null;
+  return <div className={`activity-feed activity-feed-${surface} activity-mode-${mode}`} aria-label={surface === 'chat' ? 'Agent activity in this conversation' : 'Activity trace'}>
+    {entries.map((row) => <ActivityCard key={row.id} row={row} expanded={surface === 'chat' && mode === 'inline'}/>) }
+  </div>;
+}

@@ -113,6 +113,106 @@ class AgentService:
         self.active: dict[str, Any] | None = None
         self.output_ids: queue.SimpleQueue[str] = queue.SimpleQueue()
 
+    def _publish_run_event(self, controller: dict[str, Any], turn: TurnContext, event: dict[str, Any]) -> None:
+        state = controller["session"]
+        run_state = state.get("run_state")
+        enriched = {**event, "sessionId": state["session_id"], "turnId": controller["turn_id"],
+                    "workspace": str(turn.workspace), "timestamp": event.get("at", time.time())}
+        force_save = event.get("type") in {"tool_start", "tool_done", "tool_batch", "plan", "approval_request", "error", "cancelled", "stopped_after_operation"}
+        with controller["checkpoint_lock"]:
+            if isinstance(run_state, dict):
+                if event.get("type") == "phase" and event.get("phase") == "waiting":
+                    run_state["safe_messages"] = copy.deepcopy(state.get("messages", []))
+                    run_state["tool_batch"] = None
+                    run_state["completed_tool_results"] = {}
+                    run_state["partial_content"] = ""
+                    run_state["partial_thinking"] = ""
+                elif event.get("type") == "text":
+                    run_state["partial_content"] = str(run_state.get("partial_content", "")) + str(event.get("text", ""))
+                elif event.get("type") == "thinking":
+                    run_state["partial_thinking"] = str(run_state.get("partial_thinking", "")) + str(event.get("text", ""))
+                elif event.get("type") == "tool_batch":
+                    run_state["tool_batch"] = {"assistant_message": copy.deepcopy(event.get("assistantMessage")),
+                                                "calls": copy.deepcopy(event.get("calls", [])),
+                                                "base_messages": copy.deepcopy(run_state.get("safe_messages", []))}
+                    run_state["completed_tool_results"] = {}
+                elif event.get("type") == "tool_start":
+                    controller["current_operation_id"] = event.get("operationId")
+                    run_state["active_operation"] = {key: event.get(key) for key in ("operationId", "toolCallId", "name", "arguments", "startedAt")}
+                    run_state["active_operation"]["status"] = "running"
+                elif event.get("type") == "operation_output":
+                    operation_id = str(event.get("operationId", ""))
+                    row = next((item for item in state.setdefault("activity_events", []) if item.get("operationId") == operation_id), None)
+                    if row:
+                        stream = str(event.get("stream", "stdout"))
+                        output = row.setdefault("output", {})
+                        output[stream] = str(output.get(stream, "")) + str(event.get("text", ""))
+                elif event.get("type") == "tool_done":
+                    controller["current_operation_id"] = None
+                    run_state["active_operation"] = None
+                    batch = run_state.get("tool_batch")
+                    if isinstance(batch, dict):
+                        results = run_state.setdefault("completed_tool_results", {})
+                        results[str(event.get("toolCallId", ""))] = str(event.get("result", ""))
+                        assistant = batch.get("assistant_message")
+                        calls = batch.get("calls", [])
+                        if isinstance(assistant, dict) and isinstance(calls, list):
+                            # Rebuild from the batch's immutable starting point on each result.
+                            # Using the previous checkpoint duplicates the batch for tool 2+.
+                            checkpoint = copy.deepcopy(batch.get("base_messages", run_state.get("safe_messages", [])))
+                            checkpoint.append(assistant)
+                            for call in calls:
+                                call_id = str(call.get("id", ""))
+                                result = results.get(call_id, "Not executed: the process was interrupted before this operation started.")
+                                checkpoint.append({"role": "tool", "tool_call_id": call_id, "content": result})
+                            run_state["safe_messages"] = checkpoint
+
+            kind = event.get("type")
+            activity: dict[str, Any] | None = None
+            activity_id = str(event.get("operationId") or event.get("actionId") or uuid.uuid4().hex)
+            rows = state.setdefault("activity_events", [])
+            if kind == "tool_start":
+                activity = {"id": activity_id, "operationId": activity_id, "turnId": controller["turn_id"],
+                            "sessionId": state["session_id"], "workspace": str(turn.workspace), "kind": "operation",
+                            "name": event.get("name", "tool"), "arguments": copy.deepcopy(event.get("arguments", {})),
+                            "status": "running", "startedAt": event.get("startedAt", time.time()), "output": {}, "result": "", "affectedFiles": []}
+                rows.append(activity)
+            elif kind == "operation_output":
+                activity = next((item for item in rows if item.get("operationId") == event.get("operationId")), None)
+                if activity:
+                    enriched["activityId"] = activity["id"]
+                    enriched["activityPhase"] = "progress"
+                    enriched["stream"] = event.get("stream", "stdout")
+                    enriched["chunk"] = event.get("text", "")
+            elif kind == "tool_done":
+                activity = next((item for item in rows if item.get("operationId") == event.get("operationId")), None)
+                if activity:
+                    activity.update(status=event.get("status", "completed"), result=event.get("result", ""),
+                                    affectedFiles=event.get("affectedFiles", []), completedAt=event.get("completedAt", time.time()))
+            elif kind == "plan":
+                state["plan"] = copy.deepcopy(event.get("items", []))
+                activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
+                            "workspace": str(turn.workspace), "kind": "plan", "status": "updated", "items": copy.deepcopy(event.get("items", [])), "timestamp": time.time()}
+                rows.append(activity)
+            elif kind == "error":
+                activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
+                            "workspace": str(turn.workspace), "kind": "error", "name": "Run failed", "status": "failed",
+                            "result": str(event.get("error", "The run failed.")), "timestamp": time.time()}
+                rows.append(activity)
+            if activity:
+                enriched["type"] = "activity_event"
+                enriched["activity"] = copy.deepcopy(activity) if kind != "operation_output" else None
+                self.emit(enriched)
+            else:
+                self.emit(enriched)
+
+            now = time.monotonic()
+            if force_save or now - controller["last_checkpoint"] >= 1.0:
+                controller["last_checkpoint"] = now
+                saved = self.sessions.save(state)
+                if not saved["project_saved"]:
+                    self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "error": saved["error"] or "Project session mirror is unavailable."})
+
     def emit(self, event: dict[str, Any]) -> None:
         with self.emit_lock:
             sys.stdout.write(json.dumps({"type": "event", "event": event}, ensure_ascii=True) + "\n")
@@ -262,11 +362,7 @@ class AgentService:
             return {"text": workspace_diff_text(root)}
         if command == "sessions_list":
             workspace = message.get("workspace")
-            rows = self.sessions.list()
-            if workspace:
-                target = str(Path(workspace).resolve())
-                rows = [row for row in rows if row.get("workspace") and str(Path(row["workspace"]).resolve()) == target]
-            return rows
+            return self.sessions.list(str(workspace) if workspace else None)
         if command == "session_new":
             root = validate_selected_workspace(True, message["workspace"])
             model = str(message.get("model", "")).strip()
@@ -274,8 +370,19 @@ class AgentService:
             if not model or context < 1024:
                 raise ValueError("Choose an installed model and an explicit context of at least 1,024 tokens.")
             state = self.sessions.create(str(root), model, context)
+            mode = str(message.get("activityMode", "compact"))
+            if mode not in {"compact", "sidebar", "inline"}:
+                raise ValueError("Invalid activity display mode.")
+            state["activity_mode"] = mode
             state["persistence"] = self.sessions.save(state)
             return state
+        if command == "session_activity_mode":
+            mode = str(message.get("activityMode", ""))
+            if mode not in {"compact", "sidebar", "inline"}:
+                raise ValueError("Invalid activity display mode.")
+            state = self.sessions.load(str(message["sessionId"]))
+            state["activity_mode"] = mode
+            return self.sessions.save(state)
         if command == "session_resume":
             selected_workspace = str(message.get("workspace", "")) or None
             if not selected_workspace:
@@ -294,9 +401,52 @@ class AgentService:
             state["workspace"] = str(source)
             state["activity_events"] = state.get("activity_events", []) if isinstance(state.get("activity_events", []), list) else []
             state["plan"] = state.get("plan", []) if isinstance(state.get("plan", []), list) else []
+            run_state = state.get("run_state")
+            if isinstance(run_state, dict) and run_state.get("status") == "running":
+                run_state["status"] = "interrupted"
+                run_state["interrupted_at"] = time.time()
+                active = run_state.get("active_operation")
+                if isinstance(active, dict):
+                    active["status"] = "uncertain"
+                    run_state["uncertain_operation"] = copy.deepcopy(active)
+                    for activity in state["activity_events"]:
+                        if activity.get("operationId") == active.get("operationId"):
+                            activity["status"] = "uncertain"
+                checkpoint = self._recovery_checkpoint(run_state)
+                if checkpoint is not None:
+                    run_state["safe_messages"] = checkpoint
+                self.sessions.save(state)
             if message.get("source"):
                 state["persistence"] = self.sessions.save(state)
             return state
+        if command == "session_recover":
+            action = str(message.get("action", ""))
+            if action not in {"resume", "retry", "restore"}:
+                raise ValueError("Choose resume, retry, or restore for this interrupted session.")
+            state = self.sessions.load(str(message["sessionId"]))
+            run_state = state.get("run_state")
+            if not isinstance(run_state, dict) or run_state.get("status") != "interrupted":
+                raise ValueError("This session has no interrupted run to recover.")
+            if action == "restore":
+                run_state["status"] = "restored"
+                run_state["recovered_at"] = time.time()
+                result = self.sessions.save(state)
+                return {"state": state, "persistence": result, "action": action}
+            safe_messages = run_state.get("safe_messages")
+            if isinstance(safe_messages, list):
+                state["messages"] = copy.deepcopy(safe_messages)
+            uncertain = run_state.get("uncertain_operation")
+            if action == "retry":
+                continuation = "Retry the interrupted task from its last safe checkpoint. The operation below may already have partially or fully completed; inspect the current workspace before repeating it and ask for approval as usual. Do not assume it failed."
+            else:
+                continuation = "Continue the interrupted task from its last safe checkpoint. Do not repeat any operation that already has a result. An in-flight operation may have partially completed; inspect its current effect before proposing a retry and ask for approval as usual."
+            if uncertain:
+                continuation += "\n\nUncertain operation details (review before repeating):\n" + json.dumps(uncertain, ensure_ascii=False, indent=2)
+            state["last_recovery"] = {"action": action, "interrupted_turn_id": run_state.get("turn_id"), "at": time.time()}
+            run_state["status"] = "recovered"
+            run_state["recovered_at"] = time.time()
+            state["persistence"] = self.sessions.save(state)
+            return {"state": state, "prompt": continuation, "action": action, "uncertain_operation": uncertain}
         if command == "mcp_config_get":
             return {"mcpServers": self.mcp.servers}
         if command == "mcp_config_set":
@@ -327,6 +477,15 @@ class AgentService:
         if command == "run_cancel":
             self.cancel()
             return {"cancelled": True}
+        if command == "run_stop_after_operation":
+            with self.active_lock:
+                controller = self.active
+                if controller:
+                    controller["stop_after_operation"] = True
+                    engine = controller.get("engine")
+                    if engine:
+                        engine.finish_after_operation()
+            return {"requested": controller is not None}
         if command == "approval_reply":
             return self.approval_reply(str(message["actionId"]), bool(message.get("approved")))
         if command == "copy_review":
@@ -373,6 +532,33 @@ class AgentService:
             return json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return copy.deepcopy(default)
+
+    @staticmethod
+    def _recovery_checkpoint(run_state: dict[str, Any]) -> list[dict[str, Any]] | None:
+        batch = run_state.get("tool_batch")
+        if not isinstance(batch, dict) or not isinstance(batch.get("assistant_message"), dict) or not isinstance(batch.get("calls"), list):
+            return None
+        base = batch.get("base_messages", run_state.get("safe_messages", []))
+        if not isinstance(base, list):
+            return None
+        checkpoint = copy.deepcopy(base)
+        checkpoint.append(copy.deepcopy(batch["assistant_message"]))
+        results = run_state.get("completed_tool_results", {})
+        results = results if isinstance(results, dict) else {}
+        active = run_state.get("active_operation")
+        active_call_id = active.get("toolCallId") if isinstance(active, dict) else None
+        for call in batch["calls"]:
+            if not isinstance(call, dict):
+                continue
+            call_id = str(call.get("id", ""))
+            if call_id in results:
+                content = str(results[call_id])
+            elif active_call_id is not None and call_id == str(active_call_id):
+                content = "Uncertain: this operation was interrupted and may have partially or fully completed. Inspect the workspace before retrying."
+            else:
+                content = "Not executed: the process was interrupted before this operation started."
+            checkpoint.append({"role": "tool", "tool_call_id": call_id, "content": content})
+        return checkpoint
 
     @staticmethod
     def _save_json(path: Path, value: Any) -> None:
@@ -560,23 +746,37 @@ class AgentService:
         else:
             state["working_workspace"] = str(source)
             state.pop("copy_manifest", None)
+        turn_id = uuid.uuid4().hex
+        state.setdefault("activity_events", [])
+        state.setdefault("plan", [])
+        state["run_state"] = {
+            "status": "running", "turn_id": turn_id, "prompt": prompt, "started_at": time.time(),
+            "safe_messages": copy.deepcopy(state.get("messages", [])), "partial_content": "",
+            "partial_thinking": "", "active_operation": None, "tool_batch": None,
+            "completed_tool_results": {}, "settings": {"model": model, "provider_id": provider.provider_id,
+                "context": state["context"], "max_tokens": state["max_tokens"], "reasoning": reasoning},
+        }
         turn = TurnContext.capture(
             workspace=working, model=model, context=state["context"], access=access,
             approval_mode=approval_mode, max_tokens=state["max_tokens"],
             temperature=state["temperature"], runtime_options=state.get("runtime_options", {}),
             prompt=prompt, session=state, mcp_tools=list(self.mcp_tools),
         )
-        controller = {"cancel": threading.Event(), "engine": None, "pending": {}, "session": turn.session, "source": source, "working": working}
+        controller = {"cancel": threading.Event(), "engine": None, "pending": {}, "session": turn.session, "source": source, "working": working,
+                     "turn_id": turn_id, "checkpoint_lock": threading.RLock(), "last_checkpoint": time.monotonic(), "current_operation_id": None,
+                     "stop_after_operation": False}
         with self.active_lock:
             self.active = controller
-        self.sessions.save(controller["session"])
+        saved = self.sessions.save(controller["session"])
+        if not saved["project_saved"]:
+            self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "error": saved["error"] or "Project session mirror is unavailable."})
         thread = threading.Thread(target=self._run_turn, args=(controller, turn), name="agent-run", daemon=True)
         controller["thread"] = thread
         thread.start()
 
     def _run_turn(self, controller: dict[str, Any], turn: TurnContext) -> None:
         state = controller["session"]
-        relay = AgentEventRelay(lambda event: self.emit({**event, "sessionId": state["session_id"], "workspace": str(turn.workspace)}))
+        relay = AgentEventRelay(lambda event: self._publish_run_event(controller, turn, event))
         try:
             if controller["cancel"].is_set():
                 self.emit({"type": "cancelled", "elapsed": 0, "sessionId": state["session_id"]})
@@ -596,7 +796,15 @@ class AgentService:
                 result = {"done": False, "approved": False}
                 with self.active_lock:
                     controller["pending"][action_id] = (condition, result)
-                self.emit({"type": "approval_request", "actionId": action_id, "name": name,
+                operation_id = controller.get("current_operation_id")
+                activity = {"id": action_id, "operationId": operation_id, "turnId": controller["turn_id"],
+                            "sessionId": state["session_id"], "workspace": str(turn.workspace), "kind": "approval",
+                            "name": name, "arguments": copy.deepcopy(args), "status": "waiting", "timestamp": time.time()}
+                with controller["checkpoint_lock"]:
+                    state.setdefault("activity_events", []).append(activity)
+                    self.sessions.save(state)
+                self.emit({"type": "activity_event", "activity": activity, "activityPhase": "start", "sessionId": state["session_id"], "turnId": controller["turn_id"]})
+                self.emit({"type": "approval_request", "actionId": action_id, "operationId": operation_id, "turnId": controller["turn_id"], "name": name,
                            "arguments": args, "workspace": str(turn.workspace),
                            "mode": turn.approval_mode, "sessionId": state["session_id"]})
                 with condition:
@@ -604,6 +812,11 @@ class AgentService:
                         condition.wait(0.25)
                 with self.active_lock:
                     controller["pending"].pop(action_id, None)
+                activity["status"] = "approved" if result["approved"] else "denied"
+                activity["completedAt"] = time.time()
+                with controller["checkpoint_lock"]:
+                    self.sessions.save(state)
+                self.emit({"type": "activity_event", "activity": copy.deepcopy(activity), "sessionId": state["session_id"], "turnId": controller["turn_id"]})
                 return bool(result["approved"])
 
             engine = AgentEngine(
@@ -618,11 +831,20 @@ class AgentService:
             engine.state["reasoning"] = state.get("reasoning")
             engine.state["keep_alive"] = state.get("keep_alive", "30m")
             controller["engine"] = engine
+            if controller.get("stop_after_operation"):
+                engine.finish_after_operation()
             if controller["cancel"].is_set():
                 engine.cancel()
             messages = engine.run(turn.prompt, state.get("messages", []))
             state["messages"] = messages
             terminal = relay.terminal_event
+            run_state = state.get("run_state")
+            if isinstance(run_state, dict):
+                run_state["status"] = "cancelled" if terminal and terminal.get("type") == "cancelled" else "stopped" if terminal and terminal.get("type") == "stopped_after_operation" else "completed"
+                run_state["active_operation"] = None
+                run_state["safe_messages"] = copy.deepcopy(messages)
+                run_state["partial_content"] = ""
+                run_state["partial_thinking"] = ""
             if terminal and terminal.get("type") == "error":
                 state["last_error"] = {"message": str(terminal.get("error", "Run failed.")), "occurred_at": time.time()}
             else:
@@ -631,11 +853,16 @@ class AgentService:
             state["working_workspace"] = str(turn.workspace)
             if turn.access == "copy":
                 state["copy_manifest"] = state.get("copy_manifest") or capture_manifest(turn.workspace)
-            self.sessions.save(state)
+            saved = self.sessions.save(state)
+            if not saved["project_saved"]:
+                self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "error": saved["error"] or "Project session mirror is unavailable."})
             self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
             relay.emit_terminal_after_persist()
         except Exception as exc:
             state["messages"] = state.get("messages", [])
+            if isinstance(state.get("run_state"), dict):
+                state["run_state"]["status"] = "failed"
+                state["run_state"]["active_operation"] = None
             state["last_error"] = {"message": f"{type(exc).__name__}: {exc}", "occurred_at": time.time()}
             try:
                 self.sessions.save(state)
