@@ -99,6 +99,8 @@ export default function App() {
   const [trace, setTrace] = useState<TraceRow[]>([]);
   const [plan, setPlan] = useState<Array<{ title?: string; text?: string; status?: string }>>([]);
   const [diff, setDiff] = useState('');
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffError, setDiffError] = useState('');
   const [copyChanges, setCopyChanges] = useState<Array<{ path: string; action: string; conflict: boolean; reason: string }>>([]);
   const [selectedChanges, setSelectedChanges] = useState<string[]>([]);
   const [prompt, setPrompt] = useState('');
@@ -438,12 +440,27 @@ export default function App() {
   }
 
   async function showDiff() {
-    if (!workspace) return;
+    if (!workspace) {
+      setDiffError('Choose a project before reviewing its changes.');
+      setDiffOpen(true);
+      return;
+    }
+    setDiffOpen(true);
+    setDiffLoading(true);
+    setDiffError('');
+    setDiff('');
+    setCopyChanges([]);
+    setSelectedChanges([]);
     try {
       if (session?.access === 'copy') setCopyChanges(await request({ command: 'copy_review', sessionId: session.session_id }));
       else setDiff((await request<{ text: string }>({ command: 'workspace_diff', workspace })).text);
-      setDiffOpen(true);
-    } catch (error) { notify(`Could not load changes: ${(error as Error).message}`, 'bad'); }
+    } catch (error) {
+      const message = (error as Error).message;
+      setDiffError(message);
+      notify(`Could not load changes: ${message}`, 'bad');
+    } finally {
+      setDiffLoading(false);
+    }
   }
 
   async function applyCopyChanges() {
@@ -551,14 +568,14 @@ export default function App() {
     </Modal>}
     {approval && <ApprovalModal approval={approval} onChoice={(yes) => void answerApproval(yes)} onCancelRun={() => void cancelRun()} />}
     {diffOpen && <Modal title={session?.access === 'copy' ? 'Review proposed changes' : 'Project changes'} eyebrow="CHANGE REVIEW" wide onClose={() => setDiffOpen(false)}>
-      {session?.access === 'copy' ? <>
+      {diffLoading ? <div className="empty-state" role="status">Loading changes from the selected project…</div> : diffError ? <div className="empty-state" role="alert">Could not load project changes: {diffError}</div> : session?.access === 'copy' ? <>
         <p className="modal-copy">These changes are in a disposable project copy. Select conflict-free files to apply them to the source workspace.</p>
         <div className="change-list">{copyChanges.length ? copyChanges.map((change) => <label className={`change-row ${change.conflict ? 'conflict' : ''}`} key={change.path}>
           <input type="checkbox" disabled={change.conflict} checked={selectedChanges.includes(change.path)} onChange={(e) => setSelectedChanges((list) => e.target.checked ? [...list, change.path] : list.filter((path) => path !== change.path))}/>
           <span className={`change-action ${change.action}`}>{change.action}</span><code>{change.path}</code>{change.conflict && <small>{change.reason || 'Conflict'}</small>}
         </label>) : <div className="empty-state">No reviewable changes in the working copy.</div>}</div>
         <div className="modal-actions"><Button kind="quiet" onClick={() => setDiffOpen(false)}>Close review</Button><Button kind="bright" disabled={!selectedChanges.length} onClick={() => void applyCopyChanges()}>Apply selected to source</Button></div>
-      </> : <><pre className="diff-view">{diff || 'No unstaged Git changes.'}</pre><div className="modal-actions"><Button kind="quiet" onClick={() => setDiffOpen(false)}>Done</Button></div></>}
+      </> : <><pre className="diff-view">{diff || 'No changes available.'}</pre><div className="modal-actions"><Button kind="quiet" onClick={() => setDiffOpen(false)}>Done</Button></div></>}
     </Modal>}
   </div>;
 }
