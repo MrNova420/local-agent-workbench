@@ -1,6 +1,6 @@
 # Product Backlog
 
-This is the queue for accepted follow-up work that is not part of the current reliability and packaged-app acceptance gate. Existing runtime and model-support requirements remain in [MODEL_RUNTIME_EXPANSION.md](MODEL_RUNTIME_EXPANSION.md).
+The active release focus is the core agent harness and full-project workflow described in [CORE_HARNESS_READINESS.md](CORE_HARNESS_READINESS.md). The visual and analytics items below remain queued until that core gate passes. Existing runtime and model-support requirements remain in [MODEL_RUNTIME_EXPANSION.md](MODEL_RUNTIME_EXPANSION.md).
 
 ## Queued for review and implementation
 
@@ -55,6 +55,18 @@ The selected-value run is documented in [ACCEPTANCE_LOG.md](ACCEPTANCE_LOG.md). 
 - Run the visible check against one packaged instance after the user is finished using the desktop. Reopen a saved response containing headings, lists, and fenced code, then confirm it keeps its visual rendering after both session resume and app relaunch. Do not call the reported JSON regression fixed until reproduced or ruled out in that exact flow.
 
 Orbit marker generation and styling are implemented; tests cover 0, 3, and 27 installed models, actual ring containment, and even ellipse-perimeter spacing. The `exact-orbits` package visibly showed 20 installed models attached to the rings and highlighted the selected model. After closing the prior window, launching this package, and resuming the saved session, the transcript still displayed Markdown bullets and syntax-highlighted Python code. Transcript restoration also has renderer tests for headings, lists, and code. The exact JSON-looking report remains unverified because inspected disposable sessions do not contain JSON-shaped assistant content. The accepted sessions/activity implementation now persists plan and activity events; verify that side-panel restoration in the new packaged acceptance flow.
+
+### B-006: Clickable model orbit information popover
+
+The orbit markers are interactive in source and the details popover is implemented. The CSS click-through correction is committed, but the currently open packaged build predates it and did not visibly show the dialog. Rebuild and verify the anchored popup, model metadata loading/error state, close behavior, and placement near screen edges after the core packaged workflow passes.
+
+### B-007: Live Work Sheet layout controls and visual telemetry polish
+
+Keep the existing core activity/status/readability fixes. After the harness acceptance gate, revisit section ordering/sizing, small-window responsiveness, and any additional display polish. Do not use the visual task as a substitute for core agent-flow validation.
+
+### B-008: Lifetime/session/model usage analytics and ranking
+
+Design the local-retention and export controls first. Record provider-exact counts where available, label estimates, capture timestamped active-inference hardware samples, and keep speed ranking separate from coding quality/task success. This remains deferred until the core task/session evidence is reliable.
 
 ## Active acceptance blockers
 
