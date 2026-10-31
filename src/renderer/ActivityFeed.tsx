@@ -10,7 +10,7 @@ function ProgressiveText({ value }: { value: string }) {
 }
 
 function ActivityCard({ row, expanded }: { row: ActivityRecord; expanded: boolean }) {
-  const title = row.name?.replaceAll('_', ' ') || (row.kind === 'plan' ? 'Plan updated' : row.kind === 'approval' ? 'Action approval' : 'Activity');
+  const title = row.name?.replaceAll('_', ' ') || (row.kind === 'plan' ? 'Plan updated' : row.kind === 'approval' ? 'Action approval' : row.kind === 'context' ? 'Request context compacted' : 'Activity');
   const output = row.output || {};
   return <details className={`activity-card activity-${row.kind} activity-${row.status}`} open={expanded}>
     <summary><span className={`activity-state-dot state-${row.status}`}/><strong>{title}</strong><span className="activity-status">{row.status.replaceAll('_', ' ')}</span>{row.affectedFiles?.length ? <span className="activity-file-count">{row.affectedFiles.length} file{row.affectedFiles.length === 1 ? '' : 's'}</span> : null}</summary>
@@ -20,6 +20,7 @@ function ActivityCard({ row, expanded }: { row: ActivityRecord; expanded: boolea
       {Object.entries(output).map(([stream, value]) => value ? <details className="activity-subdetails" key={stream}><summary>{stream} · {value.length.toLocaleString()} characters</summary><ProgressiveText value={value}/></details> : null)}
       {row.result ? <details className="activity-subdetails"><summary>Result · {row.result.length.toLocaleString()} characters</summary><ProgressiveText value={row.result}/></details> : null}
       {row.items?.map((item, index) => <div className="activity-plan-item" key={`${row.id}-${index}`}><b>{item.title || item.text || 'Work item'}</b><span>{item.status || 'pending'}</span></div>)}
+      {row.kind === 'context' && <div className="activity-plan-item"><b>{row.omittedTurns || 0} earlier turn{row.omittedTurns === 1 ? '' : 's'} omitted from this inference request</b><span>{row.retainedTurns || 0} retained · {row.inputBudget?.toLocaleString() || '—'} input budget · {row.configuredContext?.toLocaleString() || '—'} configured context</span></div>}
       {row.kind === 'approval' && <div className="activity-plan-item"><b>{String(row.arguments || '')}</b></div>}
       {row.startedAt && <time>{new Date(row.startedAt * 1000).toLocaleTimeString()}</time>}
     </div>

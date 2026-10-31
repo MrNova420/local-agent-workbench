@@ -378,7 +378,9 @@ export default function App() {
       if (event.type === 'complete') {
         setApproval(null);
         setRunning(false); setPhase((current) => nextRunPhase(current, event));
-        if (event.implementationRequested && event.projectChanged && event.verification?.status !== 'check_ran') {
+        const verification = event.verification;
+        const hasRecordedCheck = Boolean(verification && typeof verification === 'object' && 'status' in verification && verification.status === 'check_ran');
+        if (event.implementationRequested && event.projectChanged && !hasRecordedCheck) {
           notify('Changes were made, but no successful post-change inspection or check was recorded. Treat this result as unverified.', 'warn');
         }
         setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);

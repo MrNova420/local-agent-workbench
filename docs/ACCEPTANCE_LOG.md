@@ -226,3 +226,9 @@ A second visible check using the rebuilt package confirmed the final sidecar eve
 - Tests/build/package/visible acceptance remain queued for the final verification pass. No MCP server was launched and no model was loaded or requested during this change.
 
 - Follow-up hardening commit `ab1df55` expanded environment-only references to cover token/cookie header names as well as Authorization/API-key headers. This code has not yet been run against the final pinned MCP 1.x dependency or a real HTTP MCP server.
+
+## 2026-10-31 stop-point handoff
+
+Source implementation batch committed; the current source gates passed (engine: 132 pytest; app: 43 Vitest and 38 sidecar pytest; TypeScript typecheck passed). One existing Starlette pending-deprecation warning remains. This is source-level evidence only: package rebuild, visible acceptance, and live-model checks are still open. No inference/model was started for this checkpoint.
+
+Resume order: (1) inspect both repo status/logs and this readiness note; (2) run source suites/typecheck on the committed tree; (3) build and inspect one Windows package/sidecar; (4) run the single-instance disposable-project UI workflow including approvals, file/diff review, test output, cancel choices, hide/reopen, session restore, and project isolation; (5) only then perform the previously approved exact-tag model run, preserving any model already loaded and leaving user token/reasoning settings untouched. Continue core parity gaps in `CORE_HARNESS_READINESS.md`; keep UI polish, analytics/KV display expansion, and orbit interactions deferred until the core gates pass.

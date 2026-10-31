@@ -79,7 +79,7 @@ export type ActivityRecord = {
   turnId: string;
   sessionId: string;
   workspace?: string;
-  kind: 'operation' | 'approval' | 'plan' | 'error';
+  kind: 'operation' | 'approval' | 'plan' | 'context' | 'error';
   name?: string;
   status: string;
   timestamp?: number;
@@ -90,6 +90,11 @@ export type ActivityRecord = {
   result?: string;
   affectedFiles?: string[];
   items?: Array<{ title?: string; text?: string; status?: string }>;
+  omittedTurns?: number;
+  retainedTurns?: number;
+  configuredContext?: number;
+  inputBudget?: number;
+  reason?: string;
 };
 
 export type ActivityEventEnvelope = {

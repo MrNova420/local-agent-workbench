@@ -243,3 +243,35 @@ The app is core-ready only when the packaged visible path passes and no known P0
 #### Composer workflow toggle follow-up (2026-10-31)
 
 A direct chat-composer toggle now switches between Standard and Small-model guidance and saves the choice per session and app-wide. It does not alter any inference parameters. Unit, sidecar, typecheck, and engine checks pass; packaged and visible acceptance remains open. Next package this Desktop clone, verify session restoration and the click path visually, then continue the end-to-end project task/cancel/reopen acceptance without changing selected model settings.
+
+## 2026-10-31 core harness checkpoint and handoff
+
+This checkpoint closes the current source implementation batch. It does not claim release readiness or complete Codex/OpenCode parity.
+
+### Implemented and committed in source
+
+- Corrected Ollama multi-turn tool results to include `tool_name`, preserved streamed tool-call IDs/indexes/arguments, and normalized legacy transcript results on resume.
+- Kept the canonical session transcript intact while request-only compaction excludes complete old user-turn groups at safe tool-result boundaries; compaction is recorded and does not rewrite the configured context/output/reasoning settings.
+- Replaced the fixed retrieval allowance with remaining-budget accounting after instructions, user text, tool schemas, and output reservation; project instructions and selected skill bodies are not silently clipped.
+- Improved project/global skill discovery, metadata selection, relative skill resources, nested/scoped project search, and JSON Schema validation for built-in/MCP tool arguments.
+- Added post-change check status reporting and surfaced unverified edits in the UI; preserved explicit denied-action and approval-cancellation outcomes.
+- Added approved PowerShell command strings for ordinary Windows development workflows. They run with the user's Windows permissions; neither approval nor project working directory is an OS sandbox.
+
+### Verification evidence (source only)
+
+- Engine repository `local-9b-dev-app`: `python -m pytest -q` — **132 passed**, one existing Starlette `PendingDeprecationWarning`.
+- App repository `electron-agent-workbench`: `npm test` — **9 Vitest files / 43 tests passed; Python sidecar tests 38 passed**, one existing Starlette `PendingDeprecationWarning`.
+- App `npm run typecheck` — passed after fixing the completion-status type guard.
+- Renderer `npx vitest run` after the final activity rendering/protocol edits — **9 files / 43 tests passed**.
+- No source test here proves package behavior. No packaged installer was rebuilt/launched, no visible UI workflow was exercised in this checkpoint, and no live inference/model benchmark was run. Ollama was not asked to load, stop, or unload a model; app launch did not occur.
+
+### Remaining core work, in order
+
+1. Commit this checkpoint and keep both repos clean.
+2. Re-run source verification from the committed tree if any post-check changes occur.
+3. Build one Windows package and verify its bundled sidecar/protocol without starting inference.
+4. In one visible app instance and a disposable project, exercise hello, a real bounded code task, approvals, diff/file review, command/test output, cancel/finish choices, hide/reopen, save/resume, and project switching. Verify workspace identity and persisted activity/output.
+5. Run the previously approved exact-model live check only after package/UI gates. Preserve any model already loaded; measure first token, generation rate, effective context, and peak RAM/VRAM without changing the user's token/reasoning settings.
+6. Continue the parity backlog: granular persistent tool/path/command policies with deny precedence; Windows OS containment; first-party LSP/browser/search/question/custom tools; robust workspace/session recovery and history; explicit task-specific verification contracts; provider capability and overflow handling; packaged MCP auth/failure/cleanup acceptance. UI polish, analytics/KV panel expansion, and orbit interactions remain queued behind core reliability.
+
+Resume from the current two repository commits and this checklist. Do not treat the unrun package, visible, or live-model gates as passed.
