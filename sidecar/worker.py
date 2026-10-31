@@ -113,7 +113,7 @@ class AgentService:
 
     def emit(self, event: dict[str, Any]) -> None:
         with self.emit_lock:
-            sys.stdout.write(json.dumps({"type": "event", "event": event}, ensure_ascii=False) + "\n")
+            sys.stdout.write(json.dumps({"type": "event", "event": event}, ensure_ascii=True) + "\n")
             sys.stdout.flush()
 
     def respond(self, request_id: str, ok: bool, data: Any = None, error: str | None = None) -> None:
@@ -123,7 +123,7 @@ class AgentService:
                 payload["data"] = data
             else:
                 payload["error"] = error or "Request failed."
-            sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
+            sys.stdout.write(json.dumps(payload, ensure_ascii=True) + "\n")
             sys.stdout.flush()
 
     def dispatch(self, message: dict[str, Any]) -> bool:

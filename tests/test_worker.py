@@ -1,3 +1,5 @@
+import io
+import json
 import threading
 import time
 from pathlib import Path
@@ -207,6 +209,19 @@ def test_engine_failure_is_saved_with_the_session(service, tmp_path, monkeypatch
 
     saved = service.sessions.load(session_id)
     assert saved["last_error"]["message"] == "Synthetic provider stream failure"
+
+
+def test_protocol_escapes_unicode_for_legacy_windows_stdout(service, monkeypatch):
+    buffer = io.BytesIO()
+    stdout = io.TextIOWrapper(buffer, encoding="cp1252", write_through=True)
+    monkeypatch.setattr(worker.sys, "stdout", stdout)
+
+    service.emit({"type": "text", "text": "Hello 👋"})
+    service.respond("unicode-response", True, {"text": "Hello 👋"})
+
+    rows = [json.loads(line) for line in buffer.getvalue().decode("cp1252").splitlines()]
+    assert rows[0]["event"]["text"] == "Hello 👋"
+    assert rows[1]["data"]["text"] == "Hello 👋"
 
 
 def test_approval_reply_signals_only_matching_pending_action(service):
