@@ -207,3 +207,12 @@ A second visible check using the rebuilt package confirmed the final sidecar eve
 - This change has source-level verification only. It has not yet been packaged or visibly exercised. No model request or inference setting change was made for these checks.
 
 - Rebuilt the Desktop clone after commit `4430808`: `npm run make` produced a Windows Squirrel installer, full nupkg, RELEASES manifest, and ZIP. Source and engine suite checks were completed before packaging; package protocol ping, installer launch, and visible app acceptance are deliberately queued for the final verification pass. No Workbench UI window was opened and no model/runtime request was issued.
+
+## 2026-10-31 KV telemetry, tool inventory, and capability-boundary continuation
+
+- Committed provider-accurate KV/prompt telemetry in the Electron app (`53a52ea`) and llama.cpp slot-token metrics in the engine (`5e33918`). It distinguishes reusable prompt token counts and slot context tokens from actual KV allocation bytes, which remain unavailable through the current interfaces.
+- Added a documented parity research cross-check against official OpenAI/Codex, OpenCode, MCP SDK, and Microsoft AppContainer guidance (`495e4ed`). It records that the complete feature target remains open and approval dialogs are not OS sandboxing.
+- Added an in-app tools/integrations directory and a tool catalog protocol command (`0067c03`). It reports the existing built-ins and configured local MCP servers, and marks first-party browser, LSP, and debugger adapters as planned.
+- Added project-root-only `git_status` and `git_log` tools and fixed the agent Git inspection path so a child workspace cannot disclose a parent repository's diff (`b8cc63f`).
+- Added explicit warnings that approved or auto-approved commands/MCP run with Windows account permissions and may access beyond the selected project (`13b146f`). This is a disclosure improvement, not containment.
+- New code changes have not yet been tested, typechecked, packaged, or visibly exercised. Those checks remain queued for the final verification pass, per the current work sequence. No model request or inference settings were changed.

@@ -87,7 +87,7 @@ The complete app and engine have independent Desktop Git clones with their own h
 
 ### B-011: Provider-accurate live KV-cache telemetry
 
-**Priority:** High; source implementation in progress, end-to-end evidence pending.
+**Priority:** High; telemetry is implemented in source in both runtime adapters, with end-to-end packaged evidence pending.
 
 - Show prompt tokens cached, total/uncached prompt tokens, exact cache-hit rate, and uncached prefill time only when the selected runtime reports those metrics. Make response-delayed updates clear for Ollama.
 - For app-owned llama.cpp, sample documented slot counters to show active/request context-token occupancy and slot capacity. Never include or expose the prompt text from `/slots`.
@@ -96,7 +96,7 @@ The complete app and engine have independent Desktop Git clones with their own h
 
 ### B-012: Capability discovery, universal development tools, and safe execution boundaries
 
-**Priority:** Critical for full-product readiness; official cross-provider research is recorded in `CORE_HARNESS_READINESS.md`; implementation remains phased. A first in-app tool directory now reports built-in, MCP, and not-yet-connected capabilities; a root-confined Git status/log tool is also being added.
+**Priority:** Critical for full-product readiness; official cross-provider research is recorded in `CORE_HARNESS_READINESS.md`; implementation remains phased. The in-app tool directory reports built-in, MCP, and missing integrations; root-confined Git status/log tools are implemented in source.
 
 - Maintain a capability registry across provider/model/runtime, platform, project, and installed MCP integrations. Show supported/unsupported/unknown tool-call and modality capabilities; never infer a feature from an endpoint accepting a schema.
 - Expand integrations by need: searchable project tools, structured test/build profiles, browser automation, LSP diagnostics/navigation, debugger, Git/review, local MCP, and extensible custom tools. Keep discovery and permission approval host-controlled.
