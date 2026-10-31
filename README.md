@@ -60,4 +60,4 @@ On 2026-10-31, app typecheck passed; 43 Vitest, 38 sidecar pytest, and 132 engin
 
 ## License
 
-License selection is pending. Until a license file is added, all rights are reserved; public source visibility does not itself grant permission to reuse, modify, or distribute this code.
+Licensed under the MIT License; see [`LICENSE`](LICENSE).

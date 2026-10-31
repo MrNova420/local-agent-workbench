@@ -1,6 +1,7 @@
 node_modules/
 .vite/
 out/
+out-beta/
 dist/
 coverage/
 sidecar/build/
