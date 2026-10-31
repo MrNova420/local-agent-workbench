@@ -190,3 +190,7 @@ The app is core-ready only when the packaged visible path passes and no known P0
 - Ollama context configuration and CPU/GPU allocation interpretation: <https://docs.ollama.com/faq>
 - llama.cpp server chat templates, tool calling, cache/context and runtime reporting: <https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md>
 - Hugging Face model loading and code-execution trust boundaries: <https://huggingface.co/docs/transformers/main/models>
+
+#### Composer workflow toggle follow-up (2026-10-31)
+
+A direct chat-composer toggle now switches between Standard and Small-model guidance and saves the choice per session and app-wide. It does not alter any inference parameters. Unit, sidecar, typecheck, and engine checks pass; packaged and visible acceptance remains open. Next package this Desktop clone, verify session restoration and the click path visually, then continue the end-to-end project task/cancel/reopen acceptance without changing selected model settings.

@@ -10,6 +10,7 @@ import { LocalModelOrbit } from './ModelOrbit';
 import { ActivityFeed } from './ActivityFeed';
 import { applyActivityEvent } from '../shared/activity';
 import { DEFAULT_RUN_SHEET_LAYOUT, moveRunSheetPanel, normalizeRunSheetLayout, resizeRunSheetPanel, type RunSheetLayout, type RunSheetPanel } from '../shared/run-sheet-layout';
+import { nextHarnessProfile } from '../shared/harness-profile';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; thinking?: string; streaming?: boolean; recoveredPartial?: boolean };
 type Session = {
@@ -535,6 +536,19 @@ export default function App() {
     catch (error) { setRunning(false); setPhase('Run failed'); notify((error as Error).message, 'bad'); }
   }
 
+  async function toggleHarnessProfile() {
+    const harnessProfile = nextHarnessProfile(options.harnessProfile);
+    setOptions((current) => ({ ...current, harnessProfile }));
+    localStorage.setItem('agent-harness-profile', harnessProfile);
+    if (!session) return;
+    try {
+      await request({ command: 'session_harness_profile', sessionId: session.session_id, harnessProfile });
+      setSession((current) => current ? { ...current, harness_profile: harnessProfile } : current);
+    } catch (error) {
+      notify(`Workflow changed for this run, but the session setting could not be saved: ${(error as Error).message}`, 'warn');
+    }
+  }
+
   async function cancelRun() { setCancelChoiceOpen(true); }
 
   async function chooseCancelAction(action: 'continue' | 'cancel' | 'finish') {
@@ -668,7 +682,7 @@ export default function App() {
         elapsed={elapsed} running={running} prompt={prompt} setPrompt={setPrompt} promptRef={promptRef}
         options={options} setOptions={setOptions} files={availableFiles} telemetry={telemetry}
         runMetrics={runMetrics} onRun={startRun} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
-        onDiff={showDiff} onMcp={openMcp} onEnter={enter} endRef={endRef} model={model} appliedSettings={appliedSettings}
+        onDiff={showDiff} onMcp={openMcp} onEnter={enter} endRef={endRef} model={model} appliedSettings={appliedSettings} onToggleHarnessProfile={() => void toggleHarnessProfile()}
       />}
     </main>
 
@@ -798,7 +812,7 @@ function ProjectHome({ root, tab, setTab, files, sessions, onNew, onOpenSession,
   </section>;
 }
 
-function SessionRoom({ root, session, messages, activities, activityMode, plan, phase, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onEnter, endRef, model }: {
+function SessionRoom({ root, session, messages, activities, activityMode, plan, phase, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onEnter, endRef, model, onToggleHarnessProfile }: {
   root: string; session: Session | null; messages: ChatMessage[]; activities: ActivityRecord[]; activityMode: ActivityMode; plan: Array<{ title?: string; text?: string; status?: string }>;
   phase: string; elapsed: number; running: boolean; prompt: string; setPrompt: (value: string) => void;
   promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
@@ -806,7 +820,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
   telemetry: TelemetryView;
   runMetrics: RunMetrics; appliedSettings: AppliedSettings | null;
   onRun: () => void; onCancel: () => void; onSettings: () => void; onBack: () => void; onDiff: () => void; onMcp: () => void;
-  onEnter: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void; endRef: React.RefObject<HTMLDivElement | null>; model: string;
+  onEnter: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void; endRef: React.RefObject<HTMLDivElement | null>; model: string; onToggleHarnessProfile: () => void;
 }) {
   const [sheetLayout, setSheetLayout] = useState<RunSheetLayout>(() => {
     try { return normalizeRunSheetLayout(JSON.parse(localStorage.getItem('agent-run-sheet-layout') || 'null')); }
@@ -829,7 +843,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
           {message.thinking && <details className="reasoning-trace"><summary>Model reasoning · {message.thinking.length.toLocaleString()} characters</summary><div>{message.thinking}</div></details>}
         </article>)}<ActivityFeed entries={activities} mode={activityMode} surface="chat"/><div ref={endRef}/></div>}
         <div className="composer-shell">
-          <div className="composer-profile"><span className={`profile-chip access-${options.access}`}>{options.access.toUpperCase()}</span><span className="profile-chip approval-chip">{options.approvalMode === 'auto' ? 'AUTO APPROVE · THIS RUN' : options.approvalMode === 'per-task' ? 'PER TASK' : 'PER ACTION'}</span><span className="profile-hint">{fmt(options.context)} context · {fmt(options.maxTokens)} output</span><button onClick={onSettings}>Adjust run</button></div>
+          <div className="composer-profile"><span className={`profile-chip access-${options.access}`}>{options.access.toUpperCase()}</span><span className="profile-chip approval-chip">{options.approvalMode === 'auto' ? 'AUTO APPROVE · THIS RUN' : options.approvalMode === 'per-task' ? 'PER TASK' : 'PER ACTION'}</span><button className={`profile-toggle ${options.harnessProfile === 'small-model' ? 'is-active' : ''}`} type="button" aria-pressed={options.harnessProfile === 'small-model'} title="Changes agent workflow guidance only; model settings and token limits stay unchanged" onClick={onToggleHarnessProfile} disabled={running}>Small-model {options.harnessProfile === 'small-model' ? 'on' : 'off'}</button><span className="profile-hint">{fmt(options.context)} context · {fmt(options.maxTokens)} output</span><button onClick={onSettings}>Adjust run</button></div>
           <textarea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={onEnter} placeholder="Describe the work. Use Shift + Enter to add detail…" rows={3} disabled={running} aria-label="Task prompt"/>
           <div className="composer-bottom"><span><kbd>ENTER</kbd> to run <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> reasoning {options.reasoning == null ? 'model default' : String(options.reasoning)}</span>{running ? <Button kind="danger" onClick={onCancel}><Icon name="stop"/> Cancel request</Button> : <Button kind="bright" onClick={onRun} disabled={!prompt.trim()}><Icon name="play"/> Run task</Button>}</div>
         </div>

@@ -387,6 +387,14 @@ class AgentService:
             state = self.sessions.load(str(message["sessionId"]))
             state["activity_mode"] = mode
             return self.sessions.save(state)
+        if command == "session_harness_profile":
+            profile = str(message.get("harnessProfile", "standard"))
+            if profile not in {"standard", "small-model"}:
+                raise ValueError("Invalid harness workflow profile.")
+            state = self.sessions.load(str(message["sessionId"]))
+            state["harness_profile"] = profile
+            state["persistence"] = self.sessions.save(state)
+            return state
         if command == "session_resume":
             selected_workspace = str(message.get("workspace", "")) or None
             if not selected_workspace:

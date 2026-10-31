@@ -52,6 +52,7 @@ export type WorkerCommand =
   | { command: 'sessions_list'; workspace?: string }
   | { command: 'session_new'; workspace: string; model: string; context: number; activityMode?: ActivityMode }
   | { command: 'session_activity_mode'; sessionId: string; activityMode: ActivityMode }
+  | { command: 'session_harness_profile'; sessionId: string; harnessProfile: HarnessProfile }
   | { command: 'session_recover'; sessionId: string; action: 'resume' | 'retry' | 'restore' }
   | { command: 'session_resume'; sessionId: string; workspace?: string; source?: 'app' | 'project' }
   | { command: 'mcp_config_get' }

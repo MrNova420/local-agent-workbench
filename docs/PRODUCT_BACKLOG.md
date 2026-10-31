@@ -79,9 +79,9 @@ Design the local-retention and export controls first. Record provider-exact coun
 - Keep provider prompt prefixes stable and benchmark runtime cache flags only via repeatable A/B runs. Current source does not turn on cache-reuse or change Ollama/KV settings.
 - Rebuild from pinned app and engine commits; in one visible packaged instance, test a concise request, an explicit project build that first returns a plan, plan-only request, settings persistence, exact inference options, cache metrics when available, Home navigation, session resume, and project isolation.
 
-### B-010: Copy complete project to Desktop
+### B-010: Desktop copy follow-through — source copy verified; public repository setup pending
 
-Create and verify a complete Desktop working copy after the current app/core milestones are committed. Preserve both independent Git histories and the pre-optimization checkpoints. Do not delete the original managed worktrees; first prove the Desktop app and sibling engine clone build from their own checked-out source and packaging paths.
+The complete app and engine have independent Desktop Git clones with their own history; the app packaging path and worker ping have been verified from the Desktop app clone. Preserve original worktrees/checkpoints. Public GitHub creation/push via GitHub Desktop remains pending; inspect repository contents, credentials, license, and remote state before publishing.
 
 ## Active acceptance blockers
 

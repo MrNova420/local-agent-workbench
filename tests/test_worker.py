@@ -123,6 +123,20 @@ def test_activity_mode_is_saved_in_both_session_copies_and_restored(service, tmp
     assert project_copy["activity_mode"] == "sidebar"
 
 
+def test_harness_profile_toggle_is_saved_in_both_session_copies(service, tmp_path):
+    project = tmp_path / "harness-profile-project"
+    project.mkdir()
+    session = service.handle("session_new", {"workspace": str(project), "model": "model-a:latest", "context": 262144})
+
+    updated = service.handle("session_harness_profile", {"sessionId": session["session_id"], "harnessProfile": "small-model"})
+    loaded = service.handle("session_resume", {"sessionId": session["session_id"], "workspace": str(project)})
+    project_copy = json.loads((project / ".agent-workbench" / "sessions" / f"{session['session_id']}.json").read_text(encoding="utf-8"))
+
+    assert updated["harness_profile"] == "small-model"
+    assert loaded["harness_profile"] == "small-model"
+    assert project_copy["harness_profile"] == "small-model"
+
+
 def test_interrupted_recovery_retry_warns_and_restore_does_not_run(service, tmp_path):
     project = tmp_path / "recovery-choice-project"
     project.mkdir()
