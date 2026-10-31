@@ -43,6 +43,32 @@ def test_ollama_jsonl_stream_preserves_requested_context_and_model_reasoning_def
     assert response.closed
 
 
+def test_ollama_preload_sends_only_model_context_and_keep_alive():
+    class JsonResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"done":true}'
+
+    runtime = OllamaRuntime()
+    with patch("urllib.request.urlopen", return_value=JsonResponse()) as open_url:
+        runtime.preload("mock:latest", 65536, "30m")
+
+    request = open_url.call_args.args[0]
+    payload = json.loads(request.data)
+    assert request.full_url == "http://127.0.0.1:11434/api/generate"
+    assert payload == {
+        "model": "mock:latest", "prompt": "", "stream": False,
+        "keep_alive": "30m", "options": {"num_ctx": 65536},
+    }
+    assert "think" not in payload
+    assert open_url.call_args.kwargs["timeout"] is None
+
+
 def test_cancel_closes_only_the_active_stream_and_does_not_send_stop_request():
     response = FakeResponse([b'{"message":{"content":"first"}}\n', b""])
     runtime = OllamaRuntime()

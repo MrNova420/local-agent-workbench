@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice, type ReasoningCapability } from '../src/shared/model-controls';
+import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice, readRunTokenPreferences, type ReasoningCapability } from '../src/shared/model-controls';
 
 describe('model capability controls', () => {
   it('disambiguates installed models that share the same short display name', () => {
@@ -52,5 +52,16 @@ describe('model capability controls', () => {
     expect(chooseDefaultModel(['hf.co/ressl/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M', 'hf.co/mradermacher/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M'])).toBe('hf.co/mradermacher/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M');
     expect(chooseDefaultModel(['qwen3:0.6b'])).toBe('qwen3:0.6b');
     expect(chooseDefaultModel(['hf.co/mradermacher/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M'], 'qwen3:0.6b')).toBe('hf.co/mradermacher/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M');
+  });
+
+  it('keeps the chosen 65K context and 8K output across a fresh app window', () => {
+    expect(readRunTokenPreferences(null)).toEqual({ context: 65536, maxTokens: 8192 });
+    expect(readRunTokenPreferences(JSON.stringify({ context: 65536, maxTokens: 8192 })))
+      .toEqual({ context: 65536, maxTokens: 8192 });
+  });
+
+  it('preserves custom token choices without silently clamping them', () => {
+    expect(readRunTokenPreferences(JSON.stringify({ context: 300000, maxTokens: 12000 })))
+      .toEqual({ context: 300000, maxTokens: 12000 });
   });
 });

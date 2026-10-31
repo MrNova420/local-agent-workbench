@@ -4,6 +4,15 @@ The product target is full 1:1 user-facing feature and workflow parity with Code
 
 ## Queued for review and implementation
 
+### B-008: Preserve chosen token settings and warm selected Ollama models
+
+**Status:** Source implementation and focused tests are complete; packaged behavior remains to be verified.
+
+- Fresh app windows now default to the previously selected 65,536 context / 8,192 output, persist saved choices, and no longer substitute a model's advertised maximum when creating a session.
+- Explicitly selecting another Ollama model starts a background warm request; a PRELOAD control supports reselecting the current model. The request preserves the chosen context and keep-alive and sends no prompt, output-token limit, or reasoning override.
+- Do not load on app launch. If another model is already loaded, or the selected model is loaded with a different context, skip and explain rather than unloading or resizing it.
+- Verify packaged selection, warm-up status, repeat preload, context persistence, unchanged reasoning default, and safe skip with an externally loaded model before calling the feature complete.
+
 ## Active development order: core project work
 
 These core items take priority over visual polish, orbit popovers, usage dashboards, and other quality-of-life backlog work. Verification and visible packaged acceptance remain grouped for the final gate, as requested.

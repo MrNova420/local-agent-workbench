@@ -24,6 +24,9 @@ class FakeRuntime:
     def loaded(self):
         return []
 
+    def preload(self, model, context, keep_alive):
+        self.preloaded = (model, context, keep_alive)
+
 
 @pytest.fixture
 def service(tmp_path, monkeypatch):
@@ -44,6 +47,44 @@ def test_dynamic_models_and_full_advertised_context(service):
         "reasoning": {"support": "unknown", "default": None, "values": []},
         "provider": "ollama", "context_limit_known": True,
     }
+
+
+def test_ollama_preload_uses_requested_context_and_keep_alive_without_starting_inference(service):
+    events = []
+    service.emit = events.append
+
+    result = service.handle("ollama_preload", {
+        "model": "model-a:latest", "context": 65536, "keepAlive": "30m",
+    })
+    thread = service.ollama_preload_thread
+    assert result == {"accepted": True, "model": "model-a:latest"}
+    thread.join(2)
+
+    assert service.runtime.preloaded == ("model-a:latest", 65536, "30m")
+    assert any(event["type"] == "ollama_preload_complete" for event in events)
+
+
+def test_ollama_preload_does_not_replace_a_different_loaded_model(service):
+    class LoadedRuntime(FakeRuntime):
+        def __init__(self):
+            super().__init__()
+            self.preloaded = None
+
+        def loaded(self):
+            return [{"name": "model-b:latest", "context_length": 8192}]
+
+    service.runtime = LoadedRuntime()
+    events = []
+    service.emit = events.append
+
+    result = service.handle("ollama_preload", {
+        "model": "model-a:latest", "context": 65536, "keepAlive": "30m",
+    })
+
+    assert result["accepted"] is False
+    assert "model-b:latest" in result["reason"]
+    assert service.runtime.preloaded is None
+    assert events[-1]["type"] == "ollama_preload_skipped"
 
 
 def test_model_info_exposes_exact_ollama_reasoning_values(service):

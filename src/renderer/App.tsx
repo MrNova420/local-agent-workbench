@@ -3,7 +3,7 @@ import { Markdown } from './Markdown';
 import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
 import { nextRunPhase, restoredRunPhase, runStepProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordStreamedText, type RunMetrics } from '../shared/run-metrics';
-import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice } from '../shared/model-controls';
+import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice, readRunTokenPreferences } from '../shared/model-controls';
 import { normalizeGpuStats } from '../shared/resource-metrics';
 import { restoreTranscriptMessages } from '../shared/transcript';
 import { LocalModelOrbit } from './ModelOrbit';
@@ -48,8 +48,7 @@ type TelemetryView = {
 type AppliedSettings = { model: string; context: number; maxOutput: number; reasoning: boolean | string | null };
 
 const initialOptions = {
-  context: 8192,
-  maxTokens: 4096,
+  ...readRunTokenPreferences(localStorage.getItem('agent-run-token-preferences')),
   temperature: 0.2,
   keepAlive: '30m',
   access: 'ask' as AccessMode,
@@ -132,6 +131,7 @@ export default function App() {
   const [selectedChanges, setSelectedChanges] = useState<string[]>([]);
   const [prompt, setPrompt] = useState('');
   const [installed, setInstalled] = useState(false);
+  const [modelPreloading, setModelPreloading] = useState(false);
   const [connected, setConnected] = useState<'checking' | 'yes' | 'no'>('checking');
   const [running, setRunning] = useState(false);
   const [phase, setPhase] = useState('Ready');
@@ -155,10 +155,8 @@ export default function App() {
     ...initialOptions,
     harnessProfile: localStorage.getItem('agent-harness-profile') === 'small-model' ? 'small-model' as HarnessProfile : 'standard' as HarnessProfile,
   }));
-  const [settingsTouched, setSettingsTouched] = useState(false);
   const [view, setView] = useState<'landing' | 'project' | 'session'>('landing');
   const [projectTab, setProjectTab] = useState<'overview' | 'files' | 'sessions'>('overview');
-  const [contextTouched, setContextTouched] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
@@ -261,8 +259,6 @@ export default function App() {
         reasoning: loaded.reasoning ?? null,
         harnessProfile: loaded.harness_profile === 'small-model' ? 'small-model' : (localStorage.getItem('agent-harness-profile') === 'small-model' ? 'small-model' : 'standard'),
       });
-      setContextTouched(true);
-      setSettingsTouched(true);
       setView('session');
       setRecoverySession(loaded.run_state?.status === 'interrupted' ? loaded : null);
       setSessions(await request<SessionSummary[]>({ command: 'sessions_list', workspace: root }));
@@ -308,6 +304,7 @@ export default function App() {
       if (event.type === 'service_ready') setInstalled(true);
       if (event.type === 'service_error' || event.type === 'service_exit') {
         setInstalled(false);
+        setModelPreloading(false);
         if (event.type === 'service_exit') {
           setApproval(null);
           setRunning(false);
@@ -319,6 +316,22 @@ export default function App() {
         notify(String(event.error || 'Agent service stopped.'), 'bad');
       }
       if (event.type === 'service_log') console.info('[agent service]', event.text);
+      if (event.type === 'ollama_preload_started') {
+        setModelPreloading(true);
+        notify(`Preloading ${shortModel(model)} at ${fmt(Number(event.context))} context.`, 'warn');
+      }
+      if (event.type === 'ollama_preload_complete') {
+        setModelPreloading(false);
+        notify(`${shortModel(model)} is warm and ready.`, 'good');
+      }
+      if (event.type === 'ollama_preload_skipped') {
+        setModelPreloading(false);
+        notify(String(event.reason || 'Model preload was skipped to preserve the currently loaded model.'), 'warn');
+      }
+      if (event.type === 'ollama_preload_error') {
+        setModelPreloading(false);
+        notify(String(event.error || 'Model preload failed.'), 'bad');
+      }
       if (event.type === 'activity_event') setActivities((current) => applyActivityEvent(current, event as unknown as ActivityEventEnvelope));
       if (event.type === 'session_mirror_error') notify(`The app copy is saved, but the project mirror failed: ${String(event.error || 'unavailable')}`, 'warn');
       if (event.type === 'model_registered') {
@@ -445,10 +458,9 @@ export default function App() {
     void request<ModelInfo>({ command: 'model_info', model }).then((value) => {
       if (!current) return;
       setModelInfo(value);
-      if (!contextTouched && !session && !settingsTouched && value.context !== null) setOptions((old) => ({ ...old, context: value.context! }));
     }).catch(() => { if (current) setModelInfo(null); });
     return () => { current = false; };
-  }, [contextTouched, model, request, session, settingsTouched]);
+  }, [model, request]);
 
   useEffect(() => {
     let live = true;
@@ -507,16 +519,31 @@ export default function App() {
     if (selected) await showProject(selected);
   }
 
+  async function preloadSelectedModel(selectedModel = model) {
+    if (!selectedModel || selectedModel.startsWith('gguf::') || running || modelPreloading) return;
+    try {
+      const result = await request<{ accepted: boolean; status?: string; reason?: string }>({
+        command: 'ollama_preload', model: selectedModel, context: options.context, keepAlive: options.keepAlive,
+      });
+      if (result.status === 'already_loaded') notify(`${shortModel(selectedModel)} is already loaded at the selected context.`, 'good');
+      else if (!result.accepted) notify(result.reason || 'Preload skipped to preserve the current model.', 'warn');
+    } catch (error) { notify(`Could not preload model: ${(error as Error).message}`, 'bad'); }
+  }
+
+  function selectModel(selectedModel: string) {
+    setModel(selectedModel);
+    if (selectedModel && !selectedModel.startsWith('gguf::')) void preloadSelectedModel(selectedModel);
+  }
+
   async function newSession(selectedActivityMode?: ActivityMode) {
     if (!workspace) { await chooseWorkspace(); return; }
     if (!selectedActivityMode && askActivityChoice) { setActivityChoiceOpen(true); return; }
     try {
       const selectedModel = model;
       if (!selectedModel) { notify('Add or install a local model from Model Library before starting a session.', 'warn'); setModelLibraryOpen(true); return; }
-      const selectedInfo = await request<ModelInfo>({ command: 'model_info', model: selectedModel });
-      const configuredContext = !contextTouched && !settingsTouched ? selectedInfo.context ?? options.context : options.context;
+      await request<ModelInfo>({ command: 'model_info', model: selectedModel });
       const chosenMode = selectedActivityMode || activityDefault;
-      const created = await request<Session>({ command: 'session_new', workspace, model: selectedModel, context: configuredContext, activityMode: chosenMode });
+      const created = await request<Session>({ command: 'session_new', workspace, model: selectedModel, context: options.context, activityMode: chosenMode });
       setSession(created); setMessages([]); setTrace([]); setPlan([]); setPrompt(''); setElapsed(0); setPhase('Ready'); setView('session');
       setActivities([]); setActivityMode(chosenMode); sessionStorage.setItem('agent-activity-mode', chosenMode);
       setRunMetrics(emptyRunMetrics());
@@ -527,7 +554,7 @@ export default function App() {
   }
 
   async function startRun() {
-    if (running || !session || !workspace || !model || !prompt.trim()) return;
+    if (running || modelPreloading || !session || !workspace || !model || !prompt.trim()) return;
     if (model.startsWith('gguf::')) {
       try {
         const status = await request<Record<string, unknown>>({ command: 'llama_status' });
@@ -641,13 +668,13 @@ export default function App() {
   }
 
   async function saveSettings() {
-    setSettingsTouched(true);
     if (!Number.isInteger(options.context) || options.context < 1024 || !Number.isInteger(options.maxTokens) || options.maxTokens < 1 || options.temperature < 0 || options.temperature > 2) {
       notify('Check the context, output-token, and temperature values.', 'bad'); return;
     }
     localStorage.setItem('agent-activity-default', activityDefault);
     localStorage.setItem('agent-ask-activity', String(askActivityChoice));
     localStorage.setItem('agent-harness-profile', options.harnessProfile);
+    localStorage.setItem('agent-run-token-preferences', JSON.stringify({ context: options.context, maxTokens: options.maxTokens }));
     sessionStorage.setItem('agent-activity-mode', activityMode);
     setSettingsOpen(false);
     if (session) {
@@ -661,7 +688,7 @@ export default function App() {
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void startRun(); }
   }
 
-  const readyToRun = installed && connected === 'yes' && !!workspace && !!session && !!model && !!prompt.trim() && !running;
+  const readyToRun = installed && connected === 'yes' && !!workspace && !!session && !!model && !!prompt.trim() && !running && !modelPreloading;
 
   return <div className="app-shell">
     <header className="topbar drag-region">
@@ -676,9 +703,9 @@ export default function App() {
       <div className="topbar-spacer"/>
       <div className="model-control no-drag">
         <span className="model-glyph"><Icon name="spark"/></span>
-        <label><small>LOCAL MODEL</small><select value={model} onChange={(e) => { setModel(e.target.value); setContextTouched(false); setSettingsTouched(false); }} disabled={running}>
+        <label><small>LOCAL MODEL</small><select value={model} onChange={(e) => selectModel(e.target.value)} disabled={running || modelPreloading}>
           {!models.length && <option value="">No local models</option>}{models.map((name) => <option value={name} key={name}>{displayModelLabels[name] || shortModel(name)}</option>)}
-        </select></label>
+        </select></label><button className="model-preload-button" type="button" onClick={() => void preloadSelectedModel()} disabled={running || modelPreloading || !model || model.startsWith('gguf::')} title="Preload the selected Ollama model without changing reasoning or token settings">{modelPreloading ? 'WARMING…' : 'PRELOAD'}</button>
       </div>
       <div className={`connection-pill no-drag ${model.startsWith('gguf::') ? (snapshot.llama && (snapshot.llama as Record<string, unknown>).running ? 'yes' : 'no') : connected}`}><span className="connection-light"/>{model.startsWith('gguf::') ? snapshot.llama && (snapshot.llama as Record<string, unknown>).running ? 'GGUF LOADED' : 'GGUF NOT LOADED' : connected === 'yes' ? 'OLLAMA READY' : connected === 'no' ? 'OLLAMA OFFLINE' : 'CHECKING'}</div>
       <Button kind="quiet" className="top-settings no-drag" onClick={() => setModelLibraryOpen(true)}>Model library</Button>
@@ -689,7 +716,7 @@ export default function App() {
       {view === 'landing' && <Landing
         workspaces={workspaces} workspaceSearch={workspaceSearch} sessions={sessions} models={models} modelLabels={displayModelLabels} model={model} context={options.context}
         connected={connected} telemetry={telemetry} onChoose={chooseWorkspace} onOpen={showProject}
-        onModel={(name) => { setModel(name); setContextTouched(false); setSettingsTouched(false); }} onRefresh={() => { void refreshHome(); void refreshModels(); }}
+        onModel={selectModel} onRefresh={() => { void refreshHome(); void refreshModels(); }}
         onModelInfo={(name) => request<ModelInfo>({ command: 'model_info', model: name })}
         onSearch={(value) => { setWorkspaceSearch(value); void refreshWorkspaceHistory(value); }}
         onPin={(root, pinned) => void request({ command: 'workspace_pin', workspace: root, pinned }).then(() => refreshWorkspaceHistory(workspaceSearch)).catch((error) => notify((error as Error).message, 'warn'))}
@@ -725,7 +752,7 @@ export default function App() {
 
     {notice && <div className={`toast toast-${notice.tone}`} role="status"><span>{notice.text}</span><button onClick={() => setNotice(null)}><Icon name="close"/></button></div>}
     {settingsOpen && <SettingsModal model={model} modelLabel={displayModelLabels[model] || shortModel(model)} modelInfo={modelInfo} options={options} setOptions={setOptions} activityDefault={activityDefault} setActivityDefault={setActivityDefault} activityMode={activityMode} setActivityMode={setActivityMode} askActivityChoice={askActivityChoice} setAskActivityChoice={setAskActivityChoice} hasSession={!!session} onClose={() => setSettingsOpen(false)} onSave={saveSettings} onMcp={openMcp} />}
-    {modelLibraryOpen && <ModelLibraryModal model={model} models={models} modelLabels={displayModelLabels} context={options.context} reasoning={options.reasoning} downloadedDirectory={downloadedModelDirectory} onModel={setModel} onRefresh={refreshModels} onClose={() => setModelLibraryOpen(false)} notify={notify}/>}
+    {modelLibraryOpen && <ModelLibraryModal model={model} models={models} modelLabels={displayModelLabels} context={options.context} reasoning={options.reasoning} downloadedDirectory={downloadedModelDirectory} onModel={selectModel} onRefresh={refreshModels} onClose={() => setModelLibraryOpen(false)} notify={notify}/>}
     {mcpOpen && <Modal title="MCP connections" eyebrow="EXTEND THE TOOLSET" onClose={() => setMcpOpen(false)}>
       <p className="modal-copy">Connect local stdio or remote Streamable HTTP servers. Every tool call requires approval. Use HTTPS for remote servers; reference credentials as <code>${'{ENV:VARIABLE_NAME}'}</code> so secrets stay out of this file. MCP servers can access whatever their own process/account permits.</p>
       <textarea className="code-editor mcp-editor" value={mcpJson} onChange={(e) => setMcpJson(e.target.value)} spellCheck={false}/>

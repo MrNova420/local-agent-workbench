@@ -15,6 +15,22 @@ export type TokenPresetSet = {
   outputLimitKnown: boolean;
 };
 
+export type RunTokenPreferences = { context: number; maxTokens: number };
+export const DEFAULT_RUN_TOKEN_PREFERENCES: RunTokenPreferences = { context: 65_536, maxTokens: 8_192 };
+
+export function readRunTokenPreferences(raw: string | null): RunTokenPreferences {
+  if (!raw) return { ...DEFAULT_RUN_TOKEN_PREFERENCES };
+  try {
+    const parsed = JSON.parse(raw) as Partial<RunTokenPreferences>;
+    return {
+      context: Number.isSafeInteger(parsed.context) && Number(parsed.context) >= 1024 ? Number(parsed.context) : DEFAULT_RUN_TOKEN_PREFERENCES.context,
+      maxTokens: Number.isSafeInteger(parsed.maxTokens) && Number(parsed.maxTokens) >= 1 ? Number(parsed.maxTokens) : DEFAULT_RUN_TOKEN_PREFERENCES.maxTokens,
+    };
+  } catch {
+    return { ...DEFAULT_RUN_TOKEN_PREFERENCES };
+  }
+}
+
 export const DEFAULT_OLLAMA_MODEL = 'hf.co/mradermacher/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M';
 
 export function chooseDefaultModel(modelIds: string[], current = ''): string {

@@ -109,6 +109,8 @@ class AgentService:
         self.ollama_import_thread: threading.Thread | None = None
         self.emit_lock = threading.Lock()
         self.run_lock = threading.Lock()
+        self.ollama_preload_lock = threading.Lock()
+        self.ollama_preload_thread: threading.Thread | None = None
         self.active_lock = threading.RLock()
         self.active: dict[str, Any] | None = None
         self.output_ids: queue.SimpleQueue[str] = queue.SimpleQueue()
@@ -251,6 +253,60 @@ class AgentService:
             self.respond(request_id, False, error=f"{type(exc).__name__}: {exc}")
             return False
 
+    def _start_ollama_preload(self, message: dict[str, Any]) -> dict[str, Any]:
+        model = str(message.get("model", "")).strip()
+        context = message.get("context")
+        keep_alive = str(message.get("keepAlive", "30m"))
+        if not model or model.startswith("gguf::") or model not in self.runtime.models():
+            raise ValueError("Choose an installed Ollama model to preload.")
+        if not isinstance(context, int) or isinstance(context, bool) or context < 1024:
+            raise ValueError("Preload context must be an integer of at least 1,024 tokens.")
+        if not keep_alive:
+            raise ValueError("Keep-alive must match the selected model setting.")
+        if self.active or self.run_lock.locked():
+            raise RuntimeError("Cannot preload a model while a task is running.")
+        if not self.ollama_preload_lock.acquire(blocking=False):
+            raise RuntimeError("A model preload is already in progress.")
+
+        keep_lock = False
+        try:
+            if self.run_lock.locked():
+                raise RuntimeError("Cannot preload a model while a task is running.")
+            loaded = self.runtime.loaded()
+            target = next((row for row in loaded if row.get("name", row.get("model")) == model), None)
+            if target is not None:
+                loaded_context = target.get("context_length")
+                if loaded_context == context:
+                    self.emit({"type": "ollama_preload_skipped", "model": model, "reason": "The selected model is already loaded at the requested context.", "status": "already_loaded"})
+                    return {"accepted": False, "status": "already_loaded"}
+                reason = f"{model} is already loaded at {loaded_context or 'an unknown'} context; it was left untouched."
+                self.emit({"type": "ollama_preload_skipped", "model": model, "reason": reason})
+                return {"accepted": False, "reason": reason}
+            if loaded:
+                other = str(loaded[0].get("name", loaded[0].get("model", "another model")))
+                reason = f"{other} is already loaded by Ollama; it was left running and the new model was not preloaded."
+                self.emit({"type": "ollama_preload_skipped", "model": model, "reason": reason})
+                return {"accepted": False, "reason": reason}
+
+            def preload() -> None:
+                try:
+                    self.emit({"type": "ollama_preload_started", "model": model, "context": context})
+                    self.runtime.preload(model, context, keep_alive)
+                    self.emit({"type": "ollama_preload_complete", "model": model, "context": context})
+                except Exception as exc:
+                    self.emit({"type": "ollama_preload_error", "model": model, "error": f"{type(exc).__name__}: {exc}"})
+                finally:
+                    self.ollama_preload_lock.release()
+
+            thread = threading.Thread(target=preload, name="ollama-model-preload", daemon=True)
+            self.ollama_preload_thread = thread
+            thread.start()
+            keep_lock = True
+            return {"accepted": True, "model": model}
+        finally:
+            if not keep_lock:
+                self.ollama_preload_lock.release()
+
     def handle(self, command: str, message: dict[str, Any]) -> Any:
         if command == "ping":
             return {"status": "ready", "version": "0.1.0"}
@@ -305,6 +361,8 @@ class AgentService:
                 "capabilities": capabilities, "tool_support": tool_support,
                 "provider": "ollama", "context_limit_known": context is not None,
             }
+        if command == "ollama_preload":
+            return self._start_ollama_preload(message)
         if command == "tool_catalog":
             registry = ToolRegistry(Workspace(Path.home(), "plan"), lambda *_: False)
             tools = [{"name": item["function"]["name"],
@@ -523,13 +581,18 @@ class AgentService:
             options = message.get("options")
             if not isinstance(options, dict):
                 raise ValueError("Run settings are missing.")
-            if not self.run_lock.acquire(blocking=False):
-                raise RuntimeError("A task is already running.")
+            if not self.ollama_preload_lock.acquire(blocking=False):
+                raise RuntimeError("The selected model is still preloading.")
             try:
-                self._start_run(options)
-            except Exception:
-                self.run_lock.release()
-                raise
+                if not self.run_lock.acquire(blocking=False):
+                    raise RuntimeError("A task is already running.")
+                try:
+                    self._start_run(options)
+                except Exception:
+                    self.run_lock.release()
+                    raise
+            finally:
+                self.ollama_preload_lock.release()
             return {"started": True}
         if command == "run_cancel":
             self.cancel()

@@ -29,6 +29,7 @@ export type WorkerCommand =
   | { command: 'models' }
   | { command: 'model_catalog' }
   | { command: 'model_info'; model: string }
+  | { command: 'ollama_preload'; model: string; context: number; keepAlive: string }
   | { command: 'tool_catalog' }
   | { command: 'hf_search'; query: string }
   | { command: 'hf_repo_files'; repo: string; revision: string }

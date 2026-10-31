@@ -18,6 +18,7 @@
 - Stores resumable sessions in the app library and mirrors them into project workspaces, with recovery and activity history.
 - Accepts local stdio and remote HTTPS Streamable HTTP MCP integrations with environment-backed credentials.
 - Keeps the selected model's context, output cap, and reasoning settings distinct. Values are passed through without silent lowering; runtime-effective values are shown where available.
+- Remembers the selected context/output values across fresh windows (defaults: 65,536 / 8,192). Choosing another Ollama model starts a background preload at the selected context; the PRELOAD control repeats it for the current choice. Preload does not send a prompt or reasoning/output override, and safely skips if another model is already loaded.
 
 ## Product direction
 
@@ -39,7 +40,7 @@ npm run make
 
 ## Safety and privacy
 
-- The app does not load a model when it opens. Inference runs only after the user starts a turn.
+- The app does not load a model when it opens. An explicit model selection or PRELOAD click may warm the selected Ollama model; inference runs only after the user starts a turn. Existing loaded models are left alone when preloading would replace or resize them.
 - Built-in project file tools are scoped to the captured workspace. Commands and MCP servers run with the signed-in Windows account's OS permissions and may access other paths or network resources.
 - Keep credentials in environment variables and reference them from MCP configuration. Do not commit `.env`, model files, session data, or user project content.
 - Review the complete diff and run project-specific checks before applying changes to important work.
