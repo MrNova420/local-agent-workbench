@@ -26,14 +26,14 @@ This is the queue for accepted follow-up work that is not part of the current re
 
 ### B-003: More useful Live Work Sheet resource and generation telemetry
 
-**Priority:** High; the live worksheet and resource layout are implemented and visually verified in the current packaged build. A new change-review boundary fix is committed but still needs a package rebuild and visible check.
+**Priority:** High; the live worksheet and resource layout are implemented and visually verified in the current packaged build. Change review now opens immediately with loading/error feedback, and its project-boundary fix is committed; both changes still need a package rebuild and visible check.
 
 - Present live input/output tokens and tokens/second alongside elapsed time and waiting/generating phase.
 - Add CPU percentage, system RAM used/total, GPU percentage, VRAM used/total, and GPU power when available; show unavailable status cleanly for unsupported hardware.
 - Keep the most actionable status readable at small window sizes, move `Inspect changes` near the top, and prevent overlap with message text or controls.
 - Base live throughput on streamed output and clearly replace estimates with provider-exact final usage.
 
-**Implemented and visibly verified in the packaged app:** The bottom ribbon and Live Work Sheet expose CPU, system RAM, GPU utilization, VRAM used/total, GPU power, and agent-service CPU/RAM. Unsupported readings render as unavailable. Python telemetry parses structured `nvidia-smi` values; unit tests cover available and empty probe responses. The work sheet uses compact responsive tiles, retains live token/s output, and keeps `Inspect changes` in the sheet header. The rebuilt `out-acceptance-2026-10-31-trace-fix` package was visibly checked at 1920x1080: the activity trace stays in its scroll region and does not overlap the resource panel. The change-review button itself exposed a separate project-root isolation defect; fix `f35ee11` is covered by tests and awaits packaging plus a visible check. Active inference sampling remains in B-004.
+**Implemented and visibly verified in the packaged app:** The bottom ribbon and Live Work Sheet expose CPU, system RAM, GPU utilization, VRAM used/total, GPU power, and agent-service CPU/RAM. Unsupported readings render as unavailable. Python telemetry parses structured `nvidia-smi` values; unit tests cover available and empty probe responses. The work sheet uses compact responsive tiles, retains live token/s output, and keeps `Inspect changes` in the sheet header. The rebuilt `out-acceptance-2026-10-31-trace-fix` package was visibly checked at 1920x1080: the activity trace stays in its scroll region and does not overlap the resource panel. Change review now opens immediately and presents visible loading/error states; the project-root isolation fix `f35ee11` and feedback fix `ecc0ea9` pass automated checks but await packaging plus a visible check. Active inference sampling remains in B-004.
 
 ### B-004: Measure partial GPU offload during active inference
 
