@@ -4,6 +4,18 @@ The product target is full 1:1 user-facing feature and workflow parity with Code
 
 ## Queued for review and implementation
 
+## Active development order: core project work
+
+These core items take priority over visual polish, orbit popovers, usage dashboards, and other quality-of-life backlog work. Verification and visible packaged acceptance remain grouped for the final gate, as requested.
+
+1. **Close the model/tool protocol gate:** exact Ollama second-request payload, streamed and batched calls, schema validation, MCP schema compatibility, cancellation/approval transitions, and legacy session migration.
+2. **Prove full-project workflow correctness:** build a real project through inspect → plan → edit/write → inspect diff → run relevant checks → report evidence. Replace intent/completion heuristics with an explicit workflow state so discussion, plan-only, blocked, changed, and verified outcomes are distinct.
+3. **Complete permission and workspace boundaries:** per-tool allow/ask/deny with hard-deny precedence, exact command previews, and a real opt-in Windows containment backend. Until then, host commands (including PowerShell) must be identified as uncontained even when their working directory is the selected project or disposable copy.
+4. **Close resumability and context reliability:** preserve canonical history separately from each request's budgeted context, verify checkpoint tool-result associations, expose compaction/omissions, and fault-test crash recovery without replaying uncertain effects.
+5. **Add developer capabilities by evidence and adapter:** language-server diagnostics/navigation, browser/web tools, richer test/build workflows, and custom tools/plugins, each with capability reporting and individual permission rules. Do not imply these are available merely because MCP can theoretically provide them.
+
+After those gates, return to deferred runtime benchmarks, analytics/KV presentation, visual customization, and model-orbit interactions. These backlog items remain approved and are not deleted.
+
 ### B-001: Compare context presets and output-token performance
 
 **Status:** Selected 65,536 context / 8,192 output has passed a visible packaged run and runtime-context verification. The 262,144 same-prompt comparison remains.
