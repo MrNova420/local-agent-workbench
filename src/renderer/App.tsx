@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import type { AccessMode, ApprovalMode, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, WorkerCommand, WorkerEvent } from '../shared/protocol';
 import { nextRunPhase } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordStreamedText, type RunMetrics } from '../shared/run-metrics';
-import { buildTokenPresets, normalizeReasoningChoice } from '../shared/model-controls';
+import { buildModelLabels, buildTokenPresets, normalizeReasoningChoice } from '../shared/model-controls';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; thinking?: string; streaming?: boolean };
 type Session = {
@@ -81,6 +81,7 @@ function Markdown({ content }: { content: string }) {
 export default function App() {
   const [models, setModels] = useState<string[]>([]);
   const [modelLabels, setModelLabels] = useState<Record<string, string>>({});
+  const displayModelLabels = useMemo(() => buildModelLabels(models, modelLabels), [models, modelLabels]);
   const [model, setModel] = useState('');
   const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null);
   const [workspace, setWorkspace] = useState(localStorage.getItem('agent-workspace') || '');
@@ -484,7 +485,7 @@ export default function App() {
       <div className="model-control no-drag">
         <span className="model-glyph"><Icon name="spark"/></span>
         <label><small>LOCAL MODEL</small><select value={model} onChange={(e) => { setModel(e.target.value); setContextTouched(false); setSettingsTouched(false); }} disabled={running}>
-          {!models.length && <option value="">No local models</option>}{models.map((name) => <option value={name} key={name}>{modelLabels[name] || shortModel(name)}</option>)}
+          {!models.length && <option value="">No local models</option>}{models.map((name) => <option value={name} key={name}>{displayModelLabels[name] || shortModel(name)}</option>)}
         </select></label>
       </div>
       <div className={`connection-pill no-drag ${model.startsWith('gguf::') ? (snapshot.llama && (snapshot.llama as Record<string, unknown>).running ? 'yes' : 'no') : connected}`}><span className="connection-light"/>{model.startsWith('gguf::') ? snapshot.llama && (snapshot.llama as Record<string, unknown>).running ? 'GGUF LOADED' : 'GGUF NOT LOADED' : connected === 'yes' ? 'OLLAMA READY' : connected === 'no' ? 'OLLAMA OFFLINE' : 'CHECKING'}</div>
@@ -494,7 +495,7 @@ export default function App() {
 
     <main className="main-stage">
       {view === 'landing' && <Landing
-        workspace={workspace} sessions={sessions} models={models} modelLabels={modelLabels} model={model} context={options.context}
+        workspace={workspace} sessions={sessions} models={models} modelLabels={displayModelLabels} model={model} context={options.context}
         connected={connected} telemetry={telemetry} onChoose={chooseWorkspace} onOpen={showProject}
         onResume={loadSession} onModel={(name) => { setModel(name); setContextTouched(false); setSettingsTouched(false); }} onRefresh={() => { void refreshModels(); }}
         onLibrary={() => setModelLibraryOpen(true)}
@@ -520,8 +521,8 @@ export default function App() {
     </footer>
 
     {notice && <div className={`toast toast-${notice.tone}`} role="status"><span>{notice.text}</span><button onClick={() => setNotice(null)}><Icon name="close"/></button></div>}
-    {settingsOpen && <SettingsModal model={model} modelLabel={modelLabels[model] || shortModel(model)} modelInfo={modelInfo} options={options} setOptions={setOptions} onClose={() => setSettingsOpen(false)} onSave={saveSettings} onMcp={openMcp} />}
-    {modelLibraryOpen && <ModelLibraryModal model={model} models={models} modelLabels={modelLabels} context={options.context} reasoning={options.reasoning} downloadedDirectory={downloadedModelDirectory} onModel={setModel} onRefresh={refreshModels} onClose={() => setModelLibraryOpen(false)} notify={notify}/>}
+    {settingsOpen && <SettingsModal model={model} modelLabel={displayModelLabels[model] || shortModel(model)} modelInfo={modelInfo} options={options} setOptions={setOptions} onClose={() => setSettingsOpen(false)} onSave={saveSettings} onMcp={openMcp} />}
+    {modelLibraryOpen && <ModelLibraryModal model={model} models={models} modelLabels={displayModelLabels} context={options.context} reasoning={options.reasoning} downloadedDirectory={downloadedModelDirectory} onModel={setModel} onRefresh={refreshModels} onClose={() => setModelLibraryOpen(false)} notify={notify}/>}
     {mcpOpen && <Modal title="Local MCP connections" eyebrow="TOOL BRIDGE" onClose={() => setMcpOpen(false)}>
       <p className="modal-copy">Each server starts as a local stdio process. Add only commands you trust. Tool calls require approval.</p>
       <textarea className="code-editor mcp-editor" value={mcpJson} onChange={(e) => setMcpJson(e.target.value)} spellCheck={false}/>

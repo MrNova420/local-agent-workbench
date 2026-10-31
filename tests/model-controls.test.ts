@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { buildTokenPresets, normalizeReasoningChoice, type ReasoningCapability } from '../src/shared/model-controls';
+import { buildModelLabels, buildTokenPresets, normalizeReasoningChoice, type ReasoningCapability } from '../src/shared/model-controls';
 
 describe('model capability controls', () => {
+  it('disambiguates installed models that share the same short display name', () => {
+    const labels = buildModelLabels([
+      'hf.co/mradermacher/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M',
+      'hf.co/ressl/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M',
+    ]);
+
+    expect(labels['hf.co/mradermacher/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M']).toContain('hf.co/mradermacher');
+    expect(labels['hf.co/ressl/Ornith-1.5-9B-uncensored-GGUF:Q4_K_M']).toContain('hf.co/ressl');
+    expect(Object.values(labels)[0]).not.toBe(Object.values(labels)[1]);
+  });
+
   it('builds context tiers beyond one million and includes the exact nonstandard maximum', () => {
     const presets = buildTokenPresets({ contextLimit: 2_500_000, outputLimit: 1_500_000 });
 

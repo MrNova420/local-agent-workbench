@@ -15,6 +15,28 @@ export type TokenPresetSet = {
   outputLimitKnown: boolean;
 };
 
+export function buildModelLabels(modelIds: string[], overrides: Record<string, string> = {}): Record<string, string> {
+  const rows = modelIds.map((id) => {
+    const normalized = id.startsWith('gguf::') ? id.slice('gguf::'.length) : id;
+    const pathParts = normalized.replaceAll('\\', '/').split('/').filter(Boolean);
+    const base = overrides[id] || pathParts.at(-1) || id || 'No model selected';
+    const origin = pathParts.length > 1 ? pathParts.slice(0, -1).slice(-2).join('/') : id;
+    return { id, base, origin };
+  });
+  const baseCounts = new Map<string, number>();
+  const originCounts = new Map<string, number>();
+  for (const row of rows) {
+    baseCounts.set(row.base, (baseCounts.get(row.base) ?? 0) + 1);
+    const key = `${row.base}\0${row.origin}`;
+    originCounts.set(key, (originCounts.get(key) ?? 0) + 1);
+  }
+  return Object.fromEntries(rows.map(({ id, base, origin }) => {
+    if ((baseCounts.get(base) ?? 0) < 2) return [id, base];
+    const suffix = (originCounts.get(`${base}\0${origin}`) ?? 0) > 1 ? id : origin;
+    return [id, `${base} · ${suffix}`];
+  }));
+}
+
 const BASE_TIERS = [4096, 8192, 16384, 32768, 65536, 100000, 131072, 200000, 262144, 300000, 500000, 750000, 1000000, 1500000, 2000000, 3000000, 5000000, 10000000];
 
 function buildTiers(): number[] {
