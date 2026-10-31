@@ -541,12 +541,13 @@ export default function App() {
       const selectedModel = model;
       if (!selectedModel) { notify('Add or install a local model from Model Library before starting a session.', 'warn'); setModelLibraryOpen(true); return; }
       await request<ModelInfo>({ command: 'model_info', model: selectedModel });
+      const tokenPreferences = readRunTokenPreferences(localStorage.getItem('agent-run-token-preferences'));
       const chosenMode = selectedActivityMode || activityDefault;
-      const created = await request<Session>({ command: 'session_new', workspace, model: selectedModel, context: options.context, activityMode: chosenMode });
+      const created = await request<Session>({ command: 'session_new', workspace, model: selectedModel, context: tokenPreferences.context, activityMode: chosenMode });
       setSession(created); setMessages([]); setTrace([]); setPlan([]); setPrompt(''); setElapsed(0); setPhase('Ready'); setView('session');
       setActivities([]); setActivityMode(chosenMode); sessionStorage.setItem('agent-activity-mode', chosenMode);
       setRunMetrics(emptyRunMetrics());
-      setOptions((old) => ({ ...old, context: created.context, approvalMode: 'per-action', reasoning: null }));
+      setOptions((old) => ({ ...old, context: created.context, maxTokens: tokenPreferences.maxTokens, approvalMode: 'per-action', reasoning: null }));
       void refreshWorkspace(workspace);
       window.setTimeout(() => promptRef.current?.focus(), 60);
     } catch (error) { notify(`Could not start a session: ${(error as Error).message}`, 'bad'); }
