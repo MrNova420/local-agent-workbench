@@ -1076,7 +1076,7 @@ function SettingsModal({ model, modelLabel, modelInfo, options, setOptions, acti
 }
 
 function ApprovalModal({ approval, onChoice, onCancelRun }: { approval: Approval; onChoice: (value: boolean) => void; onCancelRun: () => void }) {
-  const hostExecution = approval.name === 'run_command' || approval.name.startsWith('mcp__');
+  const hostExecution = approval.name === 'run_command' || approval.name === 'run_shell' || approval.name.startsWith('mcp__');
   return <Modal title={approval.name.replaceAll('_', ' ')} eyebrow="ACTION NEEDS YOUR REVIEW" wide dismissible={false} onClose={() => undefined}>
     <p className="modal-copy">The agent requested an action under <b>{approval.mode === 'per-task' ? 'per-task' : 'per-action'} approval</b>. Review the exact arguments and selected workspace, then choose an action.</p>
     <div className="approval-context"><span>WORKSPACE</span><code>{approval.workspace}</code></div>
