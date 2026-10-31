@@ -16,6 +16,7 @@
 - Source now refreshes the selected workspace's file index after terminal write/edit/patch, command, and MCP operations, so Files in View and change review can reflect tool results immediately. A regression test has been added but is intentionally queued with the final test pass per the user's latest instruction. Preload notifications now name the model from the actual event, and attempting to submit while a model is warming gives an explicit wait notice instead of silently doing nothing.
 - The Home model picker now shares the top-bar lockout while a selected Ollama model is warming, with an explicit warming label; this prevents a second Home selection from racing the in-flight preload. This source change is committed before package verification; its UI test is queued for the final test pass.
 - Preload completion now carries elapsed wall time and Ollama's response `load_duration` into its ready notification. A focused assertion was added to the final test queue; no new tests were run during the requested development-first phase.
+- The live old package visually concatenates assistant text across model/tool/model segments. Source now inserts a paragraph break when a streamed assistant answer resumes after a tool batch, while preserving ordinary chunk boundaries. A focused transcript test is queued; no test run or package restart was made while inference remained active.
 
 ## Source/package checks — 2026-10-31
 

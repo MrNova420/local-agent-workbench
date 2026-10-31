@@ -5,7 +5,7 @@ import { nextRunPhase, restoredRunPhase, runStepProgress } from '../shared/run-s
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordStreamedText, type RunMetrics } from '../shared/run-metrics';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice, readRunTokenPreferences } from '../shared/model-controls';
 import { normalizeGpuStats } from '../shared/resource-metrics';
-import { restoreTranscriptMessages } from '../shared/transcript';
+import { appendTranscriptSegment, restoreTranscriptMessages } from '../shared/transcript';
 import { LocalModelOrbit } from './ModelOrbit';
 import { ActivityFeed } from './ActivityFeed';
 import { applyActivityEvent, shouldRefreshWorkspaceForActivity } from '../shared/activity';
@@ -159,6 +159,7 @@ export default function App() {
   const [projectTab, setProjectTab] = useState<'overview' | 'files' | 'sessions'>('overview');
   const endRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  const assistantSegmentBreakRef = useRef(false);
 
   const notify = useCallback((text: string, tone: Notice['tone'] = 'good') => {
     setNotice({ text, tone });
@@ -344,6 +345,7 @@ export default function App() {
           if (root && root === workspace) void refreshWorkspace(root).catch((error) => notify(`Workspace files could not refresh after ${activityEvent.activity?.name || 'the operation'}: ${(error as Error).message}`, 'warn'));
         }
       }
+      if (event.type === 'tool_batch') assistantSegmentBreakRef.current = true;
       if (event.type === 'session_mirror_error') notify(`The app copy is saved, but the project mirror failed: ${String(event.error || 'unavailable')}`, 'warn');
       if (event.type === 'model_registered') {
         setModelLabels((current) => ({ ...current, [String(event.model)]: String(event.label || shortModel(String(event.model))) }));
@@ -366,19 +368,28 @@ export default function App() {
       }
       if (event.type === 'text') {
         const chunk = String(event.text || '');
+        const addSegmentBreak = assistantSegmentBreakRef.current;
+        assistantSegmentBreakRef.current = false;
         setRunMetrics((current) => recordStreamedText(current, chunk));
         setMessages((current) => {
           const last = current.at(-1);
-          if (last?.role === 'assistant' && last.streaming) return [...current.slice(0, -1), { ...last, content: last.content + chunk }];
+          if (last?.role === 'assistant' && last.streaming) {
+            return [...current.slice(0, -1), { ...last, content: appendTranscriptSegment(last.content, chunk, addSegmentBreak) }];
+          }
           return [...current, { role: 'assistant', content: chunk, streaming: true }];
         });
       }
       if (event.type === 'thinking') {
         const chunk = String(event.text || '');
+        const addSegmentBreak = assistantSegmentBreakRef.current;
+        assistantSegmentBreakRef.current = false;
         setRunMetrics((current) => recordStreamedText(current, chunk));
         setMessages((current) => {
           const last = current.at(-1);
-          if (last?.role === 'assistant' && last.streaming) return [...current.slice(0, -1), { ...last, thinking: (last.thinking || '') + chunk }];
+          if (last?.role === 'assistant' && last.streaming) {
+            const thinking = last.thinking || '';
+            return [...current.slice(0, -1), { ...last, thinking: appendTranscriptSegment(thinking, chunk, addSegmentBreak) }];
+          }
           return [...current, { role: 'assistant', content: '', thinking: chunk, streaming: true }];
         });
       }
@@ -577,6 +588,7 @@ export default function App() {
       } catch (error) { notify(`Could not verify llama.cpp runtime: ${(error as Error).message}`, 'bad'); return; }
     }
     const task = prompt.trim();
+    assistantSegmentBreakRef.current = false;
     const run: RunOptions = {
       workspace, sessionId: session.session_id, prompt: task, model, providerId: model.startsWith('gguf::') ? 'llama.cpp' : 'ollama',
       context: options.context, maxTokens: options.maxTokens, temperature: options.temperature,

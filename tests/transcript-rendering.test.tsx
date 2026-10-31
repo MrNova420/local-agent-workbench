@@ -2,9 +2,15 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { Markdown } from '../src/renderer/Markdown';
-import { restoreTranscriptMessages } from '../src/shared/transcript';
+import { appendTranscriptSegment, restoreTranscriptMessages } from '../src/shared/transcript';
 
 describe('resumed transcript rendering', () => {
+  it('separates assistant response segments that resume after a tool call', () => {
+    expect(appendTranscriptSegment('I will inspect the project.', 'The files are ready.', true)).toBe('I will inspect the project.\n\nThe files are ready.');
+    expect(appendTranscriptSegment('I will inspect the project.', ' continues.', false)).toBe('I will inspect the project. continues.');
+    expect(appendTranscriptSegment('I will inspect the project.\n', 'The files are ready.', true)).toBe('I will inspect the project.\n\nThe files are ready.');
+  });
+
   it('keeps saved Markdown and syntax-highlighted code renderable after session restore', () => {
     const savedContent = [
       '## Verification results',
