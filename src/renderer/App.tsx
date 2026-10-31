@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
 import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, ApprovalMode, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
-import { nextRunPhase } from '../shared/run-state';
+import { nextRunPhase, restoredRunPhase, runStepProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordStreamedText, type RunMetrics } from '../shared/run-metrics';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice } from '../shared/model-controls';
 import { normalizeGpuStats } from '../shared/resource-metrics';
@@ -214,6 +214,7 @@ export default function App() {
       }
       const loaded = response as Session;
       setSessionConflict(null);
+      setPhase(restoredRunPhase(loaded.run_state?.status));
       const root = loaded.workspace;
       setModel(loaded.model);
       const rows: ChatMessage[] = restoreTranscriptMessages(loaded.messages);
@@ -774,9 +775,8 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
   onRun: () => void; onCancel: () => void; onSettings: () => void; onBack: () => void; onDiff: () => void; onMcp: () => void;
   onEnter: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void; endRef: React.RefObject<HTMLDivElement | null>; model: string;
 }) {
-  const phaseKey = phase.toLowerCase();
-  const steps = ['Ready', 'Waiting for first token', 'Generating', 'Finishing turn'];
-  const currentStep = phaseKey.includes('waiting') ? 1 : phaseKey.includes('generat') ? 2 : phaseKey.includes('finish') ? 3 : running ? 1 : 0;
+  const steps = ['Ready', 'Waiting for first token', 'Generating', phase === 'Turn complete' ? 'Turn complete' : 'Finishing turn'];
+  const currentStep = runStepProgress(phase, running);
   return <section className="session-view">
     <div className="session-commandline"><button className="crumb-back" onClick={onBack}>PROJECT / {shortPath(root).toUpperCase()}</button><span className="crumb-slash">/</span><span className="session-crumb">SESSION {session?.session_id.slice(-8).toUpperCase()}</span><span className="commandline-spacer"/><button className="inline-command" onClick={onMcp}>MCP</button><button className="inline-command" onClick={onDiff}>CHANGES</button><span className={`phase-chip ${running ? 'is-running' : ''}`}><i/>{running ? phase.toUpperCase() : phase.toUpperCase()}</span><span className="run-elapsed"><Icon name="clock"/> {running ? secs(elapsed) : '—'}</span></div>
     <div className="task-route" aria-label="Task execution phases">{steps.map((step, index) => <div className={`route-step ${index < currentStep ? 'done' : ''} ${index === currentStep ? 'current' : ''}`} key={step}><span className="route-node">{index < currentStep ? <Icon name="check"/> : `0${index + 1}`}</span><span>{step === 'Waiting for first token' ? 'Prefill / waiting' : step}</span></div>)}</div>

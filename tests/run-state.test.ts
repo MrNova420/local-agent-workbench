@@ -1,7 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { nextRunPhase } from '../src/shared/run-state';
+import { nextRunPhase, restoredRunPhase, runStepProgress } from '../src/shared/run-state';
 
 describe('run status transitions', () => {
+  it.each([
+    ['Ready', false, 0],
+    ['Waiting for first token', true, 1],
+    ['Generating', true, 2],
+    ['Finishing turn', true, 3],
+    ['Turn complete', false, 4],
+    ['Run failed', false, 3],
+    ['Cancelled', false, 3],
+  ])('maps %s to phase rail progress %i', (phase, running, expected) => {
+    expect(runStepProgress(phase, running)).toBe(expected);
+  });
+
+  it.each([
+    ['completed', 'Turn complete'],
+    ['failed', 'Run failed'],
+    ['cancelled', 'Cancelled'],
+    ['stopped', 'Stopped after active operation'],
+    ['interrupted', 'Interrupted · recovery required'],
+    ['unknown', 'Ready'],
+  ])('restores a saved %s outcome as %s', (status, expected) => {
+    expect(restoredRunPhase(status)).toBe(expected);
+  });
+
   it('shows first-token wait and generation as separate phases', () => {
     expect(nextRunPhase('Ready', { type: 'phase', phase: 'waiting' })).toBe('Waiting for first token');
     expect(nextRunPhase('Waiting for first token', { type: 'phase', phase: 'generating' })).toBe('Generating');

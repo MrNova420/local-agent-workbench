@@ -1,5 +1,26 @@
 import type { WorkerEvent } from './protocol';
 
+export function restoredRunPhase(status: unknown): string {
+  switch (status) {
+    case 'completed': return 'Turn complete';
+    case 'failed': return 'Run failed';
+    case 'cancelled': return 'Cancelled';
+    case 'stopped': return 'Stopped after active operation';
+    case 'interrupted': return 'Interrupted · recovery required';
+    default: return 'Ready';
+  }
+}
+
+export function runStepProgress(phase: string, running: boolean): number {
+  const phaseKey = phase.toLowerCase();
+  if (phaseKey.includes('complete')) return 4;
+  if (phaseKey.includes('failed') || phaseKey.includes('cancelled') || phaseKey.includes('stopped')) return 3;
+  if (phaseKey.includes('waiting')) return 1;
+  if (phaseKey.includes('generat')) return 2;
+  if (phaseKey.includes('finish')) return 3;
+  return running ? 1 : 0;
+}
+
 export function nextRunPhase(previous: string, event: WorkerEvent): string {
   if (event.type === 'phase') {
     const phase = String(event.phase || 'working');
