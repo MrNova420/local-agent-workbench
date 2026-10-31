@@ -76,7 +76,9 @@ def test_stream_close_exception_is_reported_as_request_cancellation():
             started.set()
             while not cancel.is_set():
                 cancel.wait(0.01)
-            raise ValueError("response closed")
+            error = ValueError("response closed")
+            error.partial_message = {"role": "assistant", "content": "partial reply"}
+            raise error
 
         def cancel(self):
             cancel.set()
@@ -97,6 +99,7 @@ def test_stream_close_exception_is_reported_as_request_cancellation():
     adapter.cancel()
     thread.join(1)
     assert len(errors) == 1 and type(errors[0]).__name__ == "RequestCancelled"
+    assert errors[0].partial_message == {"role": "assistant", "content": "partial reply"}
 
 
 def test_stream_reports_exact_usage_for_every_ollama_response():

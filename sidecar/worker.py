@@ -76,7 +76,7 @@ class RequestScopedOllama:
             return result
         except Exception as exc:
             if cancel.is_set():
-                raise RequestCancelled("Cancelled") from exc
+                raise RequestCancelled("Cancelled", partial_message=getattr(exc, "partial_message", None)) from exc
             raise
 
 
