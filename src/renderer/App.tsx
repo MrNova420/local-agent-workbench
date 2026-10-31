@@ -326,7 +326,8 @@ export default function App() {
       }
       if (event.type === 'ollama_preload_skipped') {
         setModelPreloading(false);
-        notify(String(event.reason || 'Model preload was skipped to preserve the currently loaded model.'), 'warn');
+        if (event.status === 'already_loaded') notify(`${shortModel(String(event.model))} is already loaded at the selected context.`, 'good');
+        else notify(String(event.reason || 'Model preload was skipped to preserve the currently loaded model.'), 'warn');
       }
       if (event.type === 'ollama_preload_error') {
         setModelPreloading(false);
@@ -522,11 +523,9 @@ export default function App() {
   async function preloadSelectedModel(selectedModel = model) {
     if (!selectedModel || selectedModel.startsWith('gguf::') || running || modelPreloading) return;
     try {
-      const result = await request<{ accepted: boolean; status?: string; reason?: string }>({
+      await request({
         command: 'ollama_preload', model: selectedModel, context: options.context, keepAlive: options.keepAlive,
       });
-      if (result.status === 'already_loaded') notify(`${shortModel(selectedModel)} is already loaded at the selected context.`, 'good');
-      else if (!result.accepted) notify(result.reason || 'Preload skipped to preserve the current model.', 'warn');
     } catch (error) { notify(`Could not preload model: ${(error as Error).message}`, 'bad'); }
   }
 
