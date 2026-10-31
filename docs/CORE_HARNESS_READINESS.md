@@ -104,6 +104,24 @@ sequenceDiagram
 - **Packaging/source provenance must be explicit.** The bundled sidecar build currently resolves the Python engine from a sibling checkout by default or `LOCAL_AGENT_CORE_PATH`. Release packaging must pin a specific core revision and record it in build metadata; it must not accidentally package stale code from an arbitrary adjacent folder.
 - **Test gates are not release gates.** Unit/renderer tests, sidecar tests, packaged app, visible UI task, runtime model, Windows install/upgrade, and public repository are separate evidence levels.
 
+### Capability breadth and execution boundaries
+
+- “Universal tools” means a discoverable, extensible capability system that reports what the selected provider/model, OS, workspace, and integrations can actually do. It does not mean promising an unavailable browser/debugger/LSP or claiming a selected-project root is a sandbox.
+- Current agent tools cover project file discovery/search/read/write/edit/patch, plans/skills, Git review, approved direct commands, and configured stdio MCP. Built-in browser control, language-server diagnostics/navigation, dedicated debugger, and richer test-runner integrations remain gaps; users can add some capabilities through MCP, subject to each server's limits.
+- The selected-model composer now shows Ollama `/api/show` tool capability as supported/unsupported/unknown. This is advertised metadata, not proof that a model will reliably call tools. GGUF/llama.cpp remains unknown until template metadata can be mapped safely; the engine still exposes its tool schemas and does not silently disable access based on an unknown status.
+- Approval is consent, not OS containment. Approved commands and local MCP subprocesses still inherit the app user's Windows privileges. Copy workspace protects the built-in project editing path but does not contain those subprocesses. The activity/approval UI must keep that distinction explicit; don't enable unattended host-command execution by describing it as sandboxed.
+- Repository discovery currently reports bounded scan limits but cannot continue past every ceiling. Add cancellable, resumable enumeration and search cursors with progress, per-project configurable budgets, and explicit “incomplete” status. Preserve reasonable safety/resource bounds rather than making a huge scan uninterruptible.
+- MCP operation deadlines/health and process cleanup policies need per-server visibility and bounded recovery. Tools should be discoverable by capability and loaded relevantly for the turn, while access approval and project identity remain host-enforced.
+
+### Live KV-cache telemetry contract
+
+- **Implemented in source, final tests/package review pending:** the work sheet distinguishes cached prompt reuse from KV memory allocation. Ollama prompt counts are exact response metrics and arrive after each response; Ollama does not expose live KV allocation bytes or current cache occupancy through the inspected API. System VRAM is labeled system/device-wide, never presented as KV memory.
+- The llama.cpp adapter now normalizes returned prompt/cache/timing counters and samples its public `/slots` endpoint without returning prompt text. The panel can show runtime-reported slot context token counts and capacity, while KV bytes/type/precision remain “not exposed” unless a future adapter can prove otherwise.
+- Ollama describes `prompt_eval_cached_count` as prompt tokens read from cache and `prompt_eval_duration` as time spent evaluating uncached tokens. llama.cpp documents per-slot prompt/cache token metrics and response timing fields (`cache_n`, `prompt_n`, `predicted_n`); these support token-level measurements but do not by themselves establish KV allocation bytes.
+- Do not change KV quantization, context, or model defaults as a side effect of displaying telemetry. llama.cpp cache-reuse via KV shifting remains a separate measured experiment; keep the documented default until explicit runtime controls and quality/performance acceptance exist.
+
+References: [Ollama usage metrics](https://github.com/ollama/ollama/blob/main/docs/api/usage.mdx), [Ollama KV cache settings](https://github.com/ollama/ollama/blob/main/docs/faq.mdx), and [llama.cpp server slots, timings, and prompt cache](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md).
+
 ## Research-backed design decisions
 
 ### Performance and caching

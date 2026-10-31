@@ -3,6 +3,8 @@ export type RunMetrics = {
   outputTokens: number;
   promptTokens: number;
   cachedPromptTokens: number;
+  promptEvalNanoseconds: number;
+  modelLoadNanoseconds: number;
   decodeNanoseconds: number;
   pendingCharacters: number;
   estimatedDecodeNanoseconds: number;
@@ -16,6 +18,8 @@ export function emptyRunMetrics(): RunMetrics {
     outputTokens: 0,
     promptTokens: 0,
     cachedPromptTokens: 0,
+    promptEvalNanoseconds: 0,
+    modelLoadNanoseconds: 0,
     decodeNanoseconds: 0,
     pendingCharacters: 0,
     estimatedDecodeNanoseconds: 0,
@@ -54,9 +58,11 @@ export function addGenerationUsage(metrics: RunMetrics, usage: unknown): RunMetr
   const row = usage as Record<string, unknown>;
   const promptTokens = typeof row.prompt_eval_count === 'number' && Number.isFinite(row.prompt_eval_count) ? Math.max(0, Math.floor(row.prompt_eval_count)) : 0;
   const cachedPromptTokens = typeof row.prompt_eval_cached_count === 'number' && Number.isFinite(row.prompt_eval_cached_count) ? Math.max(0, Math.min(promptTokens || Infinity, Math.floor(row.prompt_eval_cached_count))) : 0;
+  const promptEvalNanoseconds = typeof row.prompt_eval_duration === 'number' && Number.isFinite(row.prompt_eval_duration) ? Math.max(0, row.prompt_eval_duration) : 0;
+  const modelLoadNanoseconds = typeof row.load_duration === 'number' && Number.isFinite(row.load_duration) ? Math.max(0, row.load_duration) : 0;
   const hasCount = typeof row.eval_count === 'number' && Number.isFinite(row.eval_count);
   const hasDuration = typeof row.eval_duration === 'number' && Number.isFinite(row.eval_duration);
-  if (!hasCount || !hasDuration) return { ...endGeneration(metrics), promptTokens: metrics.promptTokens + promptTokens, cachedPromptTokens: metrics.cachedPromptTokens + cachedPromptTokens };
+  if (!hasCount || !hasDuration) return { ...endGeneration(metrics), promptTokens: metrics.promptTokens + promptTokens, cachedPromptTokens: metrics.cachedPromptTokens + cachedPromptTokens, promptEvalNanoseconds: metrics.promptEvalNanoseconds + promptEvalNanoseconds, modelLoadNanoseconds: metrics.modelLoadNanoseconds + modelLoadNanoseconds };
 
   const tokens = Math.max(0, Math.floor(row.eval_count as number));
   const duration = Math.max(0, row.eval_duration as number);
@@ -65,6 +71,8 @@ export function addGenerationUsage(metrics: RunMetrics, usage: unknown): RunMetr
     outputTokens: metrics.outputTokens + tokens,
     promptTokens: metrics.promptTokens + promptTokens,
     cachedPromptTokens: metrics.cachedPromptTokens + cachedPromptTokens,
+    promptEvalNanoseconds: metrics.promptEvalNanoseconds + promptEvalNanoseconds,
+    modelLoadNanoseconds: metrics.modelLoadNanoseconds + modelLoadNanoseconds,
     decodeNanoseconds: metrics.decodeNanoseconds + duration,
     pendingCharacters: 0,
     generationStartedAtMs: null,

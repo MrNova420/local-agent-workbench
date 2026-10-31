@@ -37,6 +37,8 @@ The selected-value run is documented in [ACCEPTANCE_LOG.md](ACCEPTANCE_LOG.md). 
 
 **Implemented and visibly verified in the packaged app:** The bottom ribbon and Live Work Sheet expose CPU, system RAM, GPU utilization, VRAM used/total, GPU power, and agent-service CPU/RAM. Unsupported readings render as unavailable. Python telemetry parses structured `nvidia-smi` values; unit tests cover available and empty probe responses. The work sheet uses compact responsive tiles, retains live token/s output, and keeps `Inspect changes` in the sheet header. The rebuilt `out-acceptance-2026-10-31-trace-fix` package was visibly checked at 1920x1080: the activity trace stays in its scroll region and does not overlap the resource panel. Change review opens immediately and presents visible loading/error states; project-root isolation (`f35ee11`) and review feedback (`ecc0ea9`) were rebuilt and visibly verified in `out-acceptance-2026-10-31-review-fix`. Active inference sampling remains in B-004.
 
+**KV cache extension in progress:** the source panel now separates provider-reported prompt reuse, uncached prefill time, llama.cpp live slot context, and unavailable KV memory/type fields. Rebuild and acceptance are pending; see B-011.
+
 ### B-004: Measure partial GPU offload during active inference
 
 **Priority:** Immediate investigation before performance conclusions.
@@ -82,6 +84,26 @@ Design the local-retention and export controls first. Record provider-exact coun
 ### B-010: Desktop copy follow-through — source copy verified; public repository setup pending
 
 The complete app and engine have independent Desktop Git clones with their own history; the app packaging path and worker ping have been verified from the Desktop app clone. Preserve original worktrees/checkpoints. Public GitHub creation/push via GitHub Desktop remains pending; inspect repository contents, credentials, license, and remote state before publishing.
+
+### B-011: Provider-accurate live KV-cache telemetry
+
+**Priority:** High; source implementation in progress, end-to-end evidence pending.
+
+- Show prompt tokens cached, total/uncached prompt tokens, exact cache-hit rate, and uncached prefill time only when the selected runtime reports those metrics. Make response-delayed updates clear for Ollama.
+- For app-owned llama.cpp, sample documented slot counters to show active/request context-token occupancy and slot capacity. Never include or expose the prompt text from `/slots`.
+- Keep actual KV allocation bytes, cache format/precision, and unsupported provider fields explicitly unavailable. Device-wide VRAM remains separate from KV usage.
+- Test absent/partial metrics, multiple tool-loop model calls, idle/active llama slots, malformed `/slots` responses, and the packaged UI. Verify the telemetry polling does not pause inference or access/stop an external server.
+
+### B-012: Capability discovery, universal development tools, and safe execution boundaries
+
+**Priority:** Critical for full-product readiness; audit completed, phased design and implementation remain.
+
+- Maintain a capability registry across provider/model/runtime, platform, project, and installed MCP integrations. Show supported/unsupported/unknown tool-call and modality capabilities; never infer a feature from an endpoint accepting a schema.
+- Expand integrations by need: searchable project tools, structured test/build profiles, browser automation, LSP diagnostics/navigation, debugger, Git/review, local MCP, and extensible custom tools. Keep discovery and permission approval host-controlled.
+- Make large-repository enumeration/search resumable, cancellable, and progressive, with configurable budgets and visible partial-result status. Do not remove safeguards in a way that permits uninterruptible scans.
+- Add per-server MCP health/deadline/environment policy. Approval must describe the exact target and scope.
+- Design Windows command/MCP process containment before treating project root, copy mode, or auto-approval as a sandbox. Current approved subprocesses run as the Windows user and can touch locations beyond the selected workspace; consent does not provide OS isolation.
+- Maintain a parity register with upstream references, local equivalent, status, evidence tier, and incompatibilities for every Codex/OpenCode user-facing capability.
 
 ## Active acceptance blockers
 

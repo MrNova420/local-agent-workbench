@@ -22,10 +22,13 @@ describe('per-run Ollama measurements', () => {
   it('reports provider-measured prompt tokens and cache hits without estimating them', () => {
     const metrics = addGenerationUsage(emptyRunMetrics(), {
       prompt_eval_count: 1000, prompt_eval_cached_count: 640,
+      prompt_eval_duration: 500_000_000, load_duration: 2_000_000_000,
       eval_count: 10, eval_duration: 1_000_000_000,
     });
     expect(metrics.promptTokens).toBe(1000);
     expect(metrics.cachedPromptTokens).toBe(640);
+    expect(metrics.promptEvalNanoseconds).toBe(500_000_000);
+    expect(metrics.modelLoadNanoseconds).toBe(2_000_000_000);
   });
 
   it('does not report a rate without measured decode time', () => {

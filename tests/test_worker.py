@@ -40,6 +40,7 @@ def test_dynamic_models_and_full_advertised_context(service):
     assert info == {
         "model": "model-a:latest", "context": 262144, "max_output_tokens": None,
         "family": None, "parameter_size": None, "quantization": None,
+        "capabilities": [], "tool_support": "unknown",
         "reasoning": {"support": "unknown", "default": None, "values": []},
         "provider": "ollama", "context_limit_known": True,
     }
@@ -49,12 +50,21 @@ def test_model_info_exposes_exact_ollama_reasoning_values(service):
     service.runtime.info = {
         "model_info": {"test.context_length": 262144, "general.family": "qwen", "general.parameter_size": "9B", "general.quantization_level": "Q4_K_M"},
         "thinking": {"default": "medium", "values": ["low", "medium", "high", False]},
+        "capabilities": ["completion", "tools", "thinking"],
     }
     result = service.handle("model_info", {"model": "model-a:latest"})
     assert result["reasoning"] == {
         "support": "levels", "default": "medium", "values": ["low", "medium", "high", False],
     }
     assert (result["family"], result["parameter_size"], result["quantization"]) == ("qwen", "9B", "Q4_K_M")
+    assert result["capabilities"] == ["completion", "thinking", "tools"]
+    assert result["tool_support"] == "supported"
+
+
+def test_model_info_reports_known_missing_tool_capability(service):
+    service.runtime.info = {"model_info": {}, "capabilities": ["completion"]}
+    result = service.handle("model_info", {"model": "model-a:latest"})
+    assert result["tool_support"] == "unsupported"
 
 
 def test_gguf_registration_is_stable_and_uses_unknown_training_context(service, tmp_path):

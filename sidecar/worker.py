@@ -264,6 +264,7 @@ class AgentService:
                 context = status.get("context") if status.get("model") == source["path"] else source.get("context")
                 return {"model": message["model"], "provider": "llama.cpp", "context": None,
                         "effective_context": context, "context_limit_known": False, "max_output_tokens": None,
+                        "capabilities": [], "tool_support": "unknown",
                         "reasoning": {"support": "levels", "default": "auto",
                                       "values": [False, True, "minimal", "low", "medium", "high", "xhigh", "max"]}}
             info = self.runtime.model_info(str(message["model"]))
@@ -279,6 +280,9 @@ class AgentService:
             default = raw_thinking.get("default") if isinstance(raw_thinking, dict) else None
             if not isinstance(default, (str, bool)) or default not in values:
                 default = None
+            raw_capabilities = info.get("capabilities")
+            capabilities = sorted({value for value in raw_capabilities if isinstance(value, str)}) if isinstance(raw_capabilities, list) else []
+            tool_support = "supported" if "tools" in capabilities else "unsupported" if isinstance(raw_capabilities, list) else "unknown"
             support = "levels" if any(isinstance(value, str) for value in values) else "toggle" if True in values and False in values else "none" if values == [False] else "unknown"
             return {
                 "model": message["model"], "context": context, "max_output_tokens": None,
@@ -286,6 +290,7 @@ class AgentService:
                 "parameter_size": tags.get("parameter_size") or next((value for key, value in details.items() if key.endswith(".parameter_size") and isinstance(value, str)), None),
                 "quantization": tags.get("quantization_level") or next((value for key, value in details.items() if key.endswith(".quantization_level") and isinstance(value, str)), None),
                 "reasoning": {"support": support, "default": default, "values": values},
+                "capabilities": capabilities, "tool_support": tool_support,
                 "provider": "ollama", "context_limit_known": context is not None,
             }
         if command == "hf_search":
@@ -332,7 +337,7 @@ class AgentService:
                 loaded = []
                 ollama_error = f"{type(exc).__name__}: {exc}"
             result = self.telemetry.snapshot(loaded)
-            result["llama"] = self.llama.status()
+            result["llama"] = self.llama.status(include_slot_metrics=True)
             result["ollama_error"] = ollama_error
             try:
                 import psutil

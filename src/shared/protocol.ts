@@ -133,6 +133,8 @@ export type ModelInfo = {
   context_limit_known?: boolean;
   max_output_tokens?: number | null;
   reasoning: ReasoningCapability;
+  capabilities?: string[];
+  tool_support?: 'supported' | 'unsupported' | 'unknown';
   provider?: 'ollama' | 'llama.cpp';
 };
 
