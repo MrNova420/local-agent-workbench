@@ -870,7 +870,7 @@ class AgentService:
                         condition.wait(0.25)
                 with self.active_lock:
                     controller["pending"].pop(action_id, None)
-                activity["status"] = "approved" if result["approved"] else "denied"
+                activity["status"] = "cancelled" if controller["cancel"].is_set() else "approved" if result["approved"] else "denied"
                 activity["completedAt"] = time.time()
                 with controller["checkpoint_lock"]:
                     self.sessions.save(state)
