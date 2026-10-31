@@ -5,8 +5,8 @@ import { nextRunPhase } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordStreamedText, type RunMetrics } from '../shared/run-metrics';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice } from '../shared/model-controls';
 import { normalizeGpuStats } from '../shared/resource-metrics';
-import { buildModelOrbitSlots } from '../shared/model-orbit';
 import { restoreTranscriptMessages } from '../shared/transcript';
+import { LocalModelOrbit } from './ModelOrbit';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; thinking?: string; streaming?: boolean };
 type Session = {
@@ -580,7 +580,6 @@ function Landing({ workspace, sessions, models, modelLabels, model, context, con
   telemetry: TelemetryView;
   onChoose: () => void; onOpen: (root: string) => void; onResume: (id: string) => void; onModel: (name: string) => void; onRefresh: () => void; onLibrary: () => void;
 }) {
-  const modelOrbitSlots = buildModelOrbitSlots(models, modelLabels, model);
   const recentProjects = useMemo(() => [...new Set([workspace, ...sessions.map((row) => row.workspace)].filter(Boolean))].slice(0, 4), [sessions, workspace]);
   return <section className="landing-view">
     <div className="landing-grid">
@@ -592,10 +591,7 @@ function Landing({ workspace, sessions, models, modelLabels, model, context, con
         <div className="landing-stats"><div><small>INSTALLED MODELS</small><strong>{String(models.length).padStart(2, '0')}</strong></div><div><small>ACTIVE CONTEXT</small><strong>{fmt(context)} <i>tokens</i></strong></div><div><small>LOCAL ENGINE</small><strong className={connected === 'yes' ? 'text-mint' : connected === 'no' ? 'text-rose' : ''}>{connected === 'yes' ? 'ONLINE' : connected === 'no' ? 'OFFLINE' : 'CHECKING'}</strong></div></div>
       </div>
       <div className="landing-visual" aria-hidden="true">
-        <div className="visual-orbit orbit-a"/><div className="visual-orbit orbit-b"/><div className="visual-orbit orbit-c"/>
-        <div className="model-orbit-slots" aria-label={`${modelOrbitSlots.length} installed local models`}>
-          {modelOrbitSlots.map((slot) => <span key={slot.id} className={`model-orbit-dot ring-${slot.ring}${slot.selected ? ' selected' : ''}`} style={{ left: slot.left, top: slot.top }} title={slot.label} aria-label={slot.label} />)}
-        </div>
+        <LocalModelOrbit models={models} labels={modelLabels} selectedModel={model} />
         <div className="visual-core"><span>LOCAL</span><strong>AI</strong><small>WORKS IN YOUR SPACE</small></div>
         <div className="orbit-label label-tl"><i/> PRIVATE BY DEFAULT</div><div className="orbit-label label-br"><i/> NO REMOTE ROUTING</div>
         <div className="visual-coordinate">[LOCATION REMOVED]<br/>[LOCATION REMOVED]</div>
