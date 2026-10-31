@@ -8,7 +8,7 @@ import { normalizeGpuStats } from '../shared/resource-metrics';
 import { restoreTranscriptMessages } from '../shared/transcript';
 import { LocalModelOrbit } from './ModelOrbit';
 import { ActivityFeed } from './ActivityFeed';
-import { applyActivityEvent } from '../shared/activity';
+import { applyActivityEvent, shouldRefreshWorkspaceForActivity } from '../shared/activity';
 import { DEFAULT_RUN_SHEET_LAYOUT, moveRunSheetPanel, normalizeRunSheetLayout, resizeRunSheetPanel, type RunSheetLayout, type RunSheetPanel } from '../shared/run-sheet-layout';
 import { nextHarnessProfile } from '../shared/harness-profile';
 
@@ -318,11 +318,11 @@ export default function App() {
       if (event.type === 'service_log') console.info('[agent service]', event.text);
       if (event.type === 'ollama_preload_started') {
         setModelPreloading(true);
-        notify(`Preloading ${shortModel(model)} at ${fmt(Number(event.context))} context.`, 'warn');
+        notify(`Preloading ${shortModel(String(event.model || model))} at ${fmt(Number(event.context))} context.`, 'warn');
       }
       if (event.type === 'ollama_preload_complete') {
         setModelPreloading(false);
-        notify(`${shortModel(model)} is warm and ready.`, 'good');
+        notify(`${shortModel(String(event.model || model))} is warm and ready.`, 'good');
       }
       if (event.type === 'ollama_preload_skipped') {
         setModelPreloading(false);
@@ -333,7 +333,14 @@ export default function App() {
         setModelPreloading(false);
         notify(String(event.error || 'Model preload failed.'), 'bad');
       }
-      if (event.type === 'activity_event') setActivities((current) => applyActivityEvent(current, event as unknown as ActivityEventEnvelope));
+      if (event.type === 'activity_event') {
+        const activityEvent = event as unknown as ActivityEventEnvelope;
+        setActivities((current) => applyActivityEvent(current, activityEvent));
+        if (activityEvent.activity && shouldRefreshWorkspaceForActivity(activityEvent.activity)) {
+          const root = activityEvent.activity.workspace || workspace;
+          if (root && root === workspace) void refreshWorkspace(root).catch((error) => notify(`Workspace files could not refresh after ${activityEvent.activity?.name || 'the operation'}: ${(error as Error).message}`, 'warn'));
+        }
+      }
       if (event.type === 'session_mirror_error') notify(`The app copy is saved, but the project mirror failed: ${String(event.error || 'unavailable')}`, 'warn');
       if (event.type === 'model_registered') {
         setModelLabels((current) => ({ ...current, [String(event.model)]: String(event.label || shortModel(String(event.model))) }));
@@ -554,7 +561,8 @@ export default function App() {
   }
 
   async function startRun() {
-    if (running || modelPreloading || !session || !workspace || !model || !prompt.trim()) return;
+    if (modelPreloading) { notify('Wait for the selected model to finish preloading before starting this task.', 'warn'); return; }
+    if (running || !session || !workspace || !model || !prompt.trim()) return;
     if (model.startsWith('gguf::')) {
       try {
         const status = await request<Record<string, unknown>>({ command: 'llama_status' });

@@ -2,6 +2,13 @@ import type { ActivityEventEnvelope, ActivityRecord } from './protocol';
 
 export type { ActivityRecord } from './protocol';
 
+export function shouldRefreshWorkspaceForActivity(row: ActivityRecord): boolean {
+  if (row.kind !== 'operation' || !['completed', 'failed', 'denied', 'blocked', 'cancelled', 'uncertain'].includes(row.status)) return false;
+  if (row.affectedFiles?.length) return true;
+  const name = row.name || '';
+  return ['write_file', 'edit_file', 'apply_patch', 'run_command', 'run_shell'].includes(name) || name.startsWith('mcp__');
+}
+
 export function applyActivityEvent(current: ActivityRecord[], event: ActivityEventEnvelope): ActivityRecord[] {
   if (event.activity) {
     const index = current.findIndex((row) => row.id === event.activity!.id);

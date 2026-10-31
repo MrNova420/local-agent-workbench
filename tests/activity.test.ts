@@ -1,10 +1,21 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { applyActivityEvent, type ActivityRecord } from '../src/shared/activity';
+import { applyActivityEvent, shouldRefreshWorkspaceForActivity, type ActivityRecord } from '../src/shared/activity';
 import { ActivityFeed } from '../src/renderer/ActivityFeed';
 
 describe('durable live activity state', () => {
+  it('refreshes the project file view after completed or uncertain mutations and commands', () => {
+    const base: ActivityRecord = {
+      id: 'op', operationId: 'op', sessionId: 's', turnId: 't', kind: 'operation', status: 'completed',
+    };
+    expect(shouldRefreshWorkspaceForActivity({ ...base, name: 'write_file' })).toBe(true);
+    expect(shouldRefreshWorkspaceForActivity({ ...base, name: 'run_command' })).toBe(true);
+    expect(shouldRefreshWorkspaceForActivity({ ...base, name: 'mcp__disk__write', affectedFiles: ['out.txt'] })).toBe(true);
+    expect(shouldRefreshWorkspaceForActivity({ ...base, name: 'read_file' })).toBe(false);
+    expect(shouldRefreshWorkspaceForActivity({ ...base, name: 'write_file', status: 'running' })).toBe(false);
+  });
+
   it('merges streamed chunks and completion by operation identity without dropping output', () => {
     const started: ActivityRecord = {
       id: 'op-1', operationId: 'op-1', sessionId: 's-1', turnId: 't-1', kind: 'operation',
