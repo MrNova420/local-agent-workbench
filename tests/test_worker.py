@@ -87,6 +87,24 @@ def test_ollama_preload_does_not_replace_a_different_loaded_model(service):
     assert events[-1]["type"] == "ollama_preload_skipped"
 
 
+def test_new_task_cannot_start_while_ollama_preload_is_in_flight(service):
+    entered = threading.Event()
+    release = threading.Event()
+
+    class BlockingRuntime(FakeRuntime):
+        def preload(self, _model, _context, _keep_alive):
+            entered.set()
+            release.wait(2)
+
+    service.runtime = BlockingRuntime()
+    service.handle("ollama_preload", {"model": "model-a:latest", "context": 65536, "keepAlive": "30m"})
+    assert entered.wait(1)
+    with pytest.raises(RuntimeError, match="still preloading"):
+        service.handle("run_start", {"options": {"prompt": "hello"}})
+    release.set()
+    service.ollama_preload_thread.join(2)
+
+
 def test_model_info_exposes_exact_ollama_reasoning_values(service):
     service.runtime.info = {
         "model_info": {"test.context_length": 262144, "general.family": "qwen", "general.parameter_size": "9B", "general.quantization_level": "Q4_K_M"},
