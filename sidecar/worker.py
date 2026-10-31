@@ -118,7 +118,7 @@ class AgentService:
         run_state = state.get("run_state")
         enriched = {**event, "sessionId": state["session_id"], "turnId": controller["turn_id"],
                     "workspace": str(turn.workspace), "timestamp": event.get("at", time.time())}
-        force_save = event.get("type") in {"tool_start", "tool_done", "tool_batch", "plan", "approval_request", "error", "cancelled", "stopped_after_operation"}
+        force_save = event.get("type") in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "approval_request", "error", "cancelled", "stopped_after_operation"}
         with controller["checkpoint_lock"]:
             if isinstance(run_state, dict):
                 if event.get("type") == "phase" and event.get("phase") == "waiting":
@@ -164,7 +164,7 @@ class AgentService:
                             for call in calls:
                                 call_id = str(call.get("id", ""))
                                 result = results.get(call_id, "Not executed: the process was interrupted before this operation started.")
-                                checkpoint.append({"role": "tool", "tool_call_id": call_id, "content": result})
+                                checkpoint.append({"role": "tool", "tool_name": str(call.get("name", "unknown_tool")), "content": result})
                             run_state["safe_messages"] = checkpoint
 
             kind = event.get("type")
@@ -193,6 +193,13 @@ class AgentService:
                 state["plan"] = copy.deepcopy(event.get("items", []))
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
                             "workspace": str(turn.workspace), "kind": "plan", "status": "updated", "items": copy.deepcopy(event.get("items", [])), "timestamp": time.time()}
+                rows.append(activity)
+            elif kind == "context_compacted":
+                activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
+                            "workspace": str(turn.workspace), "kind": "context", "status": "compacted",
+                            "omittedTurns": int(event.get("omittedTurns", 0)), "retainedTurns": int(event.get("retainedTurns", 0)),
+                            "configuredContext": int(event.get("configuredContext", turn.context)),
+                            "inputBudget": int(event.get("inputBudget", 0)), "reason": event.get("reason", ""), "timestamp": time.time()}
                 rows.append(activity)
             elif kind == "error":
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
@@ -314,7 +321,7 @@ class AgentService:
                     mcp_servers.append({"name": name, "status": "configured"})
             return {"tools": tools, "mcpServers": mcp_servers, "integrations": [
                 {"name": "Project files and search", "status": "available", "detail": "Project-scoped list, search, read, create, exact edit, and patch tools."},
-                {"name": "Commands and Git review", "status": "available", "detail": "Approved argv commands, streamed output, Git diff, and explicit results."},
+                {"name": "Commands and Git review", "status": "available", "detail": "Approved direct argv and PowerShell commands with streamed output and Git review. Commands run with host-user permissions; project root is not an OS sandbox."},
                 {"name": "Plans and project skills", "status": "available", "detail": "Structured plan updates and on-demand project/user skills."},
                 {"name": "Local and remote MCP tools", "status": "available", "detail": f"{len(self.mcp.servers)} server(s) configured. Supports local stdio and remote Streamable HTTP; each tool call uses the app approval flow."},
                 {"name": "Browser automation", "status": "planned", "detail": "No first-party browser driver is connected; compatible MCP tools can extend the agent."},
@@ -602,7 +609,7 @@ class AgentService:
                 content = "Uncertain: this operation was interrupted and may have partially or fully completed. Inspect the workspace before retrying."
             else:
                 content = "Not executed: the process was interrupted before this operation started."
-            checkpoint.append({"role": "tool", "tool_call_id": call_id, "content": content})
+            checkpoint.append({"role": "tool", "tool_name": str(call.get("name", "unknown_tool")), "content": content})
         return checkpoint
 
     @staticmethod
