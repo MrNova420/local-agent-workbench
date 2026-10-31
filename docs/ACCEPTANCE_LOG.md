@@ -224,3 +224,5 @@ A second visible check using the rebuilt package confirmed the final sidecar eve
 - Updated the capability directory and parity register to show local/remote MCP support, with remote connection and auth acceptance still pending.
 - Commits: engine `5850163`; app `1ccad36`, capability assertion `07f4c4d`, and documentation `4a2f943`.
 - Tests/build/package/visible acceptance remain queued for the final verification pass. No MCP server was launched and no model was loaded or requested during this change.
+
+- Follow-up hardening commit `ab1df55` expanded environment-only references to cover token/cookie header names as well as Authorization/API-key headers. This code has not yet been run against the final pinned MCP 1.x dependency or a real HTTP MCP server.
