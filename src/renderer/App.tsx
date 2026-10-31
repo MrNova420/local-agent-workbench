@@ -313,7 +313,10 @@ export default function App() {
       if (event.type === 'ollama_import_cancelled') notify('Safetensors import cancelled.', 'warn');
       if (event.type === 'phase') {
         setPhase((current) => nextRunPhase(current, event));
-        if (event.phase === 'generating') setRunMetrics((current) => beginGeneration(recordFirstToken(current, event.elapsed)));
+        if (event.phase === 'reasoning' || event.phase === 'generating') setRunMetrics((current) => {
+          const measured = recordFirstToken(current, event.elapsed);
+          return measured.isGenerating ? measured : beginGeneration(measured);
+        });
       }
       if (event.type === 'text') {
         const chunk = String(event.text || '');
@@ -326,6 +329,7 @@ export default function App() {
       }
       if (event.type === 'thinking') {
         const chunk = String(event.text || '');
+        setRunMetrics((current) => recordStreamedText(current, chunk));
         setMessages((current) => {
           const last = current.at(-1);
           if (last?.role === 'assistant' && last.streaming) return [...current.slice(0, -1), { ...last, thinking: (last.thinking || '') + chunk }];

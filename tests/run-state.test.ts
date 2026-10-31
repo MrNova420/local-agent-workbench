@@ -5,6 +5,7 @@ describe('run status transitions', () => {
   it.each([
     ['Ready', false, 0],
     ['Waiting for first token', true, 1],
+    ['Reasoning', true, 2],
     ['Generating', true, 2],
     ['Finishing turn', true, 3],
     ['Turn complete', false, 4],
@@ -27,7 +28,9 @@ describe('run status transitions', () => {
 
   it('shows first-token wait and generation as separate phases', () => {
     expect(nextRunPhase('Ready', { type: 'phase', phase: 'waiting' })).toBe('Waiting for first token');
+    expect(nextRunPhase('Waiting for first token', { type: 'phase', phase: 'reasoning' })).toBe('Reasoning');
     expect(nextRunPhase('Waiting for first token', { type: 'phase', phase: 'generating' })).toBe('Generating');
+    expect(nextRunPhase('Reasoning', { type: 'phase', phase: 'generating' })).toBe('Generating');
   });
 
   it('holds completion until the turn has been saved and the worker goes idle', () => {
@@ -43,6 +46,7 @@ describe('run status transitions', () => {
 
   it('marks a lost sidecar during generation as interrupted and requiring recovery', () => {
     expect(nextRunPhase('Generating', { type: 'service_exit' })).toBe('Interrupted · recovery required');
+    expect(nextRunPhase('Reasoning', { type: 'service_exit' })).toBe('Interrupted · recovery required');
     expect(nextRunPhase('Ready', { type: 'service_exit' })).toBe('Ready');
   });
 });
