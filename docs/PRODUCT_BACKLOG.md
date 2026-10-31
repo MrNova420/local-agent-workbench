@@ -68,6 +68,20 @@ Keep the existing core activity/status/readability fixes. After the harness acce
 
 Design the local-retention and export controls first. Record provider-exact counts where available, label estimates, capture timestamped active-inference hardware samples, and keep speed ranking separate from coding quality/task success. This remains deferred until the core task/session evidence is reliable.
 
+### B-009: Core small-model workflow reliability and measured runtime optimization
+
+**Source status:** workflow-profile, plan-to-tool continuation, and provider cache telemetry are implemented in source and automated tests pass. The current Electron package has not yet been rebuilt or visibly accepted with these exact changes.
+
+- The Small-model workflow is an explicit setting, captured in run settings/session history. It instructs the agent to work in short sequential tool operations and inspect results. Standard remains available. Neither profile changes model/runtime, context, output cap, reasoning, temperature, approvals, or access.
+- An explicit implementation request that returns only a plan/progress note can receive one follow-up model call requesting structured tool use. Plan-only/read-only work is excluded, and normal approvals still gate actions. Validate for false positives and avoid claiming completion when the follow-up reports a blocker.
+- Capture prompt-evaluation count/duration and provider-reported cached prompt tokens along with generation/load usage; display cache-hit rate only when supported fields are present.
+- Keep provider prompt prefixes stable and benchmark runtime cache flags only via repeatable A/B runs. Current source does not turn on cache-reuse or change Ollama/KV settings.
+- Rebuild from pinned app and engine commits; in one visible packaged instance, test a concise request, an explicit project build that first returns a plan, plan-only request, settings persistence, exact inference options, cache metrics when available, Home navigation, session resume, and project isolation.
+
+### B-010: Copy complete project to Desktop
+
+Create and verify a complete Desktop working copy after the current app/core milestones are committed. Preserve both independent Git histories and the pre-optimization checkpoints. Do not delete the original managed worktrees; first prove the Desktop app and sibling engine clone build from their own checked-out source and packaging paths.
+
 ## Active acceptance blockers
 
 - **Restored run status — verified:** Saved terminal outcome is shown after session resume, and completed turns show a fully completed phase rail. The final packaged build visibly restored session `20d95dd8` with `TURN COMPLETE`, all rail steps complete, formatted response, 13 activity events, and unchanged 65,536/8,192/model-default settings. See `ACCEPTANCE_LOG.md`.
