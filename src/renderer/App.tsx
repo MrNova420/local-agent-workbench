@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import rehypeHighlight from 'rehype-highlight';
-import remarkGfm from 'remark-gfm';
+import { Markdown } from './Markdown';
 import type { AccessMode, ApprovalMode, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, WorkerCommand, WorkerEvent } from '../shared/protocol';
 import { nextRunPhase } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordStreamedText, type RunMetrics } from '../shared/run-metrics';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice } from '../shared/model-controls';
 import { normalizeGpuStats } from '../shared/resource-metrics';
+import { buildModelOrbitSlots } from '../shared/model-orbit';
+import { restoreTranscriptMessages } from '../shared/transcript';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; thinking?: string; streaming?: boolean };
 type Session = {
@@ -79,10 +79,6 @@ function Icon({ name }: { name: 'spark' | 'folder' | 'arrow' | 'close' | 'play' 
 
 function Button({ children, onClick, kind = 'quiet', disabled, title, className = '' }: { children: React.ReactNode; onClick?: () => void; kind?: 'quiet' | 'bright' | 'outline' | 'danger'; disabled?: boolean; title?: string; className?: string }) {
   return <button className={`button button-${kind} ${className}`} onClick={onClick} disabled={disabled} title={title}>{children}</button>;
-}
-
-function Markdown({ content }: { content: string }) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{content}</ReactMarkdown>;
 }
 
 export default function App() {
@@ -182,8 +178,7 @@ export default function App() {
       const loaded = await request<Session>({ command: 'session_resume', sessionId: id });
       const root = loaded.workspace;
       setModel(loaded.model);
-      const rows: ChatMessage[] = loaded.messages.filter((row) => (row.role === 'user' || row.role === 'assistant') && row.content)
-        .map((row) => ({ role: row.role as ChatMessage['role'], content: row.content || '', thinking: typeof row.thinking === 'string' ? row.thinking : undefined }));
+      const rows: ChatMessage[] = restoreTranscriptMessages(loaded.messages);
       setWorkspace(root);
       localStorage.setItem('agent-workspace', root);
       setSession(loaded);
@@ -585,6 +580,7 @@ function Landing({ workspace, sessions, models, modelLabels, model, context, con
   telemetry: TelemetryView;
   onChoose: () => void; onOpen: (root: string) => void; onResume: (id: string) => void; onModel: (name: string) => void; onRefresh: () => void; onLibrary: () => void;
 }) {
+  const modelOrbitSlots = buildModelOrbitSlots(models, modelLabels, model);
   const recentProjects = useMemo(() => [...new Set([workspace, ...sessions.map((row) => row.workspace)].filter(Boolean))].slice(0, 4), [sessions, workspace]);
   return <section className="landing-view">
     <div className="landing-grid">
@@ -597,15 +593,8 @@ function Landing({ workspace, sessions, models, modelLabels, model, context, con
       </div>
       <div className="landing-visual" aria-hidden="true">
         <div className="visual-orbit orbit-a"/><div className="visual-orbit orbit-b"/><div className="visual-orbit orbit-c"/>
-        <div className="model-orbit-slots" aria-label={`${models.length} installed local models`}>
-          {models.map((name, index) => {
-            const angle = (index * 137.508 - 90) * Math.PI / 180;
-            const ring = index % 3;
-            const radius = [34, 41, 47][ring];
-            const x = 50 + Math.cos(angle) * radius;
-            const y = 49 + Math.sin(angle) * radius * 0.68;
-            return <span key={name} className={`model-orbit-dot ring-${ring}${name === model ? ' selected' : ''}`} style={{ left: `${x}%`, top: `${y}%` }} title={modelLabels[name] || shortModel(name)} aria-label={modelLabels[name] || shortModel(name)} />;
-          })}
+        <div className="model-orbit-slots" aria-label={`${modelOrbitSlots.length} installed local models`}>
+          {modelOrbitSlots.map((slot) => <span key={slot.id} className={`model-orbit-dot ring-${slot.ring}${slot.selected ? ' selected' : ''}`} style={{ left: slot.left, top: slot.top }} title={slot.label} aria-label={slot.label} />)}
         </div>
         <div className="visual-core"><span>LOCAL</span><strong>AI</strong><small>WORKS IN YOUR SPACE</small></div>
         <div className="orbit-label label-tl"><i/> PRIVATE BY DEFAULT</div><div className="orbit-label label-br"><i/> NO REMOTE ROUTING</div>
