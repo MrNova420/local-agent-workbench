@@ -93,10 +93,9 @@ Design the local-retention and export controls first. Record provider-exact coun
 - Keep provider prompt prefixes stable and benchmark runtime cache flags only via repeatable A/B runs. Current source does not turn on cache-reuse or change Ollama/KV settings.
 - From the rebuilt package, verify bundled-worker protocol and UI toggle persistence, then in one visible packaged instance test a concise request, an explicit project build that first returns a plan, plan-only request, settings persistence, exact inference options, cache metrics when available, Home navigation, session resume, and project isolation.
 
-### B-010: Desktop copy follow-through — source copy verified; public repository setup pending
+### B-010: Public beta repository setup — prepared, license and publish still pending
 
-The complete app and engine have independent Desktop Git clones with their own history; the app packaging path and worker ping have been verified from the Desktop app clone. Preserve original worktrees/checkpoints. Public GitHub creation/push via GitHub Desktop remains pending; inspect repository contents, credentials, license, and remote state before publishing.
-
+The app and shared engine have independent Desktop Git repositories with separate histories. On 2026-10-31, source tests passed, Windows x64 packaging succeeded, the bundled worker passed its JSONL startup/ping/shutdown smoke, and one visible packaged app restored a canceled disposable session and its five activity records. Public repo name availability and GitHub authentication were checked; no remote exists and neither repo has been published. README, CI, security/contribution guidance, beta changelog, paired core revision, and public-data cleanup are prepared. The user must select a license before adding license files; then publish both repos through GitHub Desktop, verify Actions, and create a prerelease only after the visible coding/cancel acceptance gate.
 ### B-011: Provider-accurate live KV-cache telemetry
 
 **Priority:** High; telemetry is implemented in source in both runtime adapters, with end-to-end packaged evidence pending.

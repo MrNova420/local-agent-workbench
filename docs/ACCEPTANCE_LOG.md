@@ -6,8 +6,8 @@
 - Electron renderer: 42 Vitest passed; sidecar adapter: 35 pytest passed with the same upstream warning; TypeScript typecheck passed.
 - Built isolated package `out-core-acceptance-2026-10-31-small-model-cache` from the current app and engine source. The bundled worker answered JSONL `ping` with `ready` / version `0.1.0`.
 - The existing older app instance was left open, so this package was not launched for visual acceptance. The new Home button, profile persistence, plan-to-tool continuation, and cache display still need a visible test in one app instance.
-- Copied both full Git repositories to `C:\Users\kayde\Desktop\Local Agent Workbench\` as sibling `electron-agent-workbench` and `local-9b-dev-app` clones. Their pre-optimization checkpoints (`1b1b03b`, `7b21211`) were recreated as local branches; source worktrees were retained. The Desktop clone passed 42 renderer tests, 35 sidecar tests, 114 engine tests, and typecheck.
-- Built `C:\Users\kayde\Desktop\Local Agent Workbench\electron-agent-workbench\out\Local Agent Workbench-win32-x64` from the Desktop clones using sibling-engine discovery (no `LOCAL_AGENT_CORE_PATH` override); its bundled worker answered the JSONL `ping` successfully. No new app window was opened.
+- Copied both full Git repositories to `%USERPROFILE%\Desktop\Local Agent Workbench\` as sibling `electron-agent-workbench` and `local-9b-dev-app` clones. Their pre-optimization checkpoints (`1b1b03b`, `7b21211`) were recreated as local branches; source worktrees were retained. The Desktop clone passed 42 renderer tests, 35 sidecar tests, 114 engine tests, and typecheck.
+- Built `%USERPROFILE%\Desktop\Local Agent Workbench\electron-agent-workbench\out\Local Agent Workbench-win32-x64` from the Desktop clones using sibling-engine discovery (no `LOCAL_AGENT_CORE_PATH` override); its bundled worker answered the JSONL `ping` successfully. No new app window was opened.
 
 Date: 2026-10-30  
 Build: Windows x64 Electron Forge package and Squirrel installer  
@@ -232,3 +232,23 @@ A second visible check using the rebuilt package confirmed the final sidecar eve
 Source implementation batch committed; the current source gates passed (engine: 132 pytest; app: 43 Vitest and 38 sidecar pytest; TypeScript typecheck passed). One existing Starlette pending-deprecation warning remains. This is source-level evidence only: package rebuild, visible acceptance, and live-model checks are still open. No inference/model was started for this checkpoint.
 
 Resume order: (1) inspect both repo status/logs and this readiness note; (2) run source suites/typecheck on the committed tree; (3) build and inspect one Windows package/sidecar; (4) run the single-instance disposable-project UI workflow including approvals, file/diff review, test output, cancel choices, hide/reopen, session restore, and project isolation; (5) only then perform the previously approved exact-tag model run, preserving any model already loaded and leaving user token/reasoning settings untouched. Continue core parity gaps in `CORE_HARNESS_READINESS.md`; keep UI polish, analytics/KV display expansion, and orbit interactions deferred until the core gates pass.
+
+
+
+## 2026-10-31 packaged build and resumed-session inspection
+
+- `npm run make` completed on Windows x64. It produced `out/make/squirrel.windows/x64/Local Agent Workbench-0.1.0 Setup.exe` (208,450,048 bytes), `LocalAgentWorkbench-0.1.0-full.nupkg` (207,673,440 bytes), `RELEASES`, and `out/make/zip/win32/x64/Local Agent Workbench-win32-x64-0.1.0.zip` (211,604,275 bytes). PyInstaller emitted optional hidden-import warnings for unavailable mypyc/importlib_resources modules; the worker build and Forge targets succeeded.
+- The bundled worker passed its actual handshake: startup `ready`/0.1.0, JSONL ping response `ok: true`, shutdown response `ok: true`, process exit 0. An initial smoke script incorrectly expected a request ID before the startup line; that test-driver assumption failed, and the corrected handshake passed. No inference was sent by either smoke attempt.
+- Launched one packaged app window after confirming no Workbench process was running. Home reported Ollama reachable, 20 installed models/markers, the selected mradermacher Ornith tag, 262,144 active context, two workspace-history entries, and one saved session.
+- Opened the existing disposable workspace at `%USERPROFILE%\Desktop\Local Agent Workbench\acceptance\website-flow-2026-10-31` and resumed canceled session `b3329511`. The UI showed its project path, selected model, 262,144 context, 4,096 output, reasoning at model default, canceled status, and five persisted activity records (three list-files outcomes and two command outcomes). No new user or assistant content was generated.
+- The Live Work Sheet's Inspect Changes control remained separated from the task-signal text. Scrolling the sheet brought all five Activity Trace cards into view, followed by resource readings. The trace is below the initial viewport, so users must scroll the sheet to reach it.
+- No inference or settings change occurred. The app remains open as one Workbench instance for the user's inspection.
+- This is packaging/protocol plus partial visible restoration evidence. It does not cover a fresh model-backed coding task, active cancel choices, full project isolation, or live-model performance/quality. Those gates remain open.
+
+## 2026-10-31 beta repository preparation
+
+- The app README now identifies unstable-beta status, key capabilities, security boundaries, build steps, paired engine revision, and exact evidence/limitations. Added contribution and private-vulnerability reporting guidance, an initial changelog, pull-request and bug templates, and a Windows source-check workflow.
+- The engine README now describes its role as the independently versioned Python dependency; added a Windows pytest workflow.
+- Paired engine source revision recorded in `core-revision.txt` as `3210b30503cfe529df47997fac678098108dd066`.
+- Removed the tracked host-specific `model-inspection.json` from the engine's current tree and added it to `.gitignore`; the local file remains on disk. Redacted the current documentation's Windows profile path to `%USERPROFILE%` for public-facing docs.
+- GitHub account authentication and repository-name availability were checked. No remote repository has been created or pushed yet. The license choice is still awaiting the user's selection; do not describe the public repo as license-granted/open-source until that file is added.

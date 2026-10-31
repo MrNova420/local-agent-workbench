@@ -1,0 +1,39 @@
+name: Windows source checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: MrNova420/local-agent-workbench-core
+          ref: 3210b30503cfe529df47997fac678098108dd066
+          path: engine
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: sidecar/requirements.txt
+      - name: Install Python dependencies
+        run: python -m pip install -r engine/requirements.txt -r sidecar/requirements.txt pytest
+      - name: Install Node dependencies
+        run: npm ci
+      - name: Typecheck desktop app
+        run: npm run typecheck
+      - name: Test desktop and sidecar
+        run: npm test
+        env:
+          LOCAL_AGENT_CORE_PATH: ${{ github.workspace }}/engine
+      - name: Test shared agent engine
+        run: python -m pytest -q
+        working-directory: engine

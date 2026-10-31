@@ -1,0 +1,36 @@
+name: Bug report
+about: Report a reproducible defect in this unstable beta
+labels: bug
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials, private code, model files, or private session data. Use the Security tab for exploitable vulnerabilities.
+  - type: input
+    id: version
+    attributes:
+      label: App version / commit
+      placeholder: 0.1.0-beta.1 or commit hash
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Provider/runtime and model identifier
+      placeholder: Ollama + exact model tag, llama.cpp + GGUF file, or not applicable
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs and evidence tier
+      description: Identify whether this is source tests, packaged UI, runtime, or live-model evidence. Remove paths and sensitive project contents.

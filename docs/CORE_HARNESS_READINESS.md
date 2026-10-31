@@ -275,3 +275,10 @@ This checkpoint closes the current source implementation batch. It does not clai
 6. Continue the parity backlog: granular persistent tool/path/command policies with deny precedence; Windows OS containment; first-party LSP/browser/search/question/custom tools; robust workspace/session recovery and history; explicit task-specific verification contracts; provider capability and overflow handling; packaged MCP auth/failure/cleanup acceptance. UI polish, analytics/KV panel expansion, and orbit interactions remain queued behind core reliability.
 
 Resume from the current two repository commits and this checklist. Do not treat the unrun package, visible, or live-model gates as passed.
+
+### Package and partial visible verification update (2026-10-31)
+
+- Fresh Windows x64 `npm run make` completed. It generated the Squirrel Setup executable, full nupkg, RELEASES manifest, and ZIP. The bundled worker responded to startup, ping, and shutdown and exited 0; no inference request was sent.
+- The packaged app Home visibly reported 20 installed models/markers, reachable Ollama, the selected exact mradermacher Ornith tag, 262,144 active context, and recent workspace history. A disposable workspace and its canceled session were opened. The saved context/output/reasoning, workspace path, canceled state, and five activity outcomes were displayed.
+- Activity Trace was reachable by scrolling the Live Work Sheet and showed all five persisted cards; `Inspect changes` stayed in its own top header area. Activity is below the initial viewport, which is a discoverability tradeoff to retain for follow-up design review.
+- This does not prove a fresh model response, file-write approval, command execution, active cancellation, crash recovery, llama.cpp/Hugging Face flow, or MCP against a real server. No token or reasoning setting was altered. No model was loaded, stopped, or unloaded by the UI check.
