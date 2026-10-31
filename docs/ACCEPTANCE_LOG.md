@@ -216,3 +216,11 @@ A second visible check using the rebuilt package confirmed the final sidecar eve
 - Added project-root-only `git_status` and `git_log` tools and fixed the agent Git inspection path so a child workspace cannot disclose a parent repository's diff (`b8cc63f`).
 - Added explicit warnings that approved or auto-approved commands/MCP run with Windows account permissions and may access beyond the selected project (`13b146f`). This is a disclosure improvement, not containment.
 - New code changes have not yet been tested, typechecked, packaged, or visibly exercised. Those checks remain queued for the final verification pass, per the current work sequence. No model request or inference settings were changed.
+
+## 2026-10-31 remote MCP and tool-boundary implementation
+
+- Added remote MCP Streamable HTTP alongside stdio, with HTTPS required except loopback, redirects explicitly disabled in the HTTP client, environment-reference resolution for credentials, configurable connection/read timeouts, and per-tool approval retained. The config editor documents `${ENV:NAME}` usage. The stdio child now receives the SDK's default allow-listed environment plus only explicitly configured variables; the whole parent process environment is no longer forwarded.
+- Updated MCP dependencies to patched v1.30+ and below v2. This avoids the official SDK's affected HTTP redirect behavior (cross-origin redirects could forward custom headers in earlier versions). Direct credential literals in sensitive remote headers are rejected; use `${ENV:VARIABLE_NAME}`.
+- Updated the capability directory and parity register to show local/remote MCP support, with remote connection and auth acceptance still pending.
+- Commits: engine `5850163`; app `1ccad36`, then capability assertion `f06f5d8`.
+- Tests/build/package/visible acceptance remain queued for the final verification pass. No MCP server was launched and no model was loaded or requested during this change.
