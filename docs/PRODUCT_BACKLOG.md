@@ -48,13 +48,13 @@ The selected-value run is documented in [ACCEPTANCE_LOG.md](ACCEPTANCE_LOG.md). 
 
 ### B-005: Verify adaptive model markers and persistent transcript appearance
 
-**Priority:** High; source and package checks pass, with visible acceptance still pending.
+**Status:** Adaptive markers and persisted Markdown rendering passed visible checks in the final Windows package. The exact user-reported JSON-looking response was not reproduced in the disposable session, so keep that report open until its affected response/session is identified.
 
 - Show exactly one orbit marker for each installed local model; show none when the catalog is empty. Give the selected model a distinct marker and distribute larger catalogs cleanly over the existing rings.
 - Preserve Markdown structure and syntax highlighting when a saved session is resumed and after the app is relaunched. Keep user/model message content as the original Markdown string.
 - Run the visible check against one packaged instance after the user is finished using the desktop. Reopen a saved response containing headings, lists, and fenced code, then confirm it keeps its visual rendering after both session resume and app relaunch. Do not call the reported JSON regression fixed until reproduced or ruled out in that exact flow.
 
-Orbit marker generation and styling are implemented; tests cover 0, 3, and 27 installed models. Transcript restoration now has a renderer test for Markdown structure and highlighted code. The latest package includes the orbit styles and one Highlight.js theme stylesheet. Visible acceptance remains pending because the existing app window was minimized while the desktop was in use; it was not raised or replaced.
+Orbit marker generation and styling are implemented; tests cover 0, 3, and 27 installed models. The final package was visibly checked with 20 installed models: 20 markers appeared, the active model was distinct, and markers did not overlap the repositioned labels. After closing and relaunching the package, a saved session reopened with its Markdown list and inline-code styling intact. Transcript restoration also has a renderer test for headings, lists, and syntax-highlighted code. The exact report remains unverified because the inspected disposable session does not contain JSON-shaped assistant content. The plan and activity trace panels still reinitialize empty on resume and remain a separate persistence gap.
 
 ## Active acceptance blockers
 
