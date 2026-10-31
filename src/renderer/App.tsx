@@ -597,6 +597,16 @@ function Landing({ workspace, sessions, models, modelLabels, model, context, con
       </div>
       <div className="landing-visual" aria-hidden="true">
         <div className="visual-orbit orbit-a"/><div className="visual-orbit orbit-b"/><div className="visual-orbit orbit-c"/>
+        <div className="model-orbit-slots" aria-label={`${models.length} installed local models`}>
+          {models.map((name, index) => {
+            const angle = (index * 137.508 - 90) * Math.PI / 180;
+            const ring = index % 3;
+            const radius = [34, 41, 47][ring];
+            const x = 50 + Math.cos(angle) * radius;
+            const y = 49 + Math.sin(angle) * radius * 0.68;
+            return <span key={name} className={`model-orbit-dot ring-${ring}${name === model ? ' selected' : ''}`} style={{ left: `${x}%`, top: `${y}%` }} title={modelLabels[name] || shortModel(name)} aria-label={modelLabels[name] || shortModel(name)} />;
+          })}
+        </div>
         <div className="visual-core"><span>LOCAL</span><strong>AI</strong><small>WORKS IN YOUR SPACE</small></div>
         <div className="orbit-label label-tl"><i/> PRIVATE BY DEFAULT</div><div className="orbit-label label-br"><i/> NO REMOTE ROUTING</div>
         <div className="visual-coordinate">[LOCATION REMOVED]<br/>[LOCATION REMOVED]</div>
