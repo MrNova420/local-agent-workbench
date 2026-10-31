@@ -378,6 +378,9 @@ export default function App() {
       if (event.type === 'complete') {
         setApproval(null);
         setRunning(false); setPhase((current) => nextRunPhase(current, event));
+        if (event.implementationRequested && event.projectChanged && event.verification?.status !== 'check_ran') {
+          notify('Changes were made, but no successful post-change inspection or check was recorded. Treat this result as unverified.', 'warn');
+        }
         setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
         setRunMetrics((current) => endGeneration(current));
         setMessages((current) => current.map((row) => ({ ...row, streaming: false })));

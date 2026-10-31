@@ -166,6 +166,10 @@ class AgentService:
                                 result = results.get(call_id, "Not executed: the process was interrupted before this operation started.")
                                 checkpoint.append({"role": "tool", "tool_name": str(call.get("name", "unknown_tool")), "content": result})
                             run_state["safe_messages"] = checkpoint
+                elif event.get("type") == "complete":
+                    run_state["implementation_requested"] = bool(event.get("implementationRequested", False))
+                    run_state["project_changed"] = bool(event.get("projectChanged", False))
+                    run_state["verification"] = copy.deepcopy(event.get("verification", {"status": "unknown", "steps": []}))
 
             kind = event.get("type")
             activity: dict[str, Any] | None = None
