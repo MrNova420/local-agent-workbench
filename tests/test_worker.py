@@ -73,7 +73,7 @@ def test_tool_catalog_lists_real_tools_and_unimplemented_integrations(service):
     assert {"list_files", "search_files", "read_file", "write_file", "edit_file", "apply_patch", "run_command"} <= names
     assert all(item["source"] == "built-in" for item in catalog["tools"])
     integrations = {item["name"]: item for item in catalog["integrations"]}
-    assert integrations["Local MCP tools"]["status"] == "available"
+    assert integrations["Local and remote MCP tools"]["status"] == "available"
     assert integrations["Browser automation"]["status"] == "planned"
     assert integrations["LSP diagnostics and navigation"]["status"] == "planned"
 
