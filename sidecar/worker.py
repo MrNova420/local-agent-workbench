@@ -589,7 +589,7 @@ class AgentService:
 
             engine = AgentEngine(
                 turn.workspace, turn.model, turn.context, turn.access, turn.approval_mode,
-                relay, approve, runtime_options={**turn.runtime_options, "keep_alive": state.get("keep_alive", "30m")},
+                relay, approve, runtime_options=turn.runtime_options,
                 max_tokens=turn.max_tokens, temperature=turn.temperature,
                 project_instructions=knowledge.instructions(), mcp_tools=mcp_tools,
                 mcp_call=lambda name, args: self.mcp.run(self.mcp.call(name, args), cancel_event=controller["cancel"]),

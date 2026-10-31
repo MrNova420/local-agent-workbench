@@ -140,6 +140,42 @@ def test_cancel_interrupts_current_engine_without_unloading_ollama(service):
     assert service.runtime.cancelled is False
 
 
+def test_keep_alive_is_not_passed_as_an_ollama_generation_option(service, tmp_path, monkeypatch):
+    captured = {}
+    engines = []
+
+    class CapturingEngine:
+        def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
+            captured.update(kwargs)
+            self.state = {}
+            self.runtime = object()
+            engines.append(self)
+
+        def run(self, prompt, messages):
+            messages.append({"role": "user", "content": prompt})
+            return messages
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(worker, "AgentEngine", CapturingEngine)
+    project = tmp_path / "project"
+    project.mkdir()
+    options = {
+        "workspace": str(project), "prompt": "hello", "model": "model-a:latest",
+        "context": 4096, "maxTokens": 128, "temperature": 0.2,
+        "access": "ask", "approvalMode": "per-action", "keepAlive": "3h",
+    }
+    service.handle("run_start", {"options": options})
+    controller = service.active
+    assert controller is not None
+    controller["thread"].join(3)
+
+    assert "keep_alive" not in captured["runtime_options"]
+    assert captured["runtime_options"] == {}
+    assert engines[0].state["keep_alive"] == "3h"
+
+
 def test_approval_reply_signals_only_matching_pending_action(service):
     condition = threading.Condition()
     result = {"done": False, "approved": False}

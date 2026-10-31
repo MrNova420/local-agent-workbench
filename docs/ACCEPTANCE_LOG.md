@@ -55,3 +55,11 @@ A second visible check using the rebuilt package confirmed the final sidecar eve
 - The earlier visible Ollama acceptance above is historical evidence for the previous app build and does not establish the expanded provider workflow.
 - Updated Windows x64 package build: `npx electron-forge make` with `LOCAL_AGENT_OUT_DIR=out-acceptance` completed successfully. It produced the packaged app, Squirrel distributable, and ZIP without touching the older running app in `out/`. The first attempt using default `out/` correctly failed with `EBUSY` because that older instance held the resources directory open.
 - The installed endpoint check to `127.0.0.1:11434/api/ps` timed out; the current Ollama process/API state could not be verified from this session. No inference was started by the new package.
+
+## 2026-10-31 runtime payload correction
+
+- Read-only review of the fresh packaged-app run confirmed the exact mradermacher tag loaded at `context_length: 262144`. Ollama's server log showed `keep_alive` being sent as an invalid generation option because the worker copied it into both the top-level request setting and `options`.
+- Removed the duplicate `keep_alive` from generation options while preserving the session's selected warm-model duration in its supported top-level field.
+- Added a regression test. It failed before the fix because `keep_alive` was present in `runtime_options`, then passed after the fix.
+- Verification: `npm run typecheck` passed; `npm test` passed (12 Vitest, 21 Pytest). Starlette reports one existing `python_multipart` pending-deprecation warning.
+- This warning did not establish the cause of the earlier live turn ending as `RUN FAILED`. The model completed the HTTP request in 34.75 seconds after producing streamed text, while the saved session did not retain an assistant message. A fresh visible run with durable error details is still required. The 262,144 context and model reasoning default have not been changed.
