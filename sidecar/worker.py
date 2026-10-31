@@ -169,6 +169,7 @@ class AgentService:
                 elif event.get("type") == "complete":
                     run_state["implementation_requested"] = bool(event.get("implementationRequested", False))
                     run_state["project_changed"] = bool(event.get("projectChanged", False))
+                    run_state["action_denied"] = bool(event.get("actionDenied", False))
                     run_state["verification"] = copy.deepcopy(event.get("verification", {"status": "unknown", "steps": []}))
 
             kind = event.get("type")
