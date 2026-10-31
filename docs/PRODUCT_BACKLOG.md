@@ -95,7 +95,7 @@ Design the local-retention and export controls first. Record provider-exact coun
 
 ### B-010: Public beta repository setup — prepared, license and publish still pending
 
-The app and shared engine have independent Desktop Git repositories with separate histories. On 2026-10-31, source tests passed, Windows x64 packaging succeeded, the bundled worker passed its JSONL startup/ping/shutdown smoke, and one visible packaged app restored a canceled disposable session and its five activity records. Public repo name availability and GitHub authentication were checked; no remote exists and neither repo has been published. MIT license files and metadata are now committed; README, CI, security/contribution guidance, beta changelog, paired core revision, and current-tree privacy cleanup are prepared. A targeted all-history credential-pattern scan found no matches; the engine's removed model-inspection file and its machine-local Ollama blob path remain in prior history to preserve commits and are disclosed in `ACCEPTANCE_LOG.md`. Both repos are registered in GitHub Desktop on clean `main` branches. Publish both repos through GitHub Desktop, verify Actions, and create a prerelease only after the visible coding/cancel acceptance gate.
+The app and shared engine have independent Desktop Git repositories with separate histories. On 2026-10-31, source tests passed, Windows x64 `0.1.0-beta.1` packaging succeeded, the bundled worker passed its JSONL startup/ping/shutdown smoke, and one visible packaged app restored a canceled disposable session and its five activity records. The MIT-licensed engine repo has been published publicly; the desktop repo remains local pending its GitHub Desktop publish. A targeted all-history credential-pattern scan found no matches; the engine's removed model-inspection file and its machine-local Ollama blob path remain in prior history to preserve commits and are disclosed in `ACCEPTANCE_LOG.md`. Engine Actions could not start due GitHub's account-level billing lock; local tests passed. Production npm dependency audit is clean, while 18 moderate findings remain in the development Forge chain; npm proposes a major downgrade, so compatibility review is queued. Both repos are registered in GitHub Desktop on `main`. Publish the app, resolve CI account access, and create a prerelease only after the visible coding/cancel acceptance gate.
 ### B-011: Provider-accurate live KV-cache telemetry
 
 **Priority:** High; telemetry is implemented in source in both runtime adapters, with end-to-end packaged evidence pending.
@@ -118,6 +118,10 @@ The app and shared engine have independent Desktop Git repositories with separat
 - Compare Microsoft's AppContainer/Windows sandbox APIs with the app's Python and MCP process model, then implement and fault-test a real opt-in contained executor before broad unattended command permission. Preserve an explicit host-execution mode for tools that require full developer-machine access.
 - Keep browser, LSP, debugger, web access, remote MCP, computer control, and multimodal support as distinct adapters with declared prerequisites and per-tool permission rules; MCP extensibility does not mean every configured service is trustworthy or available.
 - Maintain a parity register with upstream references, local equivalent, status, evidence tier, and incompatibilities for every Codex/OpenCode user-facing capability.
+
+### B-013: Triage Electron Forge development dependency advisories
+
+The 2026-10-31 full `npm audit` reports 18 moderate findings in development dependencies, while `npm audit --omit=dev` reports zero. npm's suggested remediation downgrades Forge 8 to Forge 7.11.x, a major change. Check upstream advisory details and compatibility with the current Vite/Electron stack; then upgrade or override only with typecheck, tests, and a fresh Windows package gate. Do not apply the breaking downgrade blindly.
 
 ## Active acceptance blockers
 
