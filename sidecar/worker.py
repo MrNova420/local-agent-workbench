@@ -874,7 +874,12 @@ class AgentService:
                 self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
             except Exception as save_error:
                 self.emit({"type": "error", "error": f"{exc}; session save failed: {save_error}"})
-            self.emit({"type": "error", "error": f"{type(exc).__name__}: {exc}", "sessionId": state["session_id"]})
+            error_event = {"type": "error", "error": f"{type(exc).__name__}: {exc}", "sessionId": state["session_id"]}
+            try:
+                self._publish_run_event(controller, turn, error_event)
+            except Exception:
+                pass
+            self.emit(error_event)
         finally:
             with self.active_lock:
                 if self.active is controller:

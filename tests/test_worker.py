@@ -380,6 +380,37 @@ def test_engine_failure_is_saved_with_the_session(service, tmp_path, monkeypatch
     assert saved["run_state"]["status"] == "failed"
 
 
+def test_worker_exception_is_added_to_persisted_activity(service, tmp_path, monkeypatch):
+    class RaisingEngine:
+        def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
+            self.state = {}
+            self.runtime = object()
+
+        def run(self, prompt, messages):
+            raise RuntimeError("Synthetic worker exception")
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(worker, "AgentEngine", RaisingEngine)
+    project = tmp_path / "raising-project"
+    project.mkdir()
+    options = {"workspace": str(project), "prompt": "hello", "model": "model-a:latest",
+               "context": 4096, "maxTokens": 128, "temperature": 0.2,
+               "access": "ask", "approvalMode": "per-action"}
+    service.handle("run_start", {"options": options})
+    controller = service.active
+    assert controller is not None
+    session_id = controller["session"]["session_id"]
+    controller["thread"].join(3)
+
+    saved = service.sessions.load(session_id)
+    errors = [item for item in saved["activity_events"] if item["kind"] == "error"]
+    assert len(errors) == 1
+    assert errors[0]["status"] == "failed"
+    assert errors[0]["result"] == "RuntimeError: Synthetic worker exception"
+
+
 def test_protocol_escapes_unicode_for_legacy_windows_stdout(service, monkeypatch):
     buffer = io.BytesIO()
     stdout = io.TextIOWrapper(buffer, encoding="cp1252", write_through=True)
