@@ -1,5 +1,8 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { applyActivityEvent, type ActivityRecord } from '../src/shared/activity';
+import { ActivityFeed } from '../src/renderer/ActivityFeed';
 
 describe('durable live activity state', () => {
   it('merges streamed chunks and completion by operation identity without dropping output', () => {
@@ -30,5 +33,32 @@ describe('durable live activity state', () => {
     });
     expect(updated.map((row) => row.id)).toEqual(['old', 'current']);
     expect(updated[1].result).toBe('ok');
+  });
+
+  it('renders compact, sidebar-only, and inline modes from the same activity records', () => {
+    const record: ActivityRecord = {
+      id: 'op-1', sessionId: 's-1', turnId: 't-1', kind: 'operation', name: 'run_command',
+      status: 'completed', result: 'done',
+    };
+    const compact = renderToStaticMarkup(createElement(ActivityFeed, { entries: [record], mode: 'compact', surface: 'chat' }));
+    const sidebar = renderToStaticMarkup(createElement(ActivityFeed, { entries: [record], mode: 'sidebar', surface: 'chat' }));
+    const inline = renderToStaticMarkup(createElement(ActivityFeed, { entries: [record], mode: 'inline', surface: 'chat' }));
+    const trace = renderToStaticMarkup(createElement(ActivityFeed, { entries: [record], mode: 'sidebar', surface: 'sidebar' }));
+
+    expect(compact).toContain('run command');
+    expect(compact).not.toMatch(/<details[^>]*open/);
+    expect(sidebar).toBe('');
+    expect(inline).toMatch(/<details[^>]*open/);
+    expect(trace).toContain('run command');
+  });
+
+  it('progressively reveals long output without discarding the remainder', () => {
+    const record: ActivityRecord = {
+      id: 'op-large', sessionId: 's-1', turnId: 't-1', kind: 'operation', name: 'run_command',
+      status: 'completed', result: 'x'.repeat(40_000),
+    };
+    const markup = renderToStaticMarkup(createElement(ActivityFeed, { entries: [record], mode: 'inline', surface: 'chat' }));
+    expect(markup).toContain('Show next 16,000 characters');
+    expect(markup).toContain('24,000 remaining');
   });
 });

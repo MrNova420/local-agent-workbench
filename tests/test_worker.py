@@ -106,6 +106,53 @@ def test_workspace_history_and_session_conflict_resolution(service, tmp_path):
     assert resolved["messages"][-1]["content"] == "project-only update"
 
 
+def test_activity_mode_is_saved_in_both_session_copies_and_restored(service, tmp_path):
+    project = tmp_path / "activity-mode-project"
+    project.mkdir()
+    session = service.handle("session_new", {"workspace": str(project), "model": "model-a:latest",
+                                              "context": 262144, "activityMode": "inline"})
+    assert session["activity_mode"] == "inline"
+
+    service.handle("session_activity_mode", {"sessionId": session["session_id"], "activityMode": "sidebar"})
+    loaded = service.handle("session_resume", {"sessionId": session["session_id"], "workspace": str(project)})
+    project_copy = json.loads((project / ".agent-workbench" / "sessions" / f"{session['session_id']}.json").read_text(encoding="utf-8"))
+
+    assert loaded["activity_mode"] == "sidebar"
+    assert project_copy["activity_mode"] == "sidebar"
+
+
+def test_interrupted_recovery_retry_warns_and_restore_does_not_run(service, tmp_path):
+    project = tmp_path / "recovery-choice-project"
+    project.mkdir()
+    session = service.sessions.create(str(project), "model-a:latest", 262144)
+    session["run_state"] = {"status": "interrupted", "turn_id": "turn-old", "safe_messages": session["messages"],
+                            "uncertain_operation": {"name": "write_file", "arguments": {"path": "x.py"}}}
+    service.sessions.save(session)
+
+    retry = service.handle("session_recover", {"sessionId": session["session_id"], "action": "retry"})
+    assert retry["action"] == "retry"
+    assert "may already have partially or fully completed" in retry["prompt"]
+    assert "inspect the current workspace" in retry["prompt"]
+
+    session["run_state"]["status"] = "interrupted"
+    service.sessions.save(session)
+    restored = service.handle("session_recover", {"sessionId": session["session_id"], "action": "restore"})
+    assert restored["action"] == "restore"
+    assert restored["state"]["run_state"]["status"] == "restored"
+
+
+def test_stop_after_operation_command_marks_engine(service):
+    class Engine:
+        requested = False
+        def finish_after_operation(self):
+            self.requested = True
+
+    engine = Engine()
+    service.active = {"engine": engine}
+    assert service.handle("run_stop_after_operation", {}) == {"requested": True}
+    assert engine.requested is True
+
+
 def test_activity_events_checkpoint_complete_results_and_unstarted_calls(service, tmp_path, monkeypatch):
     project = tmp_path / "checkpoint-project"
     project.mkdir()
