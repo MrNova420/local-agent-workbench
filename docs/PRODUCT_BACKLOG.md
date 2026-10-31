@@ -26,12 +26,14 @@ This is the queue for accepted follow-up work that is not part of the current re
 
 ### B-003: More useful Live Work Sheet resource and generation telemetry
 
-**Priority:** High; coordinate with the Live Work Sheet layout already queued in `MODEL_RUNTIME_EXPANSION.md`.
+**Priority:** High; implementation is in the current build. Packaged visual verification remains pending.
 
 - Present live input/output tokens and tokens/second alongside elapsed time and waiting/generating phase.
 - Add CPU percentage, system RAM used/total, GPU percentage, VRAM used/total, and GPU power when available; show unavailable status cleanly for unsupported hardware.
 - Keep the most actionable status readable at small window sizes, move `Inspect changes` near the top, and prevent overlap with message text or controls.
 - Base live throughput on streamed output and clearly replace estimates with provider-exact final usage.
+
+**Implemented:** The bottom ribbon and Live Work Sheet now expose CPU, system RAM, GPU utilization, VRAM used/total, GPU power, and agent-service CPU/RAM. Unsupported readings render as unavailable. Python telemetry parses structured `nvidia-smi` values; unit tests cover available and empty probe responses. The work sheet uses compact responsive tiles, retains live token/s output, and keeps `Inspect changes` in the sheet header. Rebuild and visually verify the packaged app before calling this complete.
 
 ### B-004: Measure partial GPU offload during active inference
 
@@ -47,3 +49,4 @@ This is the queue for accepted follow-up work that is not part of the current re
 - The corrected packaged-sidecar coding run created `calculator.py` and `test_calculator.py` after per-action approvals. Its approved `python -m unittest -v` command timed out in the prior app run after 120 seconds, while the same fixture's direct invocation passed all five tests. Follow-up source-worker and correctly frozen-worker probes both ran the exact command successfully in 0.25 seconds. The discrepancy is not reproduced outside the actual Electron acceptance flow; verify it in the single-instance visible workflow before calling the command gate passed.
 - One manually written test driver also stopped an in-progress run at a 20-minute cap. That cap was not a product limit; it was an agent test-wrapper mistake and must not be reused. Model-generation observation must remain open-ended as approved.
 - The new package still needs visible, one-instance acceptance in a disposable project, including hello, coding task, approval modal, test output, cancel, save, resume, project-boundary checks, and visible verification of the selected token controls. Close/avoid the older package before launching the latest build to prevent duplicate windows.
+- Rebuild the package to include structured GPU telemetry, then visually check the footer and Live Work Sheet values, layout, unavailable readings, and live update behavior.

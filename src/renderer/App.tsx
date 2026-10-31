@@ -6,6 +6,7 @@ import type { AccessMode, ApprovalMode, ModelCatalog, ModelInfo, ProjectFile, Ru
 import { nextRunPhase } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordStreamedText, type RunMetrics } from '../shared/run-metrics';
 import { buildModelLabels, buildTokenPresets, normalizeReasoningChoice } from '../shared/model-controls';
+import { normalizeGpuStats } from '../shared/resource-metrics';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; thinking?: string; streaming?: boolean };
 type Session = {
@@ -29,6 +30,11 @@ type Session = {
 type TraceRow = { id: string; title: string; description?: string; kind: 'tool' | 'status' | 'plan' | 'error'; time: number };
 type Approval = { actionId: string; name: string; arguments: unknown; workspace: string; mode: ApprovalMode };
 type Notice = { tone: 'good' | 'warn' | 'bad'; text: string };
+type TelemetryView = {
+  cpu: number | null; ram: string; gpu: string; gpuUtil: number | null;
+  vramUsed: number | null; vramTotal: number | null; vramPercent: number | null; gpuPower: number | null;
+  loadedContext: number | null; contextMismatch: boolean; serviceRss: string; serviceCpu: number | null;
+};
 type AppliedSettings = { model: string; context: number; maxOutput: number; reasoning: boolean | string | null };
 
 const initialOptions = {
@@ -350,13 +356,19 @@ export default function App() {
     const loaded = Array.isArray(snapshot.loaded) ? snapshot.loaded as Array<Record<string, unknown>> : [];
     const active = loaded.find((row) => row.name === model);
     const llama = snapshot.llama && typeof snapshot.llama === 'object' ? snapshot.llama as Record<string, unknown> : {};
+    const gpuStats = normalizeGpuStats(snapshot.gpu_stats);
     const llamaMatches = model.startsWith('gguf::') && llama.running === true && String(llama.model || '') === model.slice('gguf::'.length);
     const llamaContext = llamaMatches && typeof llama.effective_context === 'number' ? llama.effective_context : null;
     return {
       cpu: typeof snapshot.cpu_percent === 'number' ? Math.round(snapshot.cpu_percent) : null,
       ram: typeof snapshot.ram_total_bytes === 'number' && typeof snapshot.ram_available_bytes === 'number'
         ? `${((snapshot.ram_total_bytes - snapshot.ram_available_bytes) / 1024 ** 3).toFixed(1)} / ${(snapshot.ram_total_bytes / 1024 ** 3).toFixed(0)} GB` : '—',
-      gpu: typeof snapshot.gpu === 'string' ? snapshot.gpu.split(',')[0].trim() : 'GPU status unavailable',
+      gpu: gpuStats?.name ?? (typeof snapshot.gpu === 'string' ? snapshot.gpu.split(',')[0].trim() : 'GPU status unavailable'),
+      gpuUtil: gpuStats?.utilizationPercent ?? null,
+      vramUsed: gpuStats?.memoryUsedMiB ?? null,
+      vramTotal: gpuStats?.memoryTotalMiB ?? null,
+      vramPercent: gpuStats?.memoryUsedMiB != null && gpuStats.memoryTotalMiB ? Math.round(gpuStats.memoryUsedMiB / gpuStats.memoryTotalMiB * 100) : null,
+      gpuPower: gpuStats?.powerWatts ?? null,
       loadedContext: llamaMatches ? llamaContext : active && typeof active.context_length === 'number' ? active.context_length : null,
       contextMismatch: Boolean((llamaMatches && llamaContext !== null && llamaContext < options.context) || (active && typeof active.context_length === 'number' && active.context_length < options.context)),
       serviceRss: typeof snapshot.service_rss_bytes === 'number' ? `${(snapshot.service_rss_bytes / 1024 ** 3).toFixed(2)} GB` : '—',
@@ -519,7 +531,13 @@ export default function App() {
 
     <footer className="system-ribbon">
       <div className="ribbon-left"><span className={`ribbon-state ${installed ? 'live' : 'dim'}`}/><span>{installed ? 'ENGINE BRIDGE READY' : 'STARTING LOCAL BRIDGE'}</span><span className="ribbon-sep">/</span><span>REASONING: {options.reasoning == null ? 'MODEL DEFAULT' : String(options.reasoning).toUpperCase()}</span></div>
-      <div className="ribbon-metrics"><span><Icon name="cpu"/> SYS {telemetry.cpu == null ? '—' : `${telemetry.cpu}%`}</span><span><Icon name="memory"/> RAM {telemetry.ram}</span><span className="gpu-readout">{telemetry.gpu}</span></div>
+      <div className="ribbon-metrics" title={telemetry.gpu}>
+        <span><Icon name="cpu"/> CPU {telemetry.cpu == null ? '—' : `${telemetry.cpu}%`}</span>
+        <span><Icon name="memory"/> RAM {telemetry.ram}</span>
+        <span>GPU {telemetry.gpuUtil == null ? '—' : `${telemetry.gpuUtil}%`}</span>
+        <span className="vram-stat">VRAM {telemetry.vramUsed == null ? '—' : fmt(telemetry.vramUsed)} / {telemetry.vramTotal == null ? '—' : fmt(telemetry.vramTotal)} MiB</span>
+        <span className="power-stat">PWR {telemetry.gpuPower == null ? '—' : `${telemetry.gpuPower.toFixed(2)} W`}</span>
+      </div>
       <button className="ribbon-link" onClick={() => void request<Record<string, unknown>>({ command: 'system_snapshot' }).then(setSnapshot)}>DIAGNOSTICS <Icon name="arrow"/></button>
     </footer>
 
@@ -547,7 +565,7 @@ export default function App() {
 
 function Landing({ workspace, sessions, models, modelLabels, model, context, connected, telemetry, onChoose, onOpen, onResume, onModel, onRefresh, onLibrary }: {
   workspace: string; sessions: SessionSummary[]; models: string[]; modelLabels: Record<string, string>; model: string; context: number; connected: string;
-  telemetry: { cpu: number | null; ram: string; gpu: string; serviceRss: string; serviceCpu: number | null };
+  telemetry: TelemetryView;
   onChoose: () => void; onOpen: (root: string) => void; onResume: (id: string) => void; onModel: (name: string) => void; onRefresh: () => void; onLibrary: () => void;
 }) {
   const recentProjects = useMemo(() => [...new Set([workspace, ...sessions.map((row) => row.workspace)].filter(Boolean))].slice(0, 4), [sessions, workspace]);
@@ -616,7 +634,7 @@ function SessionRoom({ root, session, messages, trace, plan, phase, elapsed, run
   phase: string; elapsed: number; running: boolean; prompt: string; setPrompt: (value: string) => void;
   promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
   setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>; files: ProjectFile[];
-  telemetry: { cpu: number | null; ram: string; gpu: string; loadedContext: number | null; contextMismatch: boolean; serviceRss: string; serviceCpu: number | null };
+  telemetry: TelemetryView;
   runMetrics: RunMetrics; appliedSettings: AppliedSettings | null;
   onRun: () => void; onCancel: () => void; onSettings: () => void; onBack: () => void; onDiff: () => void; onMcp: () => void;
   onEnter: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void; endRef: React.RefObject<HTMLDivElement | null>; model: string;
@@ -647,7 +665,17 @@ function SessionRoom({ root, session, messages, trace, plan, phase, elapsed, run
         {telemetry.contextMismatch && <p className="context-warning" role="status">Ollama reports a smaller runtime context than requested. Available memory may limit allocation.</p>}
         <div className="sheet-section"><div className="sheet-heading"><h3>Plan</h3><span>{plan.length ? `${plan.length} steps` : 'Awaiting agent'}</span></div>{plan.length ? <ol className="plan-list">{plan.map((item, index) => <li key={`${index}-${item.title || item.text}`}><span>{String(index + 1).padStart(2, '0')}</span><b>{item.title || item.text || 'Work item'}</b><small>{item.status || 'pending'}</small></li>)}</ol> : <p className="sheet-empty">A task checklist appears here when the agent creates one.</p>}</div>
         <div className="sheet-section trace-section"><div className="sheet-heading"><h3>Activity trace</h3><span>{trace.length} events</span></div>{trace.length ? <div className="trace-list">{trace.slice(-8).reverse().map((row) => <div className="trace-item" key={row.id}><span className={`trace-dot ${row.kind}`}/><div><b>{row.title}</b><small>{row.description || ''}</small></div></div>)}</div> : <p className="sheet-empty">Reads, tool calls, and results will be grouped here.</p>}</div>
-        <div className="resource-summary"><div className="resource-heading"><span>RESOURCE / SYSTEM</span><span>SIDECAR {telemetry.serviceRss}</span></div><div className="resource-row"><span>CPU</span><div className="meter"><i style={{ width: `${Math.min(100, telemetry.cpu ?? 0)}%` }}/></div><b>{telemetry.cpu == null ? '—' : `${telemetry.cpu}%`}</b></div><div className="resource-row"><span>RAM</span><div className="meter"><i style={{ width: `${memoryPct(telemetry.ram)}%` }}/></div><b>{telemetry.ram}</b></div><p>{telemetry.gpu}</p></div>
+        <div className="resource-summary">
+          <div className="resource-heading"><span>RESOURCE / SYSTEM</span><span>SIDECAR {telemetry.serviceRss}</span></div>
+          <div className="resource-grid">
+            <div className="resource-tile"><small>CPU</small><strong>{telemetry.cpu == null ? '—' : `${telemetry.cpu}%`}</strong><div className="meter"><i style={{ width: `${Math.min(100, telemetry.cpu ?? 0)}%` }}/></div></div>
+            <div className="resource-tile"><small>RAM</small><strong>{telemetry.ram}</strong><div className="meter"><i style={{ width: `${memoryPct(telemetry.ram)}%` }}/></div></div>
+            <div className="resource-tile"><small>GPU LOAD</small><strong>{telemetry.gpuUtil == null ? '—' : `${telemetry.gpuUtil}%`}</strong><div className="meter"><i style={{ width: `${Math.min(100, telemetry.gpuUtil ?? 0)}%` }}/></div></div>
+            <div className="resource-tile"><small>VRAM · {telemetry.gpu}</small><strong>{telemetry.vramUsed == null ? '—' : fmt(telemetry.vramUsed)} / {telemetry.vramTotal == null ? '—' : fmt(telemetry.vramTotal)} MiB</strong><div className="meter"><i style={{ width: `${telemetry.vramPercent ?? 0}%` }}/></div></div>
+            <div className="resource-tile"><small>GPU POWER</small><strong>{telemetry.gpuPower == null ? '—' : `${telemetry.gpuPower.toFixed(2)} W`}</strong><span>BOARD DRAW</span></div>
+            <div className="resource-tile"><small>AGENT SERVICE</small><strong>{telemetry.serviceCpu == null ? '—' : `${telemetry.serviceCpu}% CPU`}</strong><span>{telemetry.serviceRss} RAM</span></div>
+          </div>
+        </div>
       </aside>
     </div>
   </section>;
