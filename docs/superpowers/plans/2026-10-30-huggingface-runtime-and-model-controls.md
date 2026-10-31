@@ -20,7 +20,7 @@
 - Cancel only the active request; do not kill Ollama or an unrelated runtime.
 - Preserve requested context and output-token settings; surface effective allocation and errors.
 - Treat context as total prompt-plus-generation capacity; expose it separately from maximum response tokens.
-- Provide broad context/output preset ladders (including 4K, 8K, 16K, 32K, 64K, 100K, 128K, 200K, 256K, 300K, 512K, and 1M), provider-reported higher limits, and custom values; mark unsupported context tiers visibly disabled.
+- Provide broad context/output preset ladders with binary and decimal tiers from 4K upward, continuing beyond 1M to each provider/model-reported maximum; include exact maxima and custom values, and mark unsupported context tiers visibly disabled.
 - Use model default reasoning unless the user selects an advertised supported value.
 - Do not execute remote repository model code.
 - Keep project/session capture and workspace isolation intact.
@@ -82,8 +82,8 @@
 - [ ] Test model-default requests omit `think`; test `false`, `true`, and exact string settings are passed only when supported.
 - [ ] Test missing/unsupported metadata exposes no invented effort choices and sends no reasoning override.
 - [ ] Test thinking stream chunks remain separate from answer text and session serialization can resume them without confusing tool-call messages.
-- [ ] Test the full broad context preset ladder, provider-reported higher limits, disabled unsupported tiers, the exact reported maximum, and custom values.
-- [ ] Test the broad output-token ladder against provider/model ceilings, ensure it remains distinct from context size, and assert the exact selected value reaches generation.
+- [ ] Test context presets above 1M through a mocked provider-reported maximum, disabled unsupported tiers, the exact reported maximum, and custom values.
+- [ ] Test output-token presets above 1M through a mocked provider-reported maximum, ensure the ladder remains distinct from context size, and assert the exact selected value reaches generation.
 - [ ] Test that selected context/output values pass unchanged into the Ollama `num_ctx`/`num_predict` fields and llama.cpp context/generation options, persist across session resume, and are reported separately from effective runtime allocation.
 - [ ] Implement the Ollama capability mapping and add settings UI options `Model default`, `Off`, and exact advertised values. Add a separate show/hide control for returned reasoning text.
 - [ ] Implement broad context and output preset selectors plus exact custom values; distinguish total context, response-token cap, requested settings, and effective allocation.
