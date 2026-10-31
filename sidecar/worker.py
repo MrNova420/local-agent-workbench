@@ -295,8 +295,13 @@ class AgentService:
             def preload() -> None:
                 try:
                     self.emit({"type": "ollama_preload_started", "model": model, "context": context})
-                    self.runtime.preload(model, context, keep_alive)
-                    self.emit({"type": "ollama_preload_complete", "model": model, "context": context})
+                    started = time.monotonic()
+                    response = self.runtime.preload(model, context, keep_alive)
+                    elapsed_seconds = time.monotonic() - started
+                    load_duration = response.get("load_duration") if isinstance(response, dict) else None
+                    self.emit({"type": "ollama_preload_complete", "model": model, "context": context,
+                               "elapsed_seconds": elapsed_seconds,
+                               "load_duration_seconds": load_duration / 1_000_000_000 if isinstance(load_duration, (int, float)) and not isinstance(load_duration, bool) else None})
                 except Exception as exc:
                     self.emit({"type": "ollama_preload_error", "model": model, "error": f"{type(exc).__name__}: {exc}"})
                 finally:

@@ -322,7 +322,10 @@ export default function App() {
       }
       if (event.type === 'ollama_preload_complete') {
         setModelPreloading(false);
-        notify(`${shortModel(String(event.model || model))} is warm and ready.`, 'good');
+        const elapsed = Number(event.elapsed_seconds);
+        const load = Number(event.load_duration_seconds);
+        const timing = Number.isFinite(elapsed) ? ` · ${elapsed.toFixed(1)}s warm-up${Number.isFinite(load) ? ` / ${load.toFixed(1)}s Ollama load` : ''}` : '';
+        notify(`${shortModel(String(event.model || model))} is warm and ready${timing}.`, 'good');
       }
       if (event.type === 'ollama_preload_skipped') {
         setModelPreloading(false);

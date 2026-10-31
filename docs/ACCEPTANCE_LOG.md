@@ -15,6 +15,7 @@
 - The active 65,536 / 8,192 run resumed at 200 seconds with about 137 output tokens and 1.6 tokens/second. The assistant confirmed `index.html`, identified the missing `styles.css` and `script.js`, and began the continuation plan. Resource sample: CPU 72%, RAM 22.6 / 32 GB, GPU 23%, VRAM 3,027 / 4,096 MiB, power 20.33 W. No write for the continuation had completed at that sample.
 - Source now refreshes the selected workspace's file index after terminal write/edit/patch, command, and MCP operations, so Files in View and change review can reflect tool results immediately. A regression test has been added but is intentionally queued with the final test pass per the user's latest instruction. Preload notifications now name the model from the actual event, and attempting to submit while a model is warming gives an explicit wait notice instead of silently doing nothing.
 - The Home model picker now shares the top-bar lockout while a selected Ollama model is warming, with an explicit warming label; this prevents a second Home selection from racing the in-flight preload. This source change is committed before package verification; its UI test is queued for the final test pass.
+- Preload completion now carries elapsed wall time and Ollama's response `load_duration` into its ready notification. A focused assertion was added to the final test queue; no new tests were run during the requested development-first phase.
 
 ## Source/package checks — 2026-10-31
 

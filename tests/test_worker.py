@@ -26,6 +26,7 @@ class FakeRuntime:
 
     def preload(self, model, context, keep_alive):
         self.preloaded = (model, context, keep_alive)
+        return {"load_duration": 1_500_000_000}
 
 
 @pytest.fixture
@@ -61,7 +62,9 @@ def test_ollama_preload_uses_requested_context_and_keep_alive_without_starting_i
     thread.join(2)
 
     assert service.runtime.preloaded == ("model-a:latest", 65536, "30m")
-    assert any(event["type"] == "ollama_preload_complete" for event in events)
+    complete = next(event for event in events if event["type"] == "ollama_preload_complete")
+    assert complete["load_duration_seconds"] == 1.5
+    assert complete["elapsed_seconds"] >= 0
 
 
 def test_ollama_preload_does_not_replace_a_different_loaded_model(service):
