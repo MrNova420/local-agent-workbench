@@ -176,6 +176,39 @@ def test_keep_alive_is_not_passed_as_an_ollama_generation_option(service, tmp_pa
     assert engines[0].state["keep_alive"] == "3h"
 
 
+def test_engine_failure_is_saved_with_the_session(service, tmp_path, monkeypatch):
+    class FailingEngine:
+        def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
+            self.state = {}
+            self.runtime = object()
+            self.event = event
+
+        def run(self, prompt, messages):
+            messages.append({"role": "user", "content": prompt})
+            self.event({"type": "error", "error": "Synthetic provider stream failure"})
+            return messages
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(worker, "AgentEngine", FailingEngine)
+    project = tmp_path / "project"
+    project.mkdir()
+    options = {
+        "workspace": str(project), "prompt": "hello", "model": "model-a:latest",
+        "context": 4096, "maxTokens": 128, "temperature": 0.2,
+        "access": "ask", "approvalMode": "per-action",
+    }
+    service.handle("run_start", {"options": options})
+    controller = service.active
+    assert controller is not None
+    session_id = controller["session"]["session_id"]
+    controller["thread"].join(3)
+
+    saved = service.sessions.load(session_id)
+    assert saved["last_error"]["message"] == "Synthetic provider stream failure"
+
+
 def test_approval_reply_signals_only_matching_pending_action(service):
     condition = threading.Condition()
     result = {"done": False, "approved": False}

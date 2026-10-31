@@ -603,6 +603,11 @@ class AgentService:
                 engine.cancel()
             messages = engine.run(turn.prompt, state.get("messages", []))
             state["messages"] = messages
+            terminal = relay.terminal_event
+            if terminal and terminal.get("type") == "error":
+                state["last_error"] = {"message": str(terminal.get("error", "Run failed.")), "occurred_at": time.time()}
+            else:
+                state.pop("last_error", None)
             state.setdefault("turns", []).append({"prompt": turn.prompt, "started_at": time.time(), "workspace": str(turn.workspace), "approval_mode": turn.approval_mode})
             state["working_workspace"] = str(turn.workspace)
             if turn.access == "copy":
@@ -612,6 +617,7 @@ class AgentService:
             relay.emit_terminal_after_persist()
         except Exception as exc:
             state["messages"] = state.get("messages", [])
+            state["last_error"] = {"message": f"{type(exc).__name__}: {exc}", "occurred_at": time.time()}
             try:
                 self.sessions.save(state)
                 self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})

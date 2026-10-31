@@ -24,8 +24,9 @@ type Session = {
   keep_alive?: string;
   working_workspace?: string;
   copy_manifest?: Record<string, string>;
+  last_error?: { message: string; occurred_at: number };
 };
-type TraceRow = { id: string; title: string; description?: string; kind: 'tool' | 'status' | 'plan'; time: number };
+type TraceRow = { id: string; title: string; description?: string; kind: 'tool' | 'status' | 'plan' | 'error'; time: number };
 type Approval = { actionId: string; name: string; arguments: unknown; workspace: string; mode: ApprovalMode };
 type Notice = { tone: 'good' | 'warn' | 'bad'; text: string };
 type AppliedSettings = { model: string; context: number; maxOutput: number; reasoning: boolean | string | null };
@@ -179,6 +180,7 @@ export default function App() {
       localStorage.setItem('agent-workspace', root);
       setSession(loaded);
       setMessages(rows);
+      setTrace(loaded.last_error ? [{ id: `last-error-${loaded.last_error.occurred_at}`, title: 'Previous run failed', description: loaded.last_error.message, kind: 'error', time: loaded.last_error.occurred_at * 1000 }] : []);
       setOptions({
         context: loaded.context || modelInfo?.context || 8192,
         maxTokens: loaded.max_tokens || 4096,
@@ -277,6 +279,7 @@ export default function App() {
       if (event.type === 'error') {
         setApproval(null);
         setRunning(false); setPhase((current) => nextRunPhase(current, event)); setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
+        setTrace((current) => [...current, { id: crypto.randomUUID(), title: 'Run failed', description: String(event.error || 'The task failed.'), kind: 'error', time: Date.now() }]);
         setRunMetrics((current) => endGeneration(current));
         setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
         notify(String(event.error || 'The task failed.'), 'bad');
