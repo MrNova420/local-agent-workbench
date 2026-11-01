@@ -4,7 +4,7 @@
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
-**Current paired engine source:** `644ae1b5c831f60a08024c9777734bce83c33ad0` (unpublished; regressions intentionally queued).
+**Current paired engine source:** `ea7f9930f46a84f5308836ba29064b3ad7e59ee6` (unpublished; regressions intentionally queued).
 
 ## Implemented in this source batch
 
@@ -72,7 +72,7 @@
 
 ## Remaining reliability work
 
-- The paired app currently pins engine `644ae1b5c831f60a08024c9777734bce83c33ad0` in `core-revision.txt`; CI and the Windows release workflow read that pin. The engine records provider-specific request data, uncertain MCP effects, safe tool-preparation metadata, MCP schema capability gaps, within-task compaction and result lookup, and separate local runtime worker CPU/RAM/NVIDIA process VRAM measurements where available. JSON Schema `format` remains an annotation without value validation; GPU load remains device-wide. Reconcile and build the packaged app only after implementation is complete.
+- The paired app currently pins engine `ea7f9930f46a84f5308836ba29064b3ad7e59ee6` in `core-revision.txt`; CI and the Windows release workflow read that pin. The engine records provider-specific request data, uncertain MCP effects, safe tool-preparation metadata, MCP schema capability gaps, within-task compaction and result lookup, and separate local runtime worker CPU/RAM/NVIDIA process VRAM measurements where available. JSON Schema `format` remains an annotation without value validation; GPU load remains device-wide. Reconcile and build the packaged app only after implementation is complete.
 - Finish-after-operation drains every independent read that was already launched as part of a validated concurrent batch before stopping ahead of the next model request. Writes, commands, and MCP actions remain sequential; they are not silently parallelized.
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.

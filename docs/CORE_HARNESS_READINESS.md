@@ -8,7 +8,7 @@ Deliver **1:1 user-facing feature and workflow parity with Codex and OpenCode** 
 
 ## Current active source state (2026-11-01)
 
-- Unpublished app source pins engine commit `644ae1b5c831f60a08024c9777734bce83c33ad0` in `core-revision.txt`. These commits are isolated in worktrees and have not been pushed or packaged.
+- Unpublished app source pins engine commit `ea7f9930f46a84f5308836ba29064b3ad7e59ee6` in `core-revision.txt`. These commits are isolated in worktrees and have not been pushed or packaged.
 - The Ollama request adapter now prevents generic runtime options from silently overriding selected context, output-token, and temperature controls. Conflicts are recorded in request provenance and called out in activity details. A regression is queued; settings were not changed and no inference was run.
 - Cancelled, partial, uncertain, and otherwise incomplete commands now produce an explicit incomplete-verification outcome even when other project files changed. Their run result stays in the evidence record; no command is labeled as a passing test from exit status alone. Regression coverage is queued.
 - Oversized checkpoints now have a budgeted inference-only summary. The full checkpoint remains on disk; the summary preserves the active goal/plan and latest progress and reports any history categories omitted. The Activity Trace displays these counts. Regression coverage is queued and unrun.
@@ -347,7 +347,7 @@ The section above records an earlier checkpoint and its evidence; it is not the 
 # 2026-11-01 — Long-file writes, chat approval, model picks, and cache truth (unverified)
 
 - Added ordered `append_file` for files larger than a model's selected per-response output. Each chunk uses the selected project path and ordinary access/approval rules, is atomically assembled without loading the entire prior file into memory, and appears as a write operation for recovery and post-change inspection. The model is instructed to continue chunking and inspect the finished file; the output setting is unchanged.
-- Added optional per-session action approval. The user explicitly approves the first requested action for the saved chat, the grant is mirrored before release, rule-based deny/ask still overrides it, and switching to per-action revokes it. Mirror failure does not release the action.
+- Added optional per-session action approval. The user explicitly approves the first requested action for the saved chat, the grant is mirrored before release, rule-based deny/ask still overrides it, and switching away from per-session revokes it. Saved grants are validated as booleans; older sessions default to no grant. Mirror failure does not release the action.
 - Model Library now derives its featured rows from exact locally installed tags in the requested order; it includes observed quantization metadata and leaves other installed models and Hub search available. Selecting a recommendation does not load or download it.
 - Prompt-reuse metrics now distinguish provider-reported, partial, and unavailable cached-token counts. The llama.cpp worksheet displays the current slot's cached prompt-token count when `/slots` returns it. Actual cache allocation and precision remain unavailable where the runtime exposes no values; this is not evidence of a successful live cache hit.
 - Regression tests are queued. No test, typecheck, package build, UI, app update, or inference check was run for these edits.
