@@ -426,3 +426,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 ## 2026-11-01 llama reasoning phase attribution (verification queued)
 
 - The paired engine pin is now `c7f8fbb48d5df4f7e22f2261f55722a69b28f91e`. llama.cpp now reports a reasoning phase while only reasoning tokens arrive, then switches to generation when answer text or tool-call output begins, matching the Ollama phase behavior. A mocked transition regression was added but remains unrun.
+
+## 2026-11-01 complete provider body fields (verification queued)
+
+- The paired engine pin is `dd4278eeb8413093b58f85fb8c2ae95980c1f47d`. Request evidence now records provider-specific body fields in addition to normalized options: Ollama's explicit `think` field only when present, and llama.cpp's `stream_options.include_usage` setting. Omitted reasoning remains omitted and does not change the model default.
+- The sidecar persists these fields in snapshots and mirrored journal recovery; the Activity Trace displays them separately from normalized options. Added queued engine, persistence, worker, and renderer assertions. Tests, typecheck, package, UI, and model checks remain unrun by instruction.

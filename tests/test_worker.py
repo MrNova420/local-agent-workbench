@@ -90,8 +90,9 @@ def test_provider_request_settings_update_the_matching_prompt_activity_and_strea
                         "request_api": "/api/chat", "model": "model-a:latest", "api_model": "model-a:latest",
                         "stream": True, "tool_count": 12, "requested_context": 65536,
                         "max_output_tokens": 8192, "reasoning_override": None,
-                        "reasoning_field_sent": False, "keep_alive": "30m",
+                        "reasoning_field_sent": True, "reasoning_override": "high", "keep_alive": "30m",
                         "request_options": {"num_ctx": 65536, "num_predict": 8192},
+                        "additional_fields": {"think": "high"},
                         "estimated_input_tokens": 600, "input_estimate_method": "conservative estimate"})
             self.event({"type": "request_dispatched", "request_index": 1})
             self.event({"type": "request_headers", "request_index": 1, "http_status": 200,
@@ -121,7 +122,9 @@ def test_provider_request_settings_update_the_matching_prompt_activity_and_strea
     saved = service.sessions.load(controller["session"]["session_id"], str(project))["state"]
     prompt = next(row for row in saved["activity_events"] if row.get("kind") == "prompt")
     assert prompt["providerRequest"]["request_options"] == {"num_ctx": 65536, "num_predict": 8192}
-    assert prompt["providerRequest"]["reasoning_field_sent"] is False
+    assert prompt["providerRequest"]["additional_fields"] == {}
+    assert prompt["providerRequest"]["reasoning_field_sent"] is True
+    assert prompt["providerRequest"]["additional_fields"] == {"think": "high"}
     assert prompt["providerRequest"]["api_model"] == "model-a:latest"
     assert prompt["providerRequest"]["tool_count"] == 12
     assert prompt["providerUsage"] == {"prompt_eval_count": 580, "prompt_eval_cached_count": 120, "eval_count": 45}

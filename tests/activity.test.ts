@@ -129,8 +129,8 @@ describe('durable live activity state', () => {
       providerRequest: {
         provider: 'ollama', model: 'ornith:latest', request_api: '/api/chat', request_index: 1,
         dispatch_status: 'response_stream_ended', provider_done: true,
-        requested_context: 65536, max_output_tokens: 8192, reasoning_override: null,
-        reasoning_field_sent: false, keep_alive: '30m', request_options: { num_ctx: 65536, num_predict: 8192 },
+        requested_context: 65536, max_output_tokens: 8192, reasoning_override: 'high',
+        reasoning_field_sent: true, keep_alive: '30m', request_options: { num_ctx: 65536, num_predict: 8192 }, additional_fields: { think: 'high' },
         estimated_input_tokens: 4096,
       },
       providerUsage: { prompt_eval_count: 4096, prompt_eval_cached_count: 2048, eval_count: 212, eval_duration: 30_000_000_000 },
@@ -147,6 +147,8 @@ describe('durable live activity state', () => {
     expect(trace).toContain('8192');
     expect(trace).toContain('30m');
     expect(trace).toContain('num_predict');
+    expect(trace).toContain('Additional request fields');
+    expect(trace).toContain('"think": "high"');
     expect(trace).toContain('Provider returned usage');
     expect(trace).toContain('Cached prompt tokens');
     expect(trace).toContain('2,048');

@@ -21,8 +21,9 @@ class MirroredSessionStoreTests(unittest.TestCase):
                                   "model": "ornith:latest", "api_model": "ornith:latest", "stream": True,
                                   "tool_count": 8, "requested_context": 65536,
                                   "max_output_tokens": 8192, "reasoning_override": None,
-                                  "reasoning_field_sent": False, "keep_alive": "3h",
+                                  "reasoning_field_sent": True, "reasoning_override": "high", "keep_alive": "3h",
                                   "request_options": {"num_ctx": 65536, "num_predict": 8192},
+                                  "additional_fields": {"think": "high"},
                                   "estimated_input_tokens": 4100,
                                   "input_estimate_method": "conservative estimate"})
         _replay_run_event(state, {"type": "request_dispatched", "turnId": "turn-provider", "request_index": 2})
@@ -39,6 +40,7 @@ class MirroredSessionStoreTests(unittest.TestCase):
         prompt = state["activity_events"][0]
         self.assertEqual(prompt["id"], "turn-provider-request-2")
         self.assertEqual(prompt["providerRequest"]["request_options"], {"num_ctx": 65536, "num_predict": 8192})
+        self.assertEqual(prompt["providerRequest"]["additional_fields"], {"think": "high"})
         self.assertFalse(prompt["providerRequest"]["reasoning_field_sent"])
         self.assertEqual(prompt["providerRequest"]["keep_alive"], "3h")
         self.assertEqual(prompt["providerRequest"]["api_model"], "ornith:latest")
