@@ -46,12 +46,17 @@ def test_non_git_project_review_excludes_private_workbench_session_data(tmp_path
     private = root / ".agent-workbench" / "sessions" / "private.json"
     private.parent.mkdir(parents=True)
     private.write_text('{"messages":[{"content":"private conversation"}]}', encoding="utf-8")
+    nested_private = root / "packages" / "demo" / ".agent-workbench" / "sessions" / "nested.json"
+    nested_private.parent.mkdir(parents=True)
+    nested_private.write_text('{"messages":[{"content":"nested private conversation"}]}', encoding="utf-8")
 
     result = workspace_diff_text(root)
 
     assert "app.py" in result
     assert "private.json" not in result
     assert "private conversation" not in result
+    assert "nested.json" not in result
+    assert "nested private conversation" not in result
 
 
 def test_git_project_review_excludes_opted_in_workbench_session_data(tmp_path):
