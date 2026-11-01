@@ -130,7 +130,16 @@ class MirroredSessionStoreTests(unittest.TestCase):
                  "result": "Wrote index.html", "status": "completed", "affectedFiles": ["index.html"]},
                 {"_journal_event_id": "next-request", "_journal_recorded_at_ns": 4, "type": "phase", "phase": "waiting"},
                 {"_journal_event_id": "final-text", "_journal_recorded_at_ns": 5, "type": "text", "text": "Page is ready."},
-                {"_journal_event_id": "complete", "_journal_recorded_at_ns": 6, "type": "generation_complete",
+                {"_journal_event_id": "prompt", "_journal_recorded_at_ns": 6, "activityId": "task-request-1", "type": "prompt_manifest",
+                 "request_index": 1, "configured_context": 65536, "input_budget": 57344,
+                 "estimated_request_input_tokens": 4096, "message_count": 3,
+                 "messages": [{"index": 0, "role": "system", "source": "system_guidance_and_project_instructions", "characters": 800, "estimated_tokens": 400}],
+                 "project_instruction_sources": [{"path": "AGENTS.md", "characters": 20, "estimated_tokens": 10}], "retrieved_project_files": ["index.html"],
+                 "checkpoint_included": True, "compaction_notice_count": 0,
+                 "skills": {"enabled": True, "selected_sources": ["project"], "available": [], "catalog_entries_in_request_tool_schema": [], "load_references_in_request_history": []},
+                 "tools": [{"name": "read_file", "provider": "workbench"}],
+                 "workflow": {"harness_profile": "standard", "task_intent": "implement", "effective_access": "ask"}},
+                {"_journal_event_id": "complete", "_journal_recorded_at_ns": 7, "type": "generation_complete",
                  "verification": {"status": "not_verified", "steps": [], "contract": {
                      "implementation_requested": True, "project_change": "observed",
                      "post_change_inspection": "missing", "approved_command_results": [],
@@ -143,6 +152,10 @@ class MirroredSessionStoreTests(unittest.TestCase):
             self.assertEqual(recovered["run_state"]["status"], "completed")
             self.assertEqual(recovered["run_state"]["workflow_outcome"], "changed")
             self.assertEqual(recovered["run_state"]["verification"]["contract"]["post_change_inspection"], "missing")
+            prompt_rows = [row for row in recovered["activity_events"] if row.get("kind") == "prompt"]
+            self.assertEqual(len(prompt_rows), 1)
+            self.assertEqual(prompt_rows[0]["id"], "task-request-1")
+            self.assertEqual(prompt_rows[0]["promptManifest"]["retrieved_project_files"], ["index.html"])
             self.assertEqual(messages[1]["content"], "Build the page")
             self.assertEqual(messages[3]["content"], "Wrote index.html")
             self.assertEqual(messages[-1]["content"], "Page is ready.")

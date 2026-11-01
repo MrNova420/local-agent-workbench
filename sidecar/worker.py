@@ -121,7 +121,7 @@ class AgentService:
         run_state = state.get("run_state")
         enriched = {**event, "sessionId": state["session_id"], "turnId": controller["turn_id"],
                     "workspace": str(turn.workspace), "timestamp": event.get("at", time.time())}
-        force_save = event.get("type") in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "approval_request", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete"}
+        force_save = event.get("type") in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "prompt_manifest", "approval_request", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete"}
         with controller["checkpoint_lock"]:
             if isinstance(run_state, dict):
                 if event.get("type") == "phase" and event.get("phase") == "waiting":
@@ -200,7 +200,7 @@ class AgentService:
 
             kind = event.get("type")
             activity: dict[str, Any] | None = None
-            activity_id = str(event.get("operationId") or event.get("actionId") or uuid.uuid4().hex)
+            activity_id = str(event.get("operationId") or event.get("actionId") or event.get("activityId") or uuid.uuid4().hex)
             rows = state.setdefault("activity_events", [])
             if kind == "tool_start":
                 activity = {"id": activity_id, "operationId": activity_id, "turnId": controller["turn_id"],
@@ -243,6 +243,13 @@ class AgentService:
                             "inputBudget": int(event.get("inputBudget", 0)), "reason": event.get("reason", ""),
                             "checkpointIncluded": bool(event.get("checkpointIncluded", False)),
                             "checkpointEstimate": int(event.get("checkpointEstimate", 0)), "timestamp": time.time()}
+                rows.append(activity)
+            elif kind == "prompt_manifest":
+                manifest = {key: copy.deepcopy(value) for key, value in event.items()
+                            if key not in {"type", "activityId", "sessionId", "turnId", "workspace", "timestamp", "at"}}
+                activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
+                            "workspace": str(turn.workspace), "kind": "prompt", "name": f"Model request {int(event.get('request_index', 0))}",
+                            "status": "sent", "promptManifest": manifest, "timestamp": time.time()}
                 rows.append(activity)
             elif kind == "generation_usage":
                 state.setdefault("usage_events", []).append({

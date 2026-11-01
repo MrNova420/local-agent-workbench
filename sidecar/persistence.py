@@ -182,6 +182,16 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
             "checkpointIncluded": event.get("checkpointIncluded", False),
             "checkpointEstimate": event.get("checkpointEstimate", 0), "timestamp": event.get("timestamp", time.time()),
         })
+    elif kind == "prompt_manifest":
+        manifest = {key: copy.deepcopy(value) for key, value in event.items()
+                    if key not in {"type", "activityId", "sessionId", "turnId", "workspace", "timestamp", "at", "_journal_event_id", "_journal_recorded_at_ns", "_journal_saved_to"}}
+        state.setdefault("activity_events", []).append({
+            "id": event.get("activityId") or event.get("_journal_event_id") or uuid.uuid4().hex,
+            "turnId": event.get("turnId", run.get("turn_id")), "sessionId": state["session_id"],
+            "workspace": event.get("workspace", state.get("workspace")), "kind": "prompt",
+            "name": f"Model request {int(event.get('request_index', 0))}", "status": "sent",
+            "promptManifest": manifest, "timestamp": event.get("timestamp", time.time()),
+        })
     elif kind == "generation_usage":
         state.setdefault("usage_events", []).append({"turn_id": event.get("turnId", run.get("turn_id")),
                                                      "session_id": state["session_id"],

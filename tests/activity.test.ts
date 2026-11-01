@@ -83,6 +83,31 @@ describe('durable live activity state', () => {
     expect(trace).toContain('run command');
   });
 
+  it('renders durable prompt provenance and exact included skill names in the activity trace', () => {
+    const record: ActivityRecord = {
+      id: 'task-request-1', sessionId: 's-1', turnId: 't-1', kind: 'prompt', name: 'Model request 1', status: 'sent',
+      promptManifest: {
+        request_index: 1, configured_context: 65536, maximum_output_tokens: 8192,
+        input_budget: 57344, estimated_request_input_tokens: 4096, message_count: 2,
+        checkpoint_included: true, compaction_notice_count: 1,
+        messages: [{ index: 0, role: 'system', source: 'task_checkpoint', characters: 900, estimated_tokens: 450, retrieved_files: [] }],
+        project_instruction_sources: [{ path: 'AGENTS.md', characters: 20, estimated_tokens: 10 }], retrieved_project_files: ['src/App.tsx'],
+        skills: { enabled: true, selected_sources: ['project'], available: [{ name: 'react-review', source: 'project' }],
+          catalog_entries_in_request_tool_schema: ['react-review'], load_references_in_request_history: [] },
+        tools: [{ name: 'read_file', provider: 'workbench' }],
+        workflow: { harness_profile: 'small-model', task_intent: 'implement', effective_access: 'ask' },
+      },
+    };
+    const trace = renderToStaticMarkup(createElement(ActivityFeed, { entries: [record], mode: 'sidebar', surface: 'sidebar' }));
+
+    expect(trace).toContain('Model request 1');
+    expect(trace).toContain('AGENTS.md');
+    expect(trace).toContain('src/App.tsx');
+    expect(trace).toContain('react-review');
+    expect(trace).toContain('small-model');
+    expect(trace).toContain('4096');
+  });
+
   it('labels capped tool scans as partial rather than complete in activity views', () => {
     const record: ActivityRecord = {
       id: 'scan-1', sessionId: 's-1', turnId: 't-1', kind: 'operation', name: 'search_files',

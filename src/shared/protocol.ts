@@ -86,7 +86,7 @@ export type ActivityRecord = {
   turnId: string;
   sessionId: string;
   workspace?: string;
-  kind: 'operation' | 'approval' | 'plan' | 'context' | 'error';
+  kind: 'operation' | 'approval' | 'plan' | 'context' | 'prompt' | 'error';
   name?: string;
   status: string;
   source?: 'workbench' | 'agent';
@@ -107,6 +107,7 @@ export type ActivityRecord = {
   reason?: string;
   checkpointIncluded?: boolean;
   checkpointEstimate?: number;
+  promptManifest?: Record<string, unknown>;
 };
 
 export type ActivityEventEnvelope = {
