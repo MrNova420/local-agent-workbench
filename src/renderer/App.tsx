@@ -1182,6 +1182,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
 }) {
   const transcriptRef = useRef<HTMLDivElement>(null);
   const [followTranscript, setFollowTranscript] = useState(true);
+  const followTranscriptRef = useRef(true);
   const activitiesByTurn = useMemo(() => {
     const grouped = new Map<string, ActivityRecord[]>();
     for (const activity of activities) {
@@ -1198,14 +1199,16 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
   });
   useEffect(() => { localStorage.setItem('agent-run-sheet-layout', JSON.stringify(sheetLayout)); }, [sheetLayout]);
   useEffect(() => {
-    if (!followTranscript || !transcriptRef.current) return;
+    if (!followTranscriptRef.current || !transcriptRef.current) return;
     transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
   }, [messages, activities, toolCallProgress, followTranscript]);
-  useEffect(() => { setFollowTranscript(true); }, [session?.session_id]);
+  useEffect(() => { followTranscriptRef.current = true; setFollowTranscript(true); }, [session?.session_id]);
   const updateTranscriptFollow = () => {
     const element = transcriptRef.current;
     if (!element) return;
-    setFollowTranscript(isNearTranscriptEnd(element));
+    const shouldFollow = isNearTranscriptEnd(element);
+    followTranscriptRef.current = shouldFollow;
+    setFollowTranscript(shouldFollow);
   };
   const movePanel = (panel: RunSheetPanel, direction: -1 | 1) => setSheetLayout((layout) => moveRunSheetPanel(layout, panel, direction));
   const resizePanel = (panel: RunSheetPanel, direction: -1 | 1) => setSheetLayout((layout) => resizeRunSheetPanel(layout, panel, direction));
@@ -1222,7 +1225,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
           <div className="message-meta"><span className={`speaker-mark ${message.role}`}>{message.role === 'user' ? 'YOU' : <Icon name="spark"/>}</span><strong>{message.role === 'user' ? 'Task brief' : 'Local agent'}</strong><span>{message.recoveredPartial ? 'PARTIAL · INTERRUPTED' : message.role === 'user' ? 'INPUT' : message.streaming ? 'LIVE OUTPUT' : 'RESPONSE'}</span>{message.streaming && <i className="stream-pulse"/>}</div>
           <div className="message-content"><Markdown content={message.content}/></div>
           {message.thinking && <details className="reasoning-trace"><summary>Model reasoning · {message.thinking.length.toLocaleString()} characters</summary><div>{message.thinking}</div></details>}
-        </article>{message.role === 'user' && message.turnId && <ActivityFeed entries={activitiesByTurn.get(message.turnId) || []} mode={activityMode} surface="chat"/>}</Fragment>)}{toolCallProgress.length > 0 && <div className="tool-call-progress" role="status" aria-live="polite"><span className="stream-pulse"/><strong>Preparing structured tool request · not dispatched</strong>{toolCallProgress.map((item) => <span key={`${item.requestIndex}-${item.callIndex}`}>{item.provider.toUpperCase()} · {item.toolName || `Tool ${item.callIndex + 1}`} · {item.argumentCharacters.toLocaleString()} argument characters</span>)}</div>}<div ref={endRef}/>{!followTranscript && <button className="jump-latest" onClick={() => { setFollowTranscript(true); if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight; }} aria-label="Jump to latest message">↓ Latest</button>}</div>}
+        </article>{message.role === 'user' && message.turnId && <ActivityFeed entries={activitiesByTurn.get(message.turnId) || []} mode={activityMode} surface="chat"/>}</Fragment>)}{toolCallProgress.length > 0 && <div className="tool-call-progress" role="status" aria-live="polite"><span className="stream-pulse"/><strong>Preparing structured tool request · not dispatched</strong>{toolCallProgress.map((item) => <span key={`${item.requestIndex}-${item.callIndex}`}>{item.provider.toUpperCase()} · {item.toolName || `Tool ${item.callIndex + 1}`} · {item.argumentCharacters.toLocaleString()} argument characters</span>)}</div>}<div ref={endRef}/>{!followTranscript && <button className="jump-latest" onClick={() => { followTranscriptRef.current = true; setFollowTranscript(true); if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight; }} aria-label="Jump to latest message">↓ Latest</button>}</div>}
         <div className="composer-shell">
           <div className="composer-profile"><span className={`profile-chip access-${options.access}`}>{options.access.toUpperCase()}</span><span className="profile-chip approval-chip">{options.approvalMode === 'auto' ? 'AUTO APPROVE · THIS RUN' : options.approvalMode === 'per-task' ? 'PER TASK' : 'PER ACTION'}</span><span className="profile-chip capability-chip" title="Capability reported by the selected local runtime; support metadata may be unknown">TOOLS {modelInfo?.tool_support === 'supported' ? 'SUPPORTED' : modelInfo?.tool_support === 'unsupported' ? 'UNSUPPORTED' : 'UNKNOWN'}</span><span className="profile-chip intent-chip" title="Task intent guides the agent; file access and approval remain separate">INTENT {options.taskIntent.toUpperCase()}</span><button className={`profile-toggle ${options.harnessProfile === 'small-model' ? 'is-active' : ''}`} type="button" aria-pressed={options.harnessProfile === 'small-model'} title="Changes agent workflow guidance only; model settings and token limits stay unchanged" onClick={onToggleHarnessProfile} disabled={running}>Small-model {options.harnessProfile === 'small-model' ? 'on' : 'off'}</button><span className="profile-hint">{fmt(options.context)} context · {fmt(options.maxTokens)} output</span><button onClick={onSettings}>Adjust run</button></div>
           <textarea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={onEnter} placeholder="Describe the work. Use Shift + Enter to add detail…" rows={3} disabled={running} aria-label="Task prompt"/>
