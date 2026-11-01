@@ -612,3 +612,7 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 
 - Engine commit 153cf691edfd7757fc2ecbcc3c5aa488e7aa97a5 extends the selected-context read budget to file listing and text search. Listing and search now return resumable result pages; large matching lines point to their exact file line instead of filling a model request. No context/output setting is changed.
 - Added coverage for page continuation and large matching-line disclosure; the complete suites remain queued.
+
+## 2026-11-01 accurate file-scan cap boundaries (verification queued)
+
+- Engine commit 8e377b23fde6dc38f51b3b1ffec12524de186572 checks one additional candidate before calling a bounded file scan incomplete. Projects with exactly the configured number of files no longer receive a false partial-results warning. Added exact-limit and over-limit cases; tests remain queued.
