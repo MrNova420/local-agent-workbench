@@ -4,7 +4,7 @@
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
-**Current paired engine source:** `6bcf9c7f0099b54c49c96ae391d035478ddf6e12` (unpublished; regressions intentionally queued).
+**Current paired engine source:** `3645c16cc4595f6d375b730d0220b1af467d73c4` (unpublished; regressions intentionally queued).
 
 ## Implemented in this source batch
 
@@ -61,7 +61,7 @@
 
 ## Remaining reliability work
 
-- The shared engine is pinned at `8e5702467fd7b36249a0574831a5d0261ad89ee3` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. It records provider-specific request data, uncertain MCP effects, safe tool-preparation metadata, MCP schema capability gaps, within-task compaction and result lookup, and separate local runtime worker CPU/RAM/NVIDIA process VRAM measurements where available. JSON Schema `format` remains an annotation without value validation; GPU load remains device-wide. Reconcile and build the packaged app only after implementation is complete.
+- The paired app currently pins engine `3645c16cc4595f6d375b730d0220b1af467d73c4` in `core-revision.txt`; CI and the Windows release workflow read that pin. The engine records provider-specific request data, uncertain MCP effects, safe tool-preparation metadata, MCP schema capability gaps, within-task compaction and result lookup, and separate local runtime worker CPU/RAM/NVIDIA process VRAM measurements where available. JSON Schema `format` remains an annotation without value validation; GPU load remains device-wide. Reconcile and build the packaged app only after implementation is complete.
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.
 - Add persisted context/input usage presentation and distinguish actual runtime allocation from selected context where the provider exposes it.
