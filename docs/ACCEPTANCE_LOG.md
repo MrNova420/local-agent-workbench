@@ -709,3 +709,5 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - The renderer keeps the existing plan visible until the sidecar publishes the task's authoritative plan. The default worksheet now prioritizes Plan and Activity Trace and migrates the exact legacy default without overwriting user-customized layouts.
 - An active-run status line distinguishes model reasoning from a complete structured tool call and reports elapsed time plus the labeled input estimate. Plan, tool, approval, and command events still flow through the durable event stream.
 - Regression cases added, not run. No test/typecheck/build/UI/live-model verification performed; all remain queued.
+
+- Ollama streams now fail visibly if EOF arrives without `done: true`; partial streamed text and reasoning stay in the run checkpoint. This specifically addresses incomplete responses being mistaken for finished reasoning. Regression coverage exists but remains unrun; current paired engine pin is `9d3b4d7e9bd36e3fd05f84a5b7451a78afc6bad1`.

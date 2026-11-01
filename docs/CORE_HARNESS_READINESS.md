@@ -371,3 +371,5 @@ The section above records an earlier checkpoint and its evidence; it is not the 
 - Worksheet default priority now puts Plan and Activity Trace ahead of secondary metrics, and migrates only the exact old built-in layout; customized panel order/sizing is preserved. A compact active-run line distinguishes waiting, reasoning, structured tool preparation, and host-observed activity, with elapsed time and labeled input estimate.
 - Source inspection confirms compaction runs before a provider request and only at complete conversation/tool boundaries; it does not interrupt a live reasoning stream or reduce the active request. No request deadline or token/reasoning setting was changed.
 - Regression coverage was added but deliberately not run. Full tests, typecheck, package, visible UI flow, and exact live-model acceptance remain queued until implementation is complete.
+
+- The paired Ollama runtime rejects EOF without `done: true` as a streaming failure, preventing incomplete reasoning from being fed back as a completed turn. Received partial content remains visible and checkpointed. Source regression added; execution is queued.
