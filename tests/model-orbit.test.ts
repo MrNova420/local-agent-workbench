@@ -38,7 +38,7 @@ describe('home model orbit slots', () => {
     expect(markup.match(/class="visual-orbit orbit-[abc]" data-model-count="\d+"/g)).toHaveLength(3);
     expect(markup.match(/class="model-orbit-dot/g)).toHaveLength(3);
     expect(markup.match(/aria-haspopup="dialog"/g)).toHaveLength(3);
-    expect(markup.match(/<button/g)).toHaveLength(3);
+    expect(markup.match(/<button/g)).toHaveLength(4);
     expect(slots.find((slot) => slot.selected)?.id).toBe('llama3:8b');
     expect(markup).toContain('SLOW ORBIT');
   });
