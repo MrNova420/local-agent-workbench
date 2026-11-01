@@ -509,6 +509,40 @@ def test_activity_events_checkpoint_complete_results_and_unstarted_calls(service
     assert any(event["type"] == "activity_event" for event in emitted)
 
 
+def test_parallel_active_reads_are_tracked_and_recovered_individually(service, tmp_path, monkeypatch):
+    project = tmp_path / "parallel-read-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    state["run_state"] = {"status": "running", "turn_id": "turn-parallel", "safe_messages": [],
+                          "partial_content": "", "partial_thinking": "", "active_operation": None,
+                          "active_operations": {}, "tool_batch": None, "completed_tool_results": {}}
+    service.sessions.save(state)
+    controller = {"session": state, "turn_id": "turn-parallel", "checkpoint_lock": threading.RLock(),
+                  "last_checkpoint": time.monotonic(), "last_journal_flush": time.monotonic(), "journal_pending": []}
+    monkeypatch.setattr(service, "emit", lambda _event: None)
+    turn = SimpleNamespace(workspace=project)
+    batch = {"role": "assistant", "tool_calls": [
+        {"id": "read-a", "function": {"name": "read_file", "arguments": {"path": "a.py"}}},
+        {"id": "read-b", "function": {"name": "read_file", "arguments": {"path": "b.py"}}},
+    ]}
+    service._publish_run_event(controller, turn, {"type": "tool_batch", "assistantMessage": batch,
+                                 "calls": [{"id": "read-a", "name": "read_file"}, {"id": "read-b", "name": "read_file"}]})
+    for operation_id, call_id, path in (("op-a", "read-a", "a.py"), ("op-b", "read-b", "b.py")):
+        service._publish_run_event(controller, turn, {"type": "tool_start", "operationId": operation_id,
+                                     "toolCallId": call_id, "name": "read_file", "arguments": {"path": path}})
+    service._publish_run_event(controller, turn, {"type": "tool_done", "operationId": "op-a", "toolCallId": "read-a",
+                                 "name": "read_file", "result": "A", "status": "completed"})
+
+    assert set(state["run_state"]["active_operations"]) == {"op-b"}
+    assert state["run_state"]["active_operation"]["operationId"] == "op-b"
+    checkpoint = service._recovery_checkpoint(state["run_state"])
+    tool_results = [message["content"] for message in checkpoint if message.get("role") == "tool"]
+    assert tool_results == ["A", "Uncertain: this operation was interrupted and may have partially or fully completed. Inspect the workspace before retrying."]
+    service._publish_run_event(controller, turn, {"type": "tool_done", "operationId": "op-b", "toolCallId": "read-b",
+                                 "name": "read_file", "result": "read uncertain", "status": "uncertain"})
+    assert [item["operationId"] for item in state["run_state"]["uncertain_operations"]] == ["op-b"]
+
+
 def test_tool_call_progress_is_live_safe_and_durable(service, tmp_path, monkeypatch):
     project = tmp_path / "tool-progress-project"
     project.mkdir()

@@ -1059,7 +1059,16 @@ export default function App() {
     </Modal>}
     {recoverySession && <Modal title="An interrupted task was found" eyebrow="RECOVER SESSION" wide dismissible={false} onClose={() => undefined}>
       <p className="modal-copy">The app recovered the latest safe checkpoint. Partial model text is marked in the transcript. An in-flight tool operation may have partly completed and will not be replayed automatically.</p>
-      {typeof recoverySession.run_state?.uncertain_operation === 'object' && <div className="approval-context"><span>REVIEW BEFORE RETRYING</span><code>{JSON.stringify(recoverySession.run_state.uncertain_operation)}</code></div>}
+      {(() => {
+        const runState = recoverySession.run_state;
+        const savedOperations = runState?.uncertain_operations;
+        const operations = Array.isArray(savedOperations)
+          ? savedOperations.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+          : typeof runState?.uncertain_operation === 'object' && runState.uncertain_operation !== null
+            ? [runState.uncertain_operation as Record<string, unknown>]
+            : [];
+        return operations.length > 0 && <div className="approval-context"><span>REVIEW BEFORE RETRYING · {operations.length} OPERATION{operations.length === 1 ? '' : 'S'}</span>{operations.map((operation, index) => <code key={String(operation.operationId ?? index)}>{JSON.stringify(operation)}</code>)}</div>;
+      })()}
       <div className="activity-mode-choices"><button className="activity-mode-choice recommended" onClick={() => void recoverInterruptedRun('resume').catch((error) => notify(`Recovery failed: ${(error as Error).message}`, 'bad'))}><b>Continue from safe checkpoint</b><small>Inspect any uncertain effect before proposing another action.</small></button><button className="activity-mode-choice" onClick={() => void recoverInterruptedRun('retry').catch((error) => notify(`Recovery failed: ${(error as Error).message}`, 'bad'))}><b>Retry interrupted task</b><small>The model is explicitly warned to inspect before repeating uncertain work.</small></button><button className="activity-mode-choice" onClick={() => void recoverInterruptedRun('restore').catch((error) => notify(`Recovery failed: ${(error as Error).message}`, 'bad'))}><b>Restore history only</b><small>Keep the transcript and activity without continuing the task.</small></button></div>
     </Modal>}
     {cancelChoiceOpen && <Modal title="What should happen to this run?" eyebrow="RUN IS ACTIVE" dismissible={false} onClose={() => undefined}>

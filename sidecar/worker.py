@@ -185,8 +185,11 @@ class AgentService:
                     run_state["completed_tool_results"] = {}
                 elif event.get("type") == "tool_start":
                     controller["current_operation_id"] = event.get("operationId")
-                    run_state["active_operation"] = {key: event.get(key) for key in ("operationId", "toolCallId", "name", "arguments", "startedAt")}
-                    run_state["active_operation"]["status"] = "running"
+                    operation = {key: event.get(key) for key in ("operationId", "toolCallId", "name", "arguments", "startedAt")}
+                    operation["status"] = "running"
+                    active_operations = run_state.setdefault("active_operations", {})
+                    active_operations[str(event.get("operationId", ""))] = operation
+                    run_state["active_operation"] = copy.deepcopy(operation)
                 elif event.get("type") == "operation_output":
                     operation_id = str(event.get("operationId", ""))
                     row = next((item for item in state.setdefault("activity_events", []) if item.get("operationId") == operation_id), None)
@@ -195,15 +198,28 @@ class AgentService:
                         output = row.setdefault("output", {})
                         output[stream] = str(output.get(stream, "")) + str(event.get("text", ""))
                 elif event.get("type") == "tool_done":
-                    controller["current_operation_id"] = None
-                    previous_operation = copy.deepcopy(run_state.get("active_operation"))
-                    run_state["active_operation"] = None
+                    operation_id = str(event.get("operationId", ""))
+                    active_operations = run_state.setdefault("active_operations", {})
+                    previous_operation = copy.deepcopy(active_operations.pop(operation_id, None))
+                    current_active = run_state.get("active_operation")
+                    if previous_operation is None and isinstance(current_active, dict) and str(current_active.get("operationId", "")) == operation_id:
+                        previous_operation = copy.deepcopy(current_active)
+                    if controller.get("current_operation_id") == operation_id:
+                        controller["current_operation_id"] = None
+                    if isinstance(current_active, dict) and str(current_active.get("operationId", "")) == operation_id:
+                        run_state["active_operation"] = copy.deepcopy(next(reversed(active_operations.values()), None)) if active_operations else None
                     if event.get("status") == "uncertain":
                         uncertain = previous_operation if isinstance(previous_operation, dict) else {}
                         uncertain.update({key: copy.deepcopy(event.get(key))
                                           for key in ("operationId", "toolCallId", "name", "arguments", "result", "status", "affectedFiles", "completedAt")
                                           if key in event})
                         run_state["uncertain_operation"] = uncertain
+                        uncertain_operations = run_state.setdefault("uncertain_operations", [])
+                        if not isinstance(uncertain_operations, list):
+                            uncertain_operations = run_state["uncertain_operations"] = []
+                        uncertain_operations[:] = [item for item in uncertain_operations
+                                                    if not isinstance(item, dict) or str(item.get("operationId", "")) != operation_id]
+                        uncertain_operations.append(copy.deepcopy(uncertain))
                     batch = run_state.get("tool_batch")
                     if isinstance(batch, dict):
                         results = run_state.setdefault("completed_tool_results", {})
@@ -857,13 +873,28 @@ class AgentService:
             if isinstance(run_state, dict) and run_state.get("status") == "running":
                 run_state["status"] = "interrupted"
                 run_state["interrupted_at"] = time.time()
-                active = run_state.get("active_operation")
-                if isinstance(active, dict):
+                active_operations = run_state.get("active_operations")
+                if not isinstance(active_operations, dict):active_operations = {}
+                if not active_operations and isinstance(run_state.get("active_operation"), dict):
+                    active = run_state["active_operation"]
+                    active_operations = {str(active.get("operationId", "legacy-active")): active}
+                prior_uncertain = run_state.get("uncertain_operations")
+                uncertain_operations = [copy.deepcopy(item) for item in prior_uncertain if isinstance(item, dict)] if isinstance(prior_uncertain, list) else []
+                known_uncertain_ids = {str(item.get("operationId", "")) for item in uncertain_operations}
+                for active in active_operations.values():
+                    if not isinstance(active, dict):continue
                     active["status"] = "uncertain"
-                    run_state["uncertain_operation"] = copy.deepcopy(active)
+                    operation_id = str(active.get("operationId", ""))
+                    if operation_id not in known_uncertain_ids:
+                        uncertain_operations.append(copy.deepcopy(active))
+                        known_uncertain_ids.add(operation_id)
                     for activity in state["activity_events"]:
                         if activity.get("operationId") == active.get("operationId"):
                             activity["status"] = "uncertain"
+                run_state["uncertain_operations"] = uncertain_operations
+                if uncertain_operations:run_state["uncertain_operation"] = copy.deepcopy(uncertain_operations[-1])
+                run_state["active_operations"] = {}
+                run_state["active_operation"] = None
                 checkpoint = self._recovery_checkpoint(run_state)
                 if checkpoint is not None:
                     run_state["safe_messages"] = checkpoint
@@ -887,18 +918,23 @@ class AgentService:
             safe_messages = run_state.get("safe_messages")
             if isinstance(safe_messages, list):
                 state["messages"] = copy.deepcopy(safe_messages)
-            uncertain = run_state.get("uncertain_operation")
+            uncertain_operations = run_state.get("uncertain_operations")
+            if not isinstance(uncertain_operations, list):
+                uncertain = run_state.get("uncertain_operation")
+                uncertain_operations = [uncertain] if isinstance(uncertain, dict) else []
             if action == "retry":
                 continuation = "Retry the interrupted task from its last safe checkpoint. The operation below may already have partially or fully completed; inspect the current workspace before repeating it and ask for approval as usual. Do not assume it failed."
             else:
                 continuation = "Continue the interrupted task from its last safe checkpoint. Do not repeat any operation that already has a result. An in-flight operation may have partially completed; inspect its current effect before proposing a retry and ask for approval as usual."
-            if uncertain:
-                continuation += "\n\nUncertain operation details (review before repeating):\n" + json.dumps(uncertain, ensure_ascii=False, indent=2)
+            if uncertain_operations:
+                continuation += "\n\nUncertain operation details (review each before repeating):\n" + json.dumps(uncertain_operations, ensure_ascii=False, indent=2)
             state["last_recovery"] = {"action": action, "interrupted_turn_id": run_state.get("turn_id"), "at": time.time()}
             run_state["status"] = "recovered"
             run_state["recovered_at"] = time.time()
             state["persistence"] = self.sessions.save(state)
-            return {"state": state, "prompt": continuation, "action": action, "uncertain_operation": uncertain}
+            return {"state": state, "prompt": continuation, "action": action,
+                    "uncertain_operation": uncertain_operations[-1] if uncertain_operations else None,
+                    "uncertain_operations": copy.deepcopy(uncertain_operations)}
         if command == "mcp_config_get":
             return {"mcpServers": self.mcp.servers}
         if command == "mcp_config_set":
@@ -1001,15 +1037,19 @@ class AgentService:
         checkpoint.append(copy.deepcopy(batch["assistant_message"]))
         results = run_state.get("completed_tool_results", {})
         results = results if isinstance(results, dict) else {}
+        active_operations = run_state.get("active_operations")
+        active_operations = active_operations if isinstance(active_operations, dict) else {}
         active = run_state.get("active_operation")
-        active_call_id = active.get("toolCallId") if isinstance(active, dict) else None
+        if not active_operations and isinstance(active, dict):active_operations[str(active.get("operationId", "legacy-active"))] = active
+        active_call_ids = {str(operation.get("toolCallId")) for operation in active_operations.values()
+                           if isinstance(operation, dict) and operation.get("toolCallId") is not None}
         for call in batch["calls"]:
             if not isinstance(call, dict):
                 continue
             call_id = str(call.get("id", ""))
             if call_id in results:
                 content = str(results[call_id])
-            elif active_call_id is not None and call_id == str(active_call_id):
+            elif call_id in active_call_ids:
                 content = "Uncertain: this operation was interrupted and may have partially or fully completed. Inspect the workspace before retrying."
             else:
                 content = "Not executed: the process was interrupted before this operation started."
@@ -1268,7 +1308,7 @@ class AgentService:
             "status": "running", "turn_id": turn_id, "prompt": prompt, "started_at": turn_started_at,
             "safe_messages": [*copy.deepcopy(state.get("messages", [])), {"role": "user", "content": prompt}],
             "safe_prompt_included": True, "partial_content": "", "request_first_token_seconds": None,
-            "partial_thinking": "", "active_operation": None, "tool_batch": None,
+            "partial_thinking": "", "active_operation": None, "active_operations": {}, "tool_batch": None,
             "completed_tool_results": {}, "workflow_outcome": None, "settings": {"model": model, "provider_id": provider.provider_id,
                 "context": state["context"], "max_tokens": state["max_tokens"], "reasoning": reasoning,
                 "harness_profile": harness_profile, "skills_enabled": skills_enabled,
@@ -1334,6 +1374,7 @@ class AgentService:
                     run_state["status"] = "cancelled"
                     run_state["workflow_outcome"] = "cancelled"
                     run_state["active_operation"] = None
+                    run_state["active_operations"] = {}
                     run_state["safe_messages"] = copy.deepcopy(state.get("messages", []))
                     run_state["partial_content"] = ""
                     run_state["partial_thinking"] = ""
@@ -1452,6 +1493,7 @@ class AgentService:
                     if terminal else str(successful_completion.get("workflowOutcome", "discussion")) if successful_completion else "failed"
                 )
                 run_state["active_operation"] = None
+                run_state["active_operations"] = {}
                 run_state["safe_messages"] = copy.deepcopy(messages)
                 run_state["partial_content"] = ""
                 run_state["partial_thinking"] = ""
@@ -1487,6 +1529,7 @@ class AgentService:
                 state["run_state"]["status"] = "failed"
                 state["run_state"]["workflow_outcome"] = "failed"
                 state["run_state"]["active_operation"] = None
+                state["run_state"]["active_operations"] = {}
             state["last_error"] = {"message": f"{type(exc).__name__}: {exc}", "occurred_at": time.time()}
             try:
                 self.sessions.save(state)

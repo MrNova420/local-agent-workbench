@@ -173,8 +173,11 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
                              "base_messages": copy.deepcopy(run.get("safe_messages", []))}
         run["completed_tool_results"] = {}
     elif kind == "tool_start":
-        run["active_operation"] = {key: event.get(key) for key in ("operationId", "toolCallId", "name", "arguments", "startedAt")}
-        run["active_operation"]["status"] = "running"
+        operation = {key: event.get(key) for key in ("operationId", "toolCallId", "name", "arguments", "startedAt")}
+        operation["status"] = "running"
+        active_operations = run.setdefault("active_operations", {})
+        active_operations[str(event.get("operationId", ""))] = operation
+        run["active_operation"] = copy.deepcopy(operation)
         activity = {"id": event.get("operationId"), "operationId": event.get("operationId"),
                     "turnId": event.get("turnId", run.get("turn_id")), "sessionId": state["session_id"],
                     "workspace": event.get("workspace", state.get("workspace")), "kind": "operation",
@@ -196,14 +199,26 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
             row.update(status=event.get("status", "completed"), result=event.get("result", ""),
                        affectedFiles=copy.deepcopy(event.get("affectedFiles", [])),
                        completedAt=event.get("completedAt", time.time()))
-        previous_operation = copy.deepcopy(run.get("active_operation"))
-        run["active_operation"] = None
+        operation_id = str(event.get("operationId", ""))
+        active_operations = run.setdefault("active_operations", {})
+        previous_operation = copy.deepcopy(active_operations.pop(operation_id, None))
+        current_active = run.get("active_operation")
+        if previous_operation is None and isinstance(current_active, dict) and str(current_active.get("operationId", "")) == operation_id:
+            previous_operation = copy.deepcopy(current_active)
+        if isinstance(current_active, dict) and str(current_active.get("operationId", "")) == operation_id:
+            run["active_operation"] = copy.deepcopy(next(reversed(active_operations.values()), None)) if active_operations else None
         if event.get("status") == "uncertain":
             uncertain = previous_operation if isinstance(previous_operation, dict) else {}
             uncertain.update({key: copy.deepcopy(event.get(key))
                               for key in ("operationId", "toolCallId", "name", "arguments", "result", "status", "affectedFiles", "completedAt")
                               if key in event})
             run["uncertain_operation"] = uncertain
+            uncertain_operations = run.setdefault("uncertain_operations", [])
+            if not isinstance(uncertain_operations, list):
+                uncertain_operations = run["uncertain_operations"] = []
+            uncertain_operations[:] = [item for item in uncertain_operations
+                                       if not isinstance(item, dict) or str(item.get("operationId", "")) != operation_id]
+            uncertain_operations.append(copy.deepcopy(uncertain))
         batch = run.get("tool_batch")
         if isinstance(batch, dict):
             results = run.setdefault("completed_tool_results", {})
@@ -317,6 +332,7 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
             "error": "failed", "stopped_after_operation": "stopped",
         }[kind]))
         run["active_operation"] = None
+        run["active_operations"] = {}
         if kind in {"complete", "generation_complete"}:
             run["verification"] = copy.deepcopy(event.get("verification", {"status": "unknown", "steps": []}))
         partial = {key: run.get(field, "") for key, field in (("content", "partial_content"), ("thinking", "partial_thinking"))

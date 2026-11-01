@@ -58,7 +58,20 @@ class MirroredSessionStoreTests(unittest.TestCase):
         operation = state["run_state"]["uncertain_operation"]
         self.assertEqual(operation["name"], "mcp__calendar__create_event")
         self.assertEqual(operation["arguments"], {"title": "Review"})
+        self.assertEqual([item["operationId"] for item in state["run_state"]["uncertain_operations"]], ["op-mcp"])
         self.assertEqual(state["activity_events"][0]["status"], "uncertain")
+
+    def test_event_replay_keeps_other_active_operations_when_one_finishes(self):
+        state = {"session_id": "s-parallel", "workspace": "C:/project",
+                 "run_state": {"turn_id": "turn-parallel", "safe_messages": []}, "activity_events": []}
+        for operation_id, call_id in (("op-a", "call-a"), ("op-b", "call-b")):
+            _replay_run_event(state, {"type": "tool_start", "turnId": "turn-parallel", "operationId": operation_id,
+                                      "toolCallId": call_id, "name": "read_file", "arguments": {"path": f"{call_id}.py"}})
+        _replay_run_event(state, {"type": "tool_done", "turnId": "turn-parallel", "operationId": "op-a",
+                                  "toolCallId": "call-a", "name": "read_file", "result": "A", "status": "completed"})
+
+        self.assertEqual(set(state["run_state"]["active_operations"]), {"op-b"})
+        self.assertEqual(state["run_state"]["active_operation"]["operationId"], "op-b")
 
     def test_journal_recovery_attaches_exact_provider_settings_to_matching_prompt_request(self):
         state = {
