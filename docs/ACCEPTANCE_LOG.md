@@ -457,3 +457,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Compaction activity records and the Live Work Sheet show omitted exchange counts separately from omitted earlier turns. Added queued engine, sidecar, and renderer regressions. None were run, and no model/context/output/reasoning setting changed.
 - App pin advanced to engine `156e05c881c452138d3bd6258014b269b913631d`; no package or release was produced.
 - Standalone AgentEngine/CLI now has an in-memory fallback for complete operation results when no app session-store callback exists; the desktop's captured-session lookup remains primary and durable. The regression is queued. App pin advanced to `0f5c7f193f3bab4a162e167cccd6a0f6536e45ff`; no tests or package were run.
+
+## 2026-11-01 progressive activity timeline (verification queued)
+
+- Chat and the Live Work Sheet continue to consume the same full session activity records. The renderer now starts with the most recent 100 cards and exposes older cards in 100-entry increments, keeping long histories available without mounting every card immediately. This window is presentation-only and does not truncate or rewrite session history.
+- Added a renderer regression for a 245-event history. No tests, typecheck, package, or visual acceptance were run.

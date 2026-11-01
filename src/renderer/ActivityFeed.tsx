@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ActivityMode, ActivityRecord } from '../shared/protocol';
+
+const INITIAL_ACTIVITY_WINDOW = 100;
+const ACTIVITY_WINDOW_STEP = 100;
 
 function ProgressiveText({ value }: { value: string }) {
   const [visible, setVisible] = useState(16_000);
@@ -98,9 +101,17 @@ function PromptManifestDetails({ manifest, providerRequest, providerUsage }: { m
 }
 
 export function ActivityFeed({ entries, mode, surface }: { entries: ActivityRecord[]; mode: ActivityMode; surface: 'chat' | 'sidebar' }) {
+  const [visibleCount, setVisibleCount] = useState(INITIAL_ACTIVITY_WINDOW);
+  const scope = entries[0]?.sessionId || '';
+  useEffect(() => setVisibleCount(INITIAL_ACTIVITY_WINDOW), [scope]);
   if (surface === 'chat' && mode === 'sidebar') return null;
   if (!entries.length) return surface === 'sidebar' ? <p className="sheet-empty">Reads, tool calls, and results will appear here as they happen.</p> : null;
+  const visibleEntries = entries.slice(Math.max(0, entries.length - visibleCount));
+  const earlierCount = entries.length - visibleEntries.length;
   return <div className={`activity-feed activity-feed-${surface} activity-mode-${mode}`} aria-label={surface === 'chat' ? 'Agent activity in this conversation' : 'Activity trace'}>
-    {entries.map((row) => <ActivityCard key={row.id} row={row} expanded={surface === 'chat' && mode === 'inline'} surface={surface}/>) }
+    {earlierCount > 0 && <button className="activity-load-earlier" onClick={() => setVisibleCount((count) => count + ACTIVITY_WINDOW_STEP)}>
+      Load earlier activity · showing {visibleEntries.length.toLocaleString()} of {entries.length.toLocaleString()} total
+    </button>}
+    {visibleEntries.map((row) => <ActivityCard key={row.id} row={row} expanded={surface === 'chat' && mode === 'inline'} surface={surface}/>) }
   </div>;
 }

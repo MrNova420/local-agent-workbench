@@ -31,6 +31,7 @@
 - Approved commands stopped after launch or terminated by timeout are now marked `uncertain` because partial file effects may already exist. Their possible effects trigger workspace inspection; the renderer warns before the user treats the result as a clean cancel or definite failure. A queued regression distinguishes these from cancellation before launch.
 - The active-task checkpoint explicitly instructs the model to inspect the saved operation result and workspace before requesting or repeating an uncertain operation; uncertain operations are never automatically replayed. The continuity regression is queued.
 - `read_operation_result` now falls back to the engine's in-memory completed-operation map when running without the desktop's durable session callback, so standalone CLI use does not advertise an unavailable lookup. In the desktop, the captured session store remains authoritative, with engine memory as same-run fallback. Regression queued, not run.
+- Long chat/trace activity histories now render progressively: the latest 100 records appear first, with explicit loading of earlier records in batches. All records stay in persisted state; this is not a retention cap. Regression and visible scroll/restore acceptance are queued.
 
 ## Verification queue (not run in this implementation phase)
 

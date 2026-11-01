@@ -5,6 +5,19 @@ import { applyActivityEvent, shouldRefreshWorkspaceForActivity, type ActivityRec
 import { ActivityFeed } from '../src/renderer/ActivityFeed';
 
 describe('durable live activity state', () => {
+  it('progressively renders long activity histories without discarding older records', () => {
+    const entries: ActivityRecord[] = Array.from({ length: 245 }, (_, index) => ({
+      id: `activity-${index}`, sessionId: 'session-long', turnId: 'turn-long', kind: 'operation',
+      name: `operation_${index}`, status: 'completed',
+    }));
+    const markup = renderToStaticMarkup(createElement(ActivityFeed, { entries, mode: 'compact', surface: 'sidebar' }));
+    expect(markup).toContain('245 total');
+    expect(markup).toContain('Load earlier activity');
+    expect(markup).toContain('operation 244');
+    expect(markup).not.toContain('operation 0');
+    expect(entries).toHaveLength(245);
+  });
+
   it('refreshes the project file view after completed or uncertain mutations and commands', () => {
     const base: ActivityRecord = {
       id: 'op', operationId: 'op', sessionId: 's', turnId: 't', kind: 'operation', status: 'completed',
