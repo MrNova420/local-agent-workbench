@@ -221,6 +221,28 @@ def test_plan_intent_seeds_live_checklist_and_enforces_read_only_builtin_tools(s
     assert any(event.get("type") == "activity_event" and event.get("activity", {}).get("kind") == "plan" for event in events)
 
 
+def test_agent_plan_decisions_are_saved_to_checkpoint_and_activity(service, tmp_path, monkeypatch):
+    project = tmp_path / "plan-decision-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    state["task_checkpoint"] = {"current": {"plan": [], "decisions": []}}
+    service.sessions.save(state)
+    controller = {"session": state, "turn_id": "turn-plan-decision", "checkpoint_lock": threading.RLock(),
+                  "last_checkpoint": time.monotonic(), "last_journal_flush": time.monotonic(), "journal_pending": []}
+    monkeypatch.setattr(service, "emit", lambda _event: None)
+    decision = "Keep the existing router to preserve deep links."
+
+    service._publish_run_event(controller, SimpleNamespace(workspace=project), {
+        "type": "plan", "source": "agent", "items": [{"title": "Implement", "status": "in_progress"}],
+        "acceptanceCriteria": ["Deep links still work."], "decisions": [decision],
+    })
+
+    saved = service.sessions.load(state["session_id"], str(project))["state"]
+    assert saved["task_checkpoint"]["current"]["decisions"][0]["text"] == decision
+    plan_activity = next(row for row in saved["activity_events"] if row.get("kind") == "plan")
+    assert plan_activity["decisions"] == [decision]
+
+
 def test_session_run_settings_cannot_change_during_active_run(service, tmp_path):
     workspace = tmp_path / "busy-project"
     workspace.mkdir()

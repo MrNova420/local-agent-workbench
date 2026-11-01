@@ -197,7 +197,8 @@ class MirroredSessionStoreTests(unittest.TestCase):
                 {"_journal_event_id": "evt-1", "_journal_recorded_at_ns": 1, "type": "text", "turnId": "turn-1", "text": "working"},
                 {"_journal_event_id": "evt-2", "_journal_recorded_at_ns": 2, "type": "plan", "turnId": "turn-1",
                  "workspace": str(root), "items": [{"title": "Build", "status": "in_progress"}],
-                 "acceptanceCriteria": ["The page renders without errors."]},
+                 "acceptanceCriteria": ["The page renders without errors."],
+                 "decisions": ["Use the existing router to preserve deep links."]},
                 {"_journal_event_id": "evt-3", "_journal_recorded_at_ns": 3, "type": "tool_start", "turnId": "turn-1",
                  "workspace": str(root), "operationId": "op-1", "name": "write_file", "arguments": {"path": "index.html"}},
             ])
@@ -211,6 +212,7 @@ class MirroredSessionStoreTests(unittest.TestCase):
             self.assertEqual(recovered["activity_events"][0].get("acceptanceCriteria"), ["The page renders without errors."])
             self.assertEqual(recovered["task_checkpoint"]["current"]["acceptance_criteria"], ["The page renders without errors."])
             self.assertEqual(recovered["task_checkpoint"]["current"]["next_action"], "Build")
+            self.assertEqual(recovered["task_checkpoint"]["current"]["decisions"][0]["text"], "Use the existing router to preserve deep links.")
             self.assertEqual(recovered["run_state"]["active_operation"]["operationId"], "op-1")
             self.assertTrue(any(row.get("operationId") == "op-1" for row in recovered["activity_events"]))
 

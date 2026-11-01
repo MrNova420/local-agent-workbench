@@ -18,6 +18,7 @@ _core_path = os.environ.get("LOCAL_AGENT_CORE_PATH")
 if _core_path and Path(_core_path).is_dir() and _core_path not in sys.path:
     sys.path.insert(0, _core_path)
 from sessions import SessionStore
+from task_checkpoint import record_plan
 
 
 def _atomic_json(path: Path, value: Any) -> None:
@@ -254,6 +255,7 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
                 if criteria_included:
                     task["acceptance_criteria"] = copy.deepcopy(acceptance_criteria)
                     task["acceptance_criteria_source"] = "agent" if event.get("source") != "workbench" else "awaiting_agent_refinement"
+                record_plan(checkpoint, event.get("items", []), None, event.get("decisions"))
         plan_activity = {
             "id": event.get("actionId") or uuid.uuid4().hex, "turnId": event.get("turnId", run.get("turn_id")),
             "sessionId": state["session_id"], "workspace": event.get("workspace", state.get("workspace")),
@@ -262,6 +264,8 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
         }
         if criteria_included:
             plan_activity["acceptanceCriteria"] = copy.deepcopy(acceptance_criteria)
+        if isinstance(event.get("decisions"), list):
+            plan_activity["decisions"] = copy.deepcopy(event["decisions"])
         state.setdefault("activity_events", []).append(plan_activity)
     elif kind == "context_compacted":
         state.setdefault("activity_events", []).append({

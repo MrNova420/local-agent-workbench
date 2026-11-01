@@ -286,12 +286,15 @@ class AgentService:
                     acceptance_criteria = []
                 checkpoint = state.get("task_checkpoint")
                 if isinstance(checkpoint, dict):
-                    record_plan(checkpoint, plan_items, acceptance_criteria if criteria_included and source == "agent" else None)
+                    record_plan(checkpoint, plan_items, acceptance_criteria if criteria_included and source == "agent" else None,
+                                event.get("decisions"))
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
                             "workspace": str(turn.workspace), "kind": "plan", "status": "updated", "source": source,
                             "items": copy.deepcopy(plan_items), "timestamp": time.time()}
                 if criteria_included:
                     activity["acceptanceCriteria"] = copy.deepcopy(acceptance_criteria)
+                if isinstance(event.get("decisions"), list):
+                    activity["decisions"] = copy.deepcopy(event["decisions"])
                 rows.append(activity)
             elif kind == "context_compacted":
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
