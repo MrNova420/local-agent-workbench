@@ -8,7 +8,7 @@ Deliver **1:1 user-facing feature and workflow parity with Codex and OpenCode** 
 
 ## Current active source state (2026-11-01)
 
-- Unpublished app source pins engine commit `4ec81e176aa7257b03b71b345f62b896d170439c` in `core-revision.txt`. These commits are isolated in worktrees and have not been pushed or packaged.
+- Unpublished app source pins engine commit `69fcb9995fe03fd271276c799c34e37f194c9750` in `core-revision.txt`. These commits are isolated in worktrees and have not been pushed or packaged.
 - The Ollama request adapter now prevents generic runtime options from silently overriding selected context, output-token, and temperature controls. Conflicts are recorded in request provenance and called out in activity details. A regression is queued; settings were not changed and no inference was run.
 - Cancelled, partial, uncertain, and otherwise incomplete commands now produce an explicit incomplete-verification outcome even when other project files changed. Their run result stays in the evidence record; no command is labeled as a passing test from exit status alone. Regression coverage is queued.
 - Oversized checkpoints now have a budgeted inference-only summary. The full checkpoint remains on disk; the summary preserves the active goal/plan and latest progress and reports any history categories omitted. The Activity Trace displays these counts. Regression coverage is queued and unrun.
@@ -35,6 +35,7 @@ Deliver **1:1 user-facing feature and workflow parity with Codex and OpenCode** 
 - Regression coverage has been added but **not run** for these changes. The earlier verification numbers below describe their historical commits only, not this active source pair. Final engine/app tests, typecheck, package, visible workflow, installer/update, and live-model/hardware acceptance remain queued.
 - Structured `ask_user` clarification is now implemented in unpublished source: a run can pause on a material missing requirement, present a required non-dismissible answer dialog, journal the exchange, and return the user’s answer to the model. It remains separate from file/command approval and preserves answered versus unanswered state during recovery. Paired regression cases are queued and unrun.
 - Checkpoint compaction now budgets the inference copy to its assigned space. Expandable plan details and long prose may be summarized in that copy with explicit omission counts; canonical saved task history is unchanged and recoverable by pages. This removes the fixed assistant-update character cutoff. Regression cases are queued and unrun.
+- The compact checkpoint envelope and omission parser also handle very small projection budgets, while directing the model to recover omitted sections through the paged checkpoint tool. The tiny-budget regression is queued and unrun.
 - No model, inference setting, OpenCode configuration, or loaded runtime was changed during this source work.
 
 ## Codex / OpenCode parity map
