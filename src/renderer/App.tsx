@@ -1032,7 +1032,7 @@ export default function App() {
     {permissionsOpen && <PermissionRulesModal rules={permissionRules} setRules={setPermissionRules} tools={toolCatalog?.tools || []} loading={permissionsLoading} running={running} onClose={() => setPermissionsOpen(false)} onSave={savePermissionRules} />}
     {modelLibraryOpen && <ModelLibraryModal model={model} models={models} modelLabels={displayModelLabels} context={options.context} reasoning={options.reasoning} downloadedDirectory={downloadedModelDirectory} onModel={selectModel} onRefresh={refreshModels} onClose={() => setModelLibraryOpen(false)} notify={notify}/>}
     {mcpOpen && <Modal title="MCP connections" eyebrow="EXTEND THE TOOLSET" onClose={() => setMcpOpen(false)}>
-      <p className="modal-copy">Connect local stdio or remote Streamable HTTP servers. Every tool call requires approval. Use HTTPS for remote servers; reference credentials as <code>${'{ENV:VARIABLE_NAME}'}</code> so secrets stay out of this file. MCP servers can access whatever their own process/account permits.</p>
+      <p className="modal-copy">Connect local stdio or remote Streamable HTTP servers. Tool calls require approval by default; matching persistent permission rules can allow, ask, or deny them. Use HTTPS for remote servers; reference credentials as <code>${'{ENV:VARIABLE_NAME}'}</code> so secrets stay out of this file. MCP servers can access whatever their own process/account permits.</p>
       <textarea className="code-editor mcp-editor" value={mcpJson} onChange={(e) => setMcpJson(e.target.value)} spellCheck={false}/>
       <div className="modal-actions"><Button kind="quiet" onClick={() => setMcpOpen(false)}>Cancel</Button><Button kind="bright" onClick={() => void saveMcp()}>Save connections</Button></div>
     </Modal>}
@@ -1444,7 +1444,7 @@ function PermissionRulesModal({ rules, setRules, tools, loading, running, onClos
   const toolNames = [...new Set(['run_command', 'run_shell', ...tools.map((tool) => tool.name)])].sort();
   const update = (index: number, values: Partial<PermissionRuleDraft>) => setRules((current) => current.map((rule, row) => row === index ? { ...rule, ...values } : rule));
   return <Modal title="Tool permission rules" eyebrow="PERSISTENT ACCESS POLICY" wide onClose={onClose}>
-    <p className="modal-copy">Rules apply across sessions. The default remains the current run approval behavior. A matching <b>deny</b> is a hard block and overrides allow rules and auto-approval. Path patterns match project-relative tool targets. Approved commands and MCP servers still run with your Windows account permissions; these rules are not OS containment.</p>
+    <p className="modal-copy">Rules apply across sessions. Without a matching rule, the current run approval mode applies. A matching <b>deny</b> is a hard block; <b>ask</b> always opens the approval prompt, even during auto-approval; and <b>allow</b> skips that prompt. Deny takes precedence over ask and allow. Path patterns match project-relative tool targets. Commands and MCP servers still run with your Windows account permissions; these rules are not OS containment.</p>
     {loading && <div className="empty-state">Loading saved rules…</div>}
     <div className="permission-rule-list">
       {rules.map((rule, index) => <div className="permission-rule-row" key={`${index}:${rule.tool}`}>

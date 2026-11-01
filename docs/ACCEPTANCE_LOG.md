@@ -552,3 +552,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - The Windows sidecar build now checks the complete set of directly imported shared-engine modules before invoking PyInstaller, so an incomplete or stale engine checkout fails with the exact missing source filename.
 - Package build verification remains queued; no installer was built.
 
+## 2026-11-01 permission-rule UI copy alignment (verification queued)
+
+- MCP setup and persistent-policy dialogs now explain the actual defaults and precedence: approval by default, allow skips the prompt, ask forces it, and deny wins. They also retain the explicit Windows-account/no-OS-containment warning.
+- UI rendering and accessibility acceptance remain queued; no permission rules were changed.
+
