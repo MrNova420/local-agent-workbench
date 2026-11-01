@@ -453,6 +453,31 @@ def test_activity_events_checkpoint_complete_results_and_unstarted_calls(service
     assert any(event["type"] == "activity_event" for event in emitted)
 
 
+def test_tool_call_progress_is_live_but_not_journaled_or_saved(service, tmp_path, monkeypatch):
+    project = tmp_path / "tool-progress-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    state["run_state"] = {"status": "running", "turn_id": "turn-progress", "safe_messages": [],
+                          "partial_content": "", "partial_thinking": "", "active_operation": None}
+    service.sessions.save(state)
+    controller = {"session": state, "turn_id": "turn-progress", "checkpoint_lock": threading.RLock(),
+                  "last_checkpoint": time.monotonic(), "last_journal_flush": time.monotonic(),
+                  "journal_pending": []}
+    emitted = []
+    monkeypatch.setattr(service, "emit", emitted.append)
+
+    service._publish_run_event(controller, SimpleNamespace(workspace=project), {
+        "type": "tool_call_progress", "provider": "ollama", "request_index": 0,
+        "call_index": 0, "tool_name": "write_file", "argument_characters": 512,
+    })
+
+    assert any(event.get("type") == "tool_call_progress" for event in emitted)
+    assert controller["journal_pending"] == []
+    saved = service.sessions.load(state["session_id"], str(project))
+    assert not any(event.get("type") == "tool_call_progress" for event in saved.get("activity_events", []))
+    assert not any(event.get("type") == "tool_call_progress" for event in saved.get("run_state", {}).get("events", []))
+
+
 def test_run_errors_are_persisted_as_rehydratable_activity(service, tmp_path, monkeypatch):
     project = tmp_path / "error-activity-project"
     project.mkdir()

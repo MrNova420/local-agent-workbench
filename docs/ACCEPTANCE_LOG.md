@@ -439,3 +439,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Paired engine commit: `ed1d27f86414bb97b208683d6625e41c87e723ea`. The compact activity row also surfaces “inspect before retry” without requiring expansion; a queued renderer assertion covers that cue.
 - A separate queued MCP adapter regression covers timeout after dispatch and asserts that the uncertain result does not echo raw exception text. It has not been run.
 - The exact paired engine pin now includes that timeout regression and its implementation note (`11255ad9ea2e289afdd53b74821f6fbff2866577`).
+
+## 2026-11-01 streamed tool-call preparation cue (verification queued)
+
+- Both local streaming adapters now report tool-call name and argument-character progress without exposing partial argument content. The chat shows the cue as “not dispatched”; complete operations continue through the existing activity, approval, and persistence flow. The partial preview itself is transient and not journaled.
+- Added queued Ollama, llama.cpp, and renderer-state regressions. No tests, typecheck, package build, or visible UI acceptance were run.

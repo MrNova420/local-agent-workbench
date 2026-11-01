@@ -1,5 +1,25 @@
 import type { WorkerEvent } from './protocol';
 
+export type ToolCallProgress = { requestIndex: number; callIndex: number; provider: string; toolName: string; argumentCharacters: number };
+
+export function applyToolCallProgress(current: ToolCallProgress[], event: WorkerEvent): ToolCallProgress[] {
+  if (event.type !== 'tool_call_progress') return current;
+  const requestIndex = Number(event.request_index ?? 0);
+  const callIndex = Number(event.call_index ?? 0);
+  const argumentCharacters = Number(event.argument_characters) || 0;
+  const preview: ToolCallProgress = {
+    requestIndex: Number.isFinite(requestIndex) ? requestIndex : 0,
+    callIndex: Number.isFinite(callIndex) ? callIndex : 0,
+    provider: String(event.provider || 'local runtime'), toolName: String(event.tool_name || ''),
+    argumentCharacters: Number.isFinite(argumentCharacters) ? Math.max(0, argumentCharacters) : 0,
+  };
+  const index = current.findIndex((item) => item.requestIndex === preview.requestIndex && item.callIndex === preview.callIndex);
+  if (index < 0) return [...current, preview];
+  const next = current.slice();
+  next[index] = preview;
+  return next;
+}
+
 export function restoredRunPhase(status: unknown): string {
   switch (status) {
     case 'completed': return 'Turn complete';

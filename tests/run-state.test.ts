@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { nextRunPhase, restoredRunPhase, runStepProgress } from '../src/shared/run-state';
+import { applyToolCallProgress, nextRunPhase, restoredRunPhase, runStepProgress } from '../src/shared/run-state';
+
+describe('streamed tool-call preview', () => {
+  it('updates one request preview by index without exposing partial arguments', () => {
+    const first = applyToolCallProgress([], { type: 'tool_call_progress', provider: 'ollama', request_index: 2,
+      call_index: 0, tool_name: 'write_file', argument_characters: 320 });
+    const next = applyToolCallProgress(first, { type: 'tool_call_progress', provider: 'ollama', request_index: 2,
+      call_index: 0, tool_name: 'write_file', argument_characters: 640, arguments_preview: 'secret or partial file data' });
+
+    expect(next).toHaveLength(1);
+    expect(next[0].argumentCharacters).toBe(640);
+    expect(next[0]).not.toHaveProperty('arguments_preview');
+    expect(applyToolCallProgress(next, { type: 'tool_call_progress', provider: 'ollama', request_index: 2,
+      call_index: 1, tool_name: 'read_file', argument_characters: 15 })).toHaveLength(2);
+    expect(applyToolCallProgress(next, { type: 'text', text: 'no change' })).toEqual(next);
+  });
+});
 
 describe('run status transitions', () => {
   it.each([

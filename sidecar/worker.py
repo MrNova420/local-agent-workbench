@@ -350,6 +350,12 @@ class AgentService:
             else:
                 self.emit(enriched)
 
+            # Partial model tool arguments are a transient, non-executable progress cue.
+            # The complete call and its arguments are durably recorded only after the
+            # provider finishes the call and the engine emits the normal tool events.
+            if kind == "tool_call_progress":
+                return
+
             pending = controller.setdefault("journal_pending", [])
             journal_event = {**event, "sessionId": state["session_id"], "turnId": controller["turn_id"],
                              "workspace": str(turn.workspace), "timestamp": event.get("at", time.time()),

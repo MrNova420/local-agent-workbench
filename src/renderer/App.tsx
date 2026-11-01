@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
 import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, SkillSource, TaskIntent, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
-import { nextRunPhase, restoredRunPhase, runStepProgress } from '../shared/run-state';
+import { applyToolCallProgress, nextRunPhase, restoredRunPhase, runStepProgress, type ToolCallProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordInputEstimate, recordStreamedText, restoreRunMetrics, type RunMetrics } from '../shared/run-metrics';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice, readRunTokenPreferences } from '../shared/model-controls';
 import { normalizeGpuStats } from '../shared/resource-metrics';
@@ -189,6 +189,7 @@ export default function App() {
   const [modelPreloading, setModelPreloading] = useState(false);
   const [connected, setConnected] = useState<'checking' | 'yes' | 'no'>('checking');
   const [running, setRunning] = useState(false);
+  const [toolCallProgress, setToolCallProgress] = useState<ToolCallProgress[]>([]);
   const [phase, setPhase] = useState('Ready');
   const [workflowOutcome, setWorkflowOutcome] = useState<string | null>(null);
   const [verificationEvidence, setVerificationEvidence] = useState<VerificationEvidence | null>(null);
@@ -401,6 +402,7 @@ export default function App() {
         setInstalled(false);
         setModelPreloading(false);
         if (event.type === 'service_exit') {
+          setToolCallProgress([]);
           setWorkflowOutcome('interrupted');
           setApproval(null);
           setRunning(false);
@@ -447,6 +449,7 @@ export default function App() {
         }
       }
       if (event.type === 'run_started' && typeof event.turnId === 'string') {
+        setToolCallProgress([]);
         setMessages((current) => {
           let index = current.length - 1;
           while (index >= 0 && (current[index].role !== 'user' || current[index].turnId)) index -= 1;
@@ -456,7 +459,10 @@ export default function App() {
           return next;
         });
       }
-      if (event.type === 'tool_batch') assistantSegmentBreakRef.current = true;
+      if (event.type === 'tool_call_progress') {
+        setToolCallProgress((current) => applyToolCallProgress(current, event));
+      }
+      if (event.type === 'tool_batch') { assistantSegmentBreakRef.current = true; setToolCallProgress([]); }
       if (event.type === 'session_mirror_error') {
         const appSaved = event.appSaved !== false;
         const projectSaved = event.projectSaved === true;
@@ -546,6 +552,7 @@ export default function App() {
         setRunMetrics((current) => recordInputEstimate(current, event.estimated_input_tokens));
       }
       if (event.type === 'complete') {
+        setToolCallProgress([]);
         setApproval(null);
         setRunning(false); setPhase((current) => nextRunPhase(current, event));
         setWorkflowOutcome(typeof event.workflowOutcome === 'string' ? event.workflowOutcome : 'discussion');
@@ -569,6 +576,7 @@ export default function App() {
         setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
       }
       if (event.type === 'cancelled') {
+        setToolCallProgress([]);
         setWorkflowOutcome('cancelled');
         setApproval(null); setRunning(false); setPhase((current) => nextRunPhase(current, event)); setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
         setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
@@ -582,6 +590,7 @@ export default function App() {
         notify('The active operation was saved. No further model or tool calls were started.', 'warn');
       }
       if (event.type === 'error') {
+        setToolCallProgress([]);
         setWorkflowOutcome('failed');
         setApproval(null);
         setRunning(false); setPhase((current) => nextRunPhase(current, event)); setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
@@ -591,6 +600,7 @@ export default function App() {
         notify(String(event.error || 'The task failed.'), 'bad');
       }
       if (event.type === 'run_idle') {
+        setToolCallProgress([]);
         setApproval(null);
         setRunning(false);
         setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
@@ -924,7 +934,7 @@ export default function App() {
         onHome={() => setView('landing')}
       />}
       {view === 'session' && <SessionRoom
-        root={workspace} session={session} messages={messages} activities={activities} activityMode={activityMode} plan={plan} acceptanceCriteria={acceptanceCriteria} phase={phase} workflowOutcome={workflowOutcome} verificationEvidence={verificationEvidence}
+        root={workspace} session={session} messages={messages} activities={activities} activityMode={activityMode} plan={plan} acceptanceCriteria={acceptanceCriteria} phase={phase} workflowOutcome={workflowOutcome} verificationEvidence={verificationEvidence} toolCallProgress={toolCallProgress}
         elapsed={elapsed} running={running} prompt={prompt} setPrompt={setPrompt} promptRef={promptRef}
         options={options} setOptions={setOptions} files={availableFiles} telemetry={telemetry}
         runMetrics={runMetrics} onRun={startRun} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
@@ -1075,9 +1085,10 @@ function ProjectHome({ root, tab, setTab, files, sessions, onNew, onOpenSession,
   </section>;
 }
 
-function SessionRoom({ root, session, messages, activities, activityMode, plan, acceptanceCriteria, phase, workflowOutcome, verificationEvidence, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
+function SessionRoom({ root, session, messages, activities, activityMode, plan, acceptanceCriteria, phase, workflowOutcome, verificationEvidence, toolCallProgress, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
   root: string; session: Session | null; messages: ChatMessage[]; activities: ActivityRecord[]; activityMode: ActivityMode; plan: PlanItem[]; acceptanceCriteria: string[];
   phase: string; elapsed: number; running: boolean; prompt: string; setPrompt: (value: string) => void;
+  toolCallProgress: ToolCallProgress[];
   workflowOutcome: string | null; verificationEvidence: VerificationEvidence | null; promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
   setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>; files: ProjectFile[];
   telemetry: TelemetryView;
@@ -1105,7 +1116,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
   useEffect(() => {
     if (!followTranscript || !transcriptRef.current) return;
     transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
-  }, [messages, activities, followTranscript]);
+  }, [messages, activities, toolCallProgress, followTranscript]);
   useEffect(() => { setFollowTranscript(true); }, [session?.session_id]);
   const updateTranscriptFollow = () => {
     const element = transcriptRef.current;
@@ -1127,7 +1138,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
           <div className="message-meta"><span className={`speaker-mark ${message.role}`}>{message.role === 'user' ? 'YOU' : <Icon name="spark"/>}</span><strong>{message.role === 'user' ? 'Task brief' : 'Local agent'}</strong><span>{message.recoveredPartial ? 'PARTIAL · INTERRUPTED' : message.role === 'user' ? 'INPUT' : message.streaming ? 'LIVE OUTPUT' : 'RESPONSE'}</span>{message.streaming && <i className="stream-pulse"/>}</div>
           <div className="message-content"><Markdown content={message.content}/></div>
           {message.thinking && <details className="reasoning-trace"><summary>Model reasoning · {message.thinking.length.toLocaleString()} characters</summary><div>{message.thinking}</div></details>}
-        </article>{message.role === 'user' && message.turnId && <ActivityFeed entries={activitiesByTurn.get(message.turnId) || []} mode={activityMode} surface="chat"/>}</Fragment>)}<div ref={endRef}/>{!followTranscript && <button className="jump-latest" onClick={() => { setFollowTranscript(true); if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight; }} aria-label="Jump to latest message">↓ Latest</button>}</div>}
+        </article>{message.role === 'user' && message.turnId && <ActivityFeed entries={activitiesByTurn.get(message.turnId) || []} mode={activityMode} surface="chat"/>}</Fragment>)}{toolCallProgress.length > 0 && <div className="tool-call-progress" role="status" aria-live="polite"><span className="stream-pulse"/><strong>Preparing structured tool request · not dispatched</strong>{toolCallProgress.map((item) => <span key={`${item.requestIndex}-${item.callIndex}`}>{item.provider.toUpperCase()} · {item.toolName || `Tool ${item.callIndex + 1}`} · {item.argumentCharacters.toLocaleString()} argument characters</span>)}</div>}<div ref={endRef}/>{!followTranscript && <button className="jump-latest" onClick={() => { setFollowTranscript(true); if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight; }} aria-label="Jump to latest message">↓ Latest</button>}</div>}
         <div className="composer-shell">
           <div className="composer-profile"><span className={`profile-chip access-${options.access}`}>{options.access.toUpperCase()}</span><span className="profile-chip approval-chip">{options.approvalMode === 'auto' ? 'AUTO APPROVE · THIS RUN' : options.approvalMode === 'per-task' ? 'PER TASK' : 'PER ACTION'}</span><span className="profile-chip capability-chip" title="Capability reported by the selected local runtime; support metadata may be unknown">TOOLS {modelInfo?.tool_support === 'supported' ? 'SUPPORTED' : modelInfo?.tool_support === 'unsupported' ? 'UNSUPPORTED' : 'UNKNOWN'}</span><span className="profile-chip intent-chip" title="Task intent guides the agent; file access and approval remain separate">INTENT {options.taskIntent.toUpperCase()}</span><button className={`profile-toggle ${options.harnessProfile === 'small-model' ? 'is-active' : ''}`} type="button" aria-pressed={options.harnessProfile === 'small-model'} title="Changes agent workflow guidance only; model settings and token limits stay unchanged" onClick={onToggleHarnessProfile} disabled={running}>Small-model {options.harnessProfile === 'small-model' ? 'on' : 'off'}</button><span className="profile-hint">{fmt(options.context)} context · {fmt(options.maxTokens)} output</span><button onClick={onSettings}>Adjust run</button></div>
           <textarea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={onEnter} placeholder="Describe the work. Use Shift + Enter to add detail…" rows={3} disabled={running} aria-label="Task prompt"/>
