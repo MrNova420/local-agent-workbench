@@ -46,7 +46,7 @@
 
 ## Remaining reliability work
 
-- The shared engine is pinned at `57c7c3faf0a92846fda0475f6d3204690f0642c3` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. It records provider-specific body fields alongside normalized options, persists uncertain dispatched MCP effects, streams safe tool-preparation metadata without persisting partial arguments, and reports unsupported MCP schema-validation features before a tool call. Reconcile and build the packaged app only after implementation is complete.
+- The shared engine is pinned at `92585b5793c18bbcbad30a5673a0cdaa7b802e4a` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. It records provider-specific body fields alongside normalized options, persists uncertain dispatched MCP effects, streams safe tool-preparation metadata without persisting partial arguments, and reports unsupported MCP schema-validation features before a tool call. JSON Schema `format` remains an annotation without value validation. Reconcile and build the packaged app only after implementation is complete.
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.
 - Add persisted context/input usage presentation and distinguish actual runtime allocation from selected context where the provider exposes it.

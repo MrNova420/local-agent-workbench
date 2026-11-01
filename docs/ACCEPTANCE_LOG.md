@@ -449,4 +449,4 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 
 - MCP discovery now performs a bounded scan of advertised schemas and reports unsupported keywords, types, and non-local references in the tool description before invocation. Validation remains fail-closed; this reports capability gaps and does not claim broader JSON Schema support.
 - Tool Catalog displays the warning in the tool and server details, and discovery emits a warning when affected tools are available. Added queued engine schema/discovery and sidecar catalog regressions. No tests, typecheck, package build, or visible acceptance were run.
-- App pin advanced to engine `57c7c3faf0a92846fda0475f6d3204690f0642c3`; no model, runtime, or inference settings were changed.
+- JSON Schema `format` metadata is accepted as an annotation under the default specification behavior; values such as date-time are not asserted valid. App pin advanced to engine `92585b5793c18bbcbad30a5673a0cdaa7b802e4a`; no model, runtime, or inference settings were changed.
