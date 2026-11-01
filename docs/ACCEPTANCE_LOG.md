@@ -338,6 +338,7 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 
 - Added persisted turn IDs before inference begins and associated restored transcript user messages with their saved turns. The chat now renders activity directly after the matching prompt, using the same activity event stream as the worksheet.
 - Made the Home catalog deduplicate and stable-sort Ollama and registered GGUF IDs, and refresh it every 30 seconds while Home is visible. The source maps each unique local model to one marker; live zero/one/many catalog acceptance remains unverified.
+- Filtered missing or invalid registered GGUF paths out of the model catalog so stale library entries do not count as installed Home dots.
 - Removed the always-visible Electron titlebar overlay and added a narrow preload/main-process window-control bridge. Custom window buttons are revealed only when hovering/focusing the top-right hotspot; close still goes through the existing run decision.
 - The README already includes the Home hero orbit capture. Its caption now more clearly identifies it as a static historical visual reference, not proof of the current live model markers.
 - Tests, typecheck, build, screenshots, and packaged visual acceptance remain queued as requested. No inference request, model loading, token/reasoning setting change, or OpenCode configuration change was made.
