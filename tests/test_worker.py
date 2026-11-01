@@ -497,6 +497,7 @@ def test_keep_alive_is_not_passed_as_an_ollama_generation_option(service, tmp_pa
 
     class CapturingEngine:
         def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
+            self.event = event
             captured.update(kwargs)
             self.state = {}
             self.runtime = object()
@@ -504,6 +505,7 @@ def test_keep_alive_is_not_passed_as_an_ollama_generation_option(service, tmp_pa
 
         def run(self, prompt, messages):
             messages.append({"role": "user", "content": prompt})
+            self.event({"type": "complete", "workflowOutcome": "discussion", "verification": {"status": "not_verified"}})
             return messages
 
         def cancel(self):
@@ -525,6 +527,81 @@ def test_keep_alive_is_not_passed_as_an_ollama_generation_option(service, tmp_pa
     assert "keep_alive" not in captured["runtime_options"]
     assert captured["runtime_options"] == {}
     assert engines[0].state["keep_alive"] == "3h"
+
+
+def test_successful_completion_outcome_is_delivered_after_session_save(service, tmp_path, monkeypatch):
+    events = []
+    service.emit = events.append
+
+    class CompletingEngine:
+        def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
+            self.event = event
+            self.state = {}
+            self.runtime = object()
+
+        def run(self, prompt, messages):
+            messages.append({"role": "assistant", "content": "The change is ready."})
+            self.event({"type": "complete", "workflowOutcome": "changed", "projectChanged": True,
+                        "verification": {"status": "not_verified", "steps": []}})
+            return messages
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(worker, "AgentEngine", CompletingEngine)
+    project = tmp_path / "completion-project"
+    project.mkdir()
+    service.handle("run_start", {"options": {
+        "workspace": str(project), "prompt": "make a small change", "model": "model-a:latest",
+        "context": 4096, "maxTokens": 128, "temperature": 0.2,
+        "access": "ask", "approvalMode": "per-action",
+    }})
+    controller = service.active
+    assert controller is not None
+    session_id = controller["session"]["session_id"]
+    controller["thread"].join(3)
+
+    saved = service.sessions.load(session_id)
+    assert saved["run_state"]["workflow_outcome"] == "changed"
+    saved_index = next(i for i, event in enumerate(events) if event["type"] == "session_saved")
+    complete_index = next(i for i, event in enumerate(events) if event["type"] == "complete")
+    assert saved_index < complete_index
+    assert events[complete_index]["workflowOutcome"] == "changed"
+
+
+def test_engine_return_without_completion_event_fails_closed(service, tmp_path, monkeypatch):
+    events = []
+    service.emit = events.append
+
+    class IncompleteEngine:
+        def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
+            self.state = {}
+            self.runtime = object()
+
+        def run(self, prompt, messages):
+            return [*messages, {"role": "assistant", "content": "Maybe complete?"}]
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(worker, "AgentEngine", IncompleteEngine)
+    project = tmp_path / "missing-completion-project"
+    project.mkdir()
+    service.handle("run_start", {"options": {
+        "workspace": str(project), "prompt": "do work", "model": "model-a:latest",
+        "context": 4096, "maxTokens": 128, "temperature": 0.2,
+        "access": "ask", "approvalMode": "per-action",
+    }})
+    controller = service.active
+    assert controller is not None
+    session_id = controller["session"]["session_id"]
+    controller["thread"].join(3)
+
+    saved = service.sessions.load(session_id)
+    assert saved["run_state"]["status"] == "failed"
+    assert saved["run_state"]["workflow_outcome"] == "failed"
+    assert saved["task_checkpoint"]["current"]["status"] == "failed"
+    assert any(event.get("type") == "error" and "terminal completion event" in event.get("error", "") for event in events)
 
 
 def test_engine_failure_is_saved_with_the_session(service, tmp_path, monkeypatch):
@@ -631,6 +708,8 @@ def test_approval_state_is_recorded_on_the_operation_without_a_duplicate_trace_r
             assert self.approve("write_file", {"path": "index.html"}) is True
             self.event({"type": "tool_done", "operationId": "op-1", "toolCallId": "call-1", "status": "completed",
                         "result": "wrote index.html", "affectedFiles": ["index.html"], "completedAt": 2})
+            self.event({"type": "complete", "workflowOutcome": "changed", "projectChanged": True,
+                        "verification": {"status": "not_verified", "steps": []}})
             return messages
 
         def cancel(self):
