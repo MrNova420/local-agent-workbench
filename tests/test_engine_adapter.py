@@ -4,12 +4,16 @@ from unittest.mock import patch
 
 import pytest
 from sidecar.worker import AgentEngine, OllamaRuntime, RequestScopedOllama
+import desktop_engine
 
 
 class FakeResponse:
     def __init__(self, rows):
         self.rows = iter(rows)
         self.closed = False
+        self.status = 200
+        self.reason = "OK"
+        self.headers = {}
 
     def readline(self):
         return next(self.rows, b"")
@@ -29,7 +33,15 @@ def test_ollama_jsonl_stream_preserves_requested_context_and_model_reasoning_def
         "temperature": 0.2, "context": 262144, "max_tokens": 1024, "keep_alive": "30m",
     }
     events = []
-    with patch("urllib.request.urlopen", return_value=response) as open_url:
+    def open_stream(request, _cancel, register, on_dispatched=None, on_headers=None):
+        if on_dispatched:
+            on_dispatched()
+        register(None, response)
+        if on_headers:
+            on_headers(response)
+        return response
+
+    with patch.object(desktop_engine, "open_http_stream", side_effect=open_stream) as open_url:
         result = runtime.stream(state, [], threading.Event(), events.append)
 
     payload = json.loads(open_url.call_args.args[0].data)
@@ -86,7 +98,15 @@ def test_cancel_closes_only_the_active_stream_and_does_not_send_stop_request():
         return row
 
     response.readline = read_then_cancel
-    with patch("urllib.request.urlopen", return_value=response), patch.object(runtime, "get") as api_call:
+    def open_stream(_request, _cancel, register, on_dispatched=None, on_headers=None):
+        if on_dispatched:
+            on_dispatched()
+        register(None, response)
+        if on_headers:
+            on_headers(response)
+        return response
+
+    with patch.object(desktop_engine, "open_http_stream", side_effect=open_stream), patch.object(runtime, "get") as api_call:
         with pytest.raises(Exception, match="Cancelled"):
             runtime.stream(state, [], cancel, lambda _event: None)
     assert response.closed

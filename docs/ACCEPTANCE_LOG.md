@@ -1,5 +1,14 @@
 # Visible Acceptance Log
 
+## 2026-11-01 full harness audit: source stabilization pass
+
+- Paired engine commit `f3809e82ed6266e25ac50722535d1d9bb3030ffe`; app `core-revision.txt` pins that exact commit.
+- Verification passed locally: engine pytest **251 passed**; app `npm test` **86 renderer + 92 sidecar passed**; TypeScript typecheck passed; `git diff --check` passed.
+- The first regression pass exposed 17 sidecar failures. Root fixes were applied for session creation/mirroring, journal replay and duplicate partial text, new-task plan seeding, structured plan/checkpoint recovery, conflict fail-closed behavior, interrupted operation classification, complete tool catalog discovery, live tool-preparation activity, and compaction telemetry context fallback. Stale transport and evidence fixtures were corrected to match their actual documented contracts.
+- The engine suite initially failed 45 tests; the fixed schema-keyword traversal was the shared cause of many rejected actions. Focused regressions verified direct plan → file write → inspect completion, tool schema selection under the currently selected request budget, and request-only cancellation. The full engine suite then passed.
+- The suite run preserved the exact configured settings in its fixtures, including 65,536 and 262,144 context values. It did not issue model inference, preload/unload a model, or change any user's runtime settings.
+- Remaining evidence tiers: Windows package build and bundled-worker smoke; visible app acceptance in a disposable workspace; process/runtime resource attribution; long-run compaction and chat-resume acceptance; updater install/recovery; hosted CI. This entry does not claim product or release readiness.
+
 ## 2026-11-01 beta.3 release candidate
 
 - Candidate version: `0.1.0-beta.3`; `package.json` and `package-lock.json` match. The paired app source pins engine `e5158359cca2e780ca506cfd98e8b8015c63852a`.

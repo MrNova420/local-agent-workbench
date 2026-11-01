@@ -70,13 +70,31 @@ def _normalize_path(value: str | Path) -> str:
     return os.path.normcase(str(Path(value).resolve()))
 
 
-def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
+def _replay_run_event(state: dict[str, Any], event: dict[str, Any], *,
+                     already_captured: dict[str, int] | None = None) -> None:
     """Rebuild run progress after the last full snapshot from the append-only event journal."""
     kind = event.get("type")
     run = state.get("run_state")
     if not isinstance(run, dict):
-        return
-    if kind == "phase" and event.get("phase") == "waiting":
+        # Activity and plan events remain useful even when an older or migrated
+        # snapshot has no active run state.
+        run = {}
+        state["run_state"] = run
+    if kind == "text":
+        text = str(event.get("text", ""))
+        covered = max(0, int((already_captured or {}).get("content", 0)))
+        overlap = min(covered, len(text))
+        if already_captured is not None:
+            already_captured["content"] = covered - overlap
+        run["partial_content"] = str(run.get("partial_content", "")) + text[overlap:]
+    elif kind == "thinking":
+        text = str(event.get("text", ""))
+        covered = max(0, int((already_captured or {}).get("thinking", 0)))
+        overlap = min(covered, len(text))
+        if already_captured is not None:
+            already_captured["thinking"] = covered - overlap
+        run["partial_thinking"] = str(run.get("partial_thinking", "")) + text[overlap:]
+    elif kind == "phase" and event.get("phase") == "waiting":
         safe_messages = run.get("safe_messages")
         if not isinstance(safe_messages, list):
             safe_messages = copy.deepcopy(state.get("messages", []))
@@ -92,10 +110,8 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
                 safe_messages.append({"role": "assistant", **partial})
         run["safe_messages"] = safe_messages
         run.update(tool_batch=None, completed_tool_results={}, partial_content="", partial_thinking="")
-    elif kind == "text":
-        run["partial_content"] = str(run.get("partial_content", "")) + str(event.get("text", ""))
-    elif kind == "thinking":
-        run["partial_thinking"] = str(run.get("partial_thinking", "")) + str(event.get("text", ""))
+        if already_captured is not None:
+            already_captured.update(content=0, thinking=0)
     elif kind == "inference_settings":
         run["estimated_input_tokens"] = event.get("estimated_input_tokens")
         request_index = event.get("request_index")
@@ -285,7 +301,8 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
                 if criteria_included:
                     task["acceptance_criteria"] = copy.deepcopy(acceptance_criteria)
                     task["acceptance_criteria_source"] = "agent" if event.get("source") != "workbench" else "awaiting_agent_refinement"
-                record_plan(checkpoint, event.get("items", []), None, event.get("decisions"), event.get("taskMode"))
+                record_plan(checkpoint, event.get("items", []), None, event.get("decisions"), event.get("taskMode"),
+                            plan_source="agent" if event.get("source") != "workbench" else "workbench")
         plan_activity = {
             "id": event.get("actionId") or uuid.uuid4().hex, "turnId": event.get("turnId", run.get("turn_id")),
             "sessionId": state["session_id"], "workspace": event.get("workspace", state.get("workspace")),
@@ -486,6 +503,9 @@ class MirroredSessionStore:
                      task_checkpoint={}, usage_events=[], journal_cursor_ns=0, task_intent="auto",
                      session_approval_granted=False)
         self._set_git_exclude(root, not bool(metadata.get("track_sessions", False)))
+        # A new session must be addressable by follow-up actions immediately,
+        # even before the UI performs its first settings/activity save.
+        state["persistence"] = self.save(state)
         return state
 
     def save(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -589,6 +609,11 @@ class MirroredSessionStore:
 
     def _replay_events(self, state: dict[str, Any], workspace: str | None, sources: set[str]) -> dict[str, Any]:
         cursor = int(state.get("journal_cursor_ns", 0) or 0)
+        run_state = state.get("run_state")
+        already_captured = {
+            "content": len(str(run_state.get("partial_content", ""))) if isinstance(run_state, dict) else 0,
+            "thinking": len(str(run_state.get("partial_thinking", ""))) if isinstance(run_state, dict) else 0,
+        }
         journal_rows, issues = self._read_events(state["session_id"], workspace, sources)
         if issues:
             existing = state.setdefault("recovery_issues", [])
@@ -598,7 +623,7 @@ class MirroredSessionStore:
         rows = [row for row in journal_rows
                 if int(row.get("recorded_at_ns", 0)) > cursor]
         for row in rows:
-            _replay_run_event(state, row["event"])
+            _replay_run_event(state, row["event"], already_captured=already_captured)
             cursor = max(cursor, int(row.get("recorded_at_ns", 0)))
         if rows:
             state["journal_cursor_ns"] = cursor
@@ -626,6 +651,17 @@ class MirroredSessionStore:
         return versions
 
     def load(self, session_id: str, workspace: str | None = None, source: str | None = None) -> dict[str, Any]:
+        workspace_was_provided = workspace is not None
+        if workspace is None:
+            # The app copy records the project location, allowing us to inspect
+            # both mirrors for conflicts and session-scoped approval grants.
+            try:
+                app_state = self.app.load(session_id)
+                candidate = app_state.get("workspace")
+                if isinstance(candidate, str) and Path(candidate).is_dir():
+                    workspace = candidate
+            except (OSError, ValueError, json.JSONDecodeError):
+                pass
         versions = self._versions(session_id, workspace)
         if not versions:
             raise FileNotFoundError(f"Session not found in the app library or selected project: {session_id}")
@@ -640,8 +676,6 @@ class MirroredSessionStore:
             divergent = not same
             recommended = max(versions, key=lambda row: row["state"].get("updated_at", 0))["source"]
             if not same and source is None:
-                if workspace is None:
-                    return max(versions, key=lambda row: row["state"].get("updated_at", 0))["state"]
                 return {"conflict": True, "recommended_source": "project", "versions": [
                     {"source": row["source"], "updated_at": row["state"].get("updated_at")} for row in versions
                 ]}
@@ -667,7 +701,9 @@ class MirroredSessionStore:
         if not approval_grant_mirrored:
             state["session_approval_granted"] = False
         state = self._replay_events(state, str(root), selected_sources)
-        return {"conflict": False, "source": selected["source"], "state": state}
+        if workspace_was_provided:
+            return {"conflict": False, "source": selected["source"], "state": state}
+        return state
 
     def list(self, workspace: str | None = None) -> list[dict[str, Any]]:
         root = Path(workspace).resolve() if workspace else None

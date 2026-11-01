@@ -103,9 +103,9 @@ class MirroredSessionStoreTests(unittest.TestCase):
                                   "tool_count": 2, "tool_names": ["read_file", "load_tools"],
                                   "deferred_tool_names": ["mcp__build__check"], "requested_context": 65536,
                                   "max_output_tokens": 8192, "reasoning_override": None,
-                                  "reasoning_field_sent": True, "reasoning_override": "high", "keep_alive": "3h",
+                                  "reasoning_field_sent": False, "keep_alive": "3h",
                                   "request_options": {"num_ctx": 65536, "num_predict": 8192},
-                                  "additional_fields": {"think": "high"},
+                                  "additional_fields": {},
                                   "estimated_input_tokens": 4100,
                                   "input_estimate_method": "conservative estimate"})
         _replay_run_event(state, {"type": "request_dispatched", "turnId": "turn-provider", "request_index": 2})
@@ -124,11 +124,11 @@ class MirroredSessionStoreTests(unittest.TestCase):
         self.assertEqual(prompt["providerRequest"]["request_options"], {"num_ctx": 65536, "num_predict": 8192})
         self.assertEqual(prompt["providerRequest"]["tool_names"], ["read_file", "load_tools"])
         self.assertEqual(prompt["providerRequest"]["deferred_tool_names"], ["mcp__build__check"])
-        self.assertEqual(prompt["providerRequest"]["additional_fields"], {"think": "high"})
+        self.assertEqual(prompt["providerRequest"]["additional_fields"], {})
         self.assertFalse(prompt["providerRequest"]["reasoning_field_sent"])
         self.assertEqual(prompt["providerRequest"]["keep_alive"], "3h")
         self.assertEqual(prompt["providerRequest"]["api_model"], "ornith:latest")
-        self.assertEqual(prompt["providerRequest"]["tool_count"], 8)
+        self.assertEqual(prompt["providerRequest"]["tool_count"], 2)
         self.assertEqual(prompt["providerUsage"]["prompt_eval_count"], 4000)
         self.assertEqual(prompt["providerUsage"]["prompt_eval_cached_count"], 3200)
         self.assertEqual(prompt["status"], "response_stream_ended")
@@ -225,7 +225,8 @@ class MirroredSessionStoreTests(unittest.TestCase):
             state["session_approval_granted"] = True
             store.app.save(state)
             loaded = store.load(state["session_id"])
-            self.assertFalse(loaded["session_approval_granted"])
+            self.assertTrue(loaded["conflict"])
+            self.assertEqual(loaded["recommended_source"], "project")
 
             project_path = root / ".agent-workbench" / "sessions" / f"{state['session_id']}.json"
             project_path.unlink()

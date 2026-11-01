@@ -239,17 +239,16 @@ def test_provider_request_settings_update_the_matching_prompt_activity_and_strea
     saved = service.sessions.load(controller["session"]["session_id"], str(project))["state"]
     prompt = next(row for row in saved["activity_events"] if row.get("kind") == "prompt")
     assert prompt["providerRequest"]["request_options"] == {"num_ctx": 65536, "num_predict": 8192}
-    assert prompt["providerRequest"]["additional_fields"] == {}
     assert prompt["providerRequest"]["reasoning_field_sent"] is True
     assert prompt["providerRequest"]["additional_fields"] == {"think": "high"}
     assert prompt["providerRequest"]["api_model"] == "model-a:latest"
-    assert prompt["providerRequest"]["tool_count"] == 12
+    assert prompt["providerRequest"]["tool_count"] == 2
     assert prompt["providerUsage"] == {"prompt_eval_count": 580, "prompt_eval_cached_count": 120, "eval_count": 45}
     assert prompt["status"] == "response_stream_ended"
     assert prompt["providerRequest"]["http_status"] == 200
     assert prompt["providerRequest"]["header_wait_seconds"] == 0.75
     assert any(event.get("type") == "inference_settings" for event in events)
-    prompt_activity = next(item for item in service.state["activity_events"] if item.get("kind") == "prompt")
+    prompt_activity = next(item for item in controller["session"]["activity_events"] if item.get("kind") == "prompt")
     assert prompt_activity["providerRequest"]["tool_names"] == ["read_file", "load_tools"]
     assert prompt_activity["providerRequest"]["deferred_tool_names"] == ["mcp__build__check"]
     assert any(event.get("type") == "request_headers" and event.get("http_status") == 200 for event in events)
@@ -786,7 +785,7 @@ def test_tool_call_progress_is_live_safe_and_durable(service, tmp_path, monkeypa
     assert any(event.get("type") == "tool_call_progress" for event in emitted)
     assert any(event.get("type") == "activity_event" and event.get("activity", {}).get("kind") == "tool_preparation" for event in emitted)
     assert controller["journal_pending"] == []
-    saved = service.sessions.load(state["session_id"], str(project))
+    saved = service.sessions.load(state["session_id"], str(project))["state"]
     progress = next(event for event in saved.get("activity_events", []) if event.get("kind") == "tool_preparation")
     assert progress["name"] == "write_file"
     assert progress["argumentCharacters"] == 1024
@@ -886,7 +885,7 @@ def test_compaction_activity_records_in_task_exchange_omissions(service, tmp_pat
         "omittedOperationGroups": 7, "configuredContext": 4096, "inputBudget": 2560,
     })
 
-    saved = service.sessions.load(state["session_id"], str(project))
+    saved = service.sessions.load(state["session_id"], str(project))["state"]
     row = next(item for item in saved["activity_events"] if item["kind"] == "context")
     assert row["omittedOperationGroups"] == 7
 

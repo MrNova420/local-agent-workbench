@@ -592,7 +592,12 @@ export default function App() {
         setSession((current) => current?.session_id === sessionId ? { ...current, queued_prompts: queuedPrompts } : current);
       }
       if (event.type === 'session_approval_state' && typeof event.sessionId === 'string' && typeof event.approved === 'boolean') {
-        setSession((current) => current?.session_id === event.sessionId ? { ...current, session_approval_granted: event.approved as boolean } : current);
+        const sessionId = event.sessionId;
+        const approved = event.approved;
+        setSession((current) => {
+          if (!current || current.session_id !== sessionId) return current;
+          return { ...current, session_approval_granted: approved };
+        });
       }
       if (event.type === 'tool_call_progress') {
         setToolCallProgress((current) => applyToolCallProgress(current, event));
@@ -1193,7 +1198,7 @@ export default function App() {
       {view === 'session' && <SessionRoom
         root={workspace} session={session} messages={messages} activities={activities} activityMode={activityMode} plan={plan} acceptanceCriteria={acceptanceCriteria} phase={phase} workflowOutcome={workflowOutcome} verificationEvidence={verificationEvidence} toolCallProgress={toolCallProgress}
         elapsed={elapsed} running={running} prompt={prompt} setPrompt={setPrompt} promptRef={promptRef}
-        queuedPrompts={session?.queued_prompts || []} onQueue={queueFollowupPrompt} onRemoveQueued={removeQueuedPrompt}
+        queuedPrompts={session?.queued_prompts || []} onQueue={queueFollowupPrompt} onRemoveQueued={removeQueuedPrompt} queueSubmitting={queueSubmitting}
         options={options} setOptions={setOptions} files={availableFiles} telemetry={telemetry}
         runMetrics={runMetrics} onRun={() => void startRun()} onRunQueued={(item) => void startRun(item)} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
         onDiff={showDiff} onMcp={openMcp} onTools={openTools} onEnter={enter} endRef={endRef} model={model} modelInfo={modelInfo} appliedSettings={appliedSettings} onToggleHarnessProfile={() => void toggleHarnessProfile()}
@@ -1372,10 +1377,10 @@ function ProjectHome({ root, tab, setTab, files, sessions, sessionHistoryStatus,
   </section>;
 }
 
-function SessionRoom({ root, session, messages, activities, activityMode, plan, acceptanceCriteria, phase, workflowOutcome, verificationEvidence, toolCallProgress, elapsed, running, prompt, setPrompt, promptRef, queuedPrompts, onQueue, onRemoveQueued, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onRunQueued, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
+function SessionRoom({ root, session, messages, activities, activityMode, plan, acceptanceCriteria, phase, workflowOutcome, verificationEvidence, toolCallProgress, elapsed, running, prompt, setPrompt, promptRef, queuedPrompts, onQueue, onRemoveQueued, queueSubmitting, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onRunQueued, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
   root: string; session: Session | null; messages: ChatMessage[]; activities: ActivityRecord[]; activityMode: ActivityMode; plan: PlanItem[]; acceptanceCriteria: string[];
   phase: string; elapsed: number; running: boolean; prompt: string; setPrompt: (value: string) => void;
-  queuedPrompts: QueuedPrompt[]; onQueue: () => void; onRemoveQueued: (id: string) => void;
+  queuedPrompts: QueuedPrompt[]; onQueue: () => void; onRemoveQueued: (id: string) => void; queueSubmitting: boolean;
   toolCallProgress: ToolCallProgress[];
   workflowOutcome: string | null; verificationEvidence: VerificationEvidence | null; promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
   setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>; files: ProjectFile[];

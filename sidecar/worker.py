@@ -365,7 +365,7 @@ class AgentService:
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
                             "workspace": str(turn.workspace), "kind": "context", "status": "compacted",
                             "omittedTurns": int(event.get("omittedTurns", 0)), "retainedTurns": int(event.get("retainedTurns", 0)),
-                            "configuredContext": int(event.get("configuredContext", turn.context)),
+                            "configuredContext": int(event.get("configuredContext", getattr(turn, "context", state.get("context", 0)))),
                             "inputBudget": int(event.get("inputBudget", 0)), "reason": event.get("reason", ""),
                             "omittedOperationGroups": int(event.get("omittedOperationGroups", 0)),
                             "checkpointIncluded": bool(event.get("checkpointIncluded", False)),
@@ -669,7 +669,7 @@ class AgentService:
             if not self.run_lock.acquire(blocking=False):
                 raise RuntimeError("A run is starting; retry the follow-up after it is ready.")
             try:
-                state = self.sessions.load(session_id)
+                state = self._load_session_state(session_id)
                 if Path(state["workspace"]).resolve(strict=True) != selected_workspace:
                     raise ValueError("The selected session belongs to a different project.")
                 prompts = _validated_queued_prompts(state)
@@ -686,6 +686,14 @@ class AgentService:
         self.emit({"type": "session_queue_update", "sessionId": session_id, "workspace": str(selected_workspace),
                    "queuedPrompts": copy.deepcopy(result["queuedPrompts"])})
         return result
+
+    def _load_session_state(self, session_id: str) -> dict[str, Any]:
+        loaded = self.sessions.load(session_id)
+        if loaded.get("conflict"):
+            raise RuntimeError("The app and project session copies differ. Resolve the session conflict before changing or running this session.")
+        if loaded.get("conflict") is False and isinstance(loaded.get("state"), dict):
+            return loaded["state"]
+        return loaded
 
     @staticmethod
     def _mutate_queue(prompts: list[dict[str, Any]], *, add_prompt: str | None,
@@ -767,7 +775,9 @@ class AgentService:
         if command == "ollama_preload":
             return self._start_ollama_preload(message)
         if command == "tool_catalog":
-            registry = ToolRegistry(Workspace(Path.home(), "plan"), lambda *_: False)
+            # Capability discovery describes the full registered surface, not
+            # the current run's plan-only access policy.
+            registry = ToolRegistry(Workspace(Path.home(), "edit"), lambda *_: False)
             tools = [{"name": item["function"]["name"],
                       "description": item["function"].get("description", ""),
                       "source": "built-in",
@@ -909,7 +919,7 @@ class AgentService:
             mode = str(message.get("activityMode", ""))
             if mode not in {"compact", "sidebar", "inline"}:
                 raise ValueError("Invalid activity display mode.")
-            state = self.sessions.load(str(message["sessionId"]))
+            state = self._load_session_state(str(message["sessionId"]))
             state["activity_mode"] = mode
             return self.sessions.save(state)
         if command == "session_run_settings":
@@ -950,7 +960,7 @@ class AgentService:
                 capabilities = self.handle("model_info", {"model": model}).get("reasoning", {})
                 if reasoning not in capabilities.get("values", []):
                     raise ValueError("The selected model does not advertise that reasoning choice.")
-            state = self.sessions.load(str(message["sessionId"]))
+            state = self._load_session_state(str(message["sessionId"]))
             if approval_mode != "per-session":
                 state["session_approval_granted"] = False
             state.update(model=model, model_id=model, provider_id=provider.provider_id, provider=provider.provider_id,
@@ -965,14 +975,17 @@ class AgentService:
             profile = str(message.get("harnessProfile", "standard"))
             if profile not in {"standard", "small-model"}:
                 raise ValueError("Invalid harness workflow profile.")
-            state = self.sessions.load(str(message["sessionId"]))
+            state = self._load_session_state(str(message["sessionId"]))
             state["harness_profile"] = profile
             state["persistence"] = self.sessions.save(state)
             return state
         if command == "session_resume":
             selected_workspace = str(message.get("workspace", "")) or None
             if not selected_workspace:
-                selected_workspace = str(self.sessions.load(str(message["sessionId"]))["workspace"])
+                initial = self.sessions.load(str(message["sessionId"]))
+                if initial.get("conflict"):
+                    return initial
+                selected_workspace = str(initial["workspace"])
             loaded = self.sessions.load(str(message["sessionId"]), selected_workspace, message.get("source"))
             if loaded.get("conflict"):
                 return loaded
@@ -1020,8 +1033,10 @@ class AgentService:
                                 completed_tool_results[call_id] = "The app closed before this question received an answer. Ask again only if the answer is still needed."
                         for activity in state["activity_events"]:
                             if activity.get("operationId") == active.get("operationId"):
-                            if activity.get("status") == "awaiting_user":
-                                activity["status"] = "interrupted"
+                                if activity.get("status") == "awaiting_user":
+                                    activity["status"] = "interrupted"
+                                elif activity.get("kind") == "operation" and activity.get("status") == "running":
+                                    activity["status"] = "interrupted"
                         continue
                     active["status"] = "uncertain"
                     operation_id = str(active.get("operationId", ""))
@@ -1049,7 +1064,7 @@ class AgentService:
             action = str(message.get("action", ""))
             if action not in {"resume", "retry", "restore"}:
                 raise ValueError("Choose resume, retry, or restore for this interrupted session.")
-            state = self.sessions.load(str(message["sessionId"]))
+            state = self._load_session_state(str(message["sessionId"]))
             run_state = state.get("run_state")
             if not isinstance(run_state, dict) or run_state.get("status") != "interrupted":
                 raise ValueError("This session has no interrupted run to recover.")
@@ -1129,14 +1144,14 @@ class AgentService:
                 raise ValueError("Provide a non-empty answer to the active question.")
             return {"answered": self.question_reply(str(message["questionId"]), answer.strip())}
         if command == "copy_review":
-            session = self.sessions.load(str(message["sessionId"]))
+            session = self._load_session_state(str(message["sessionId"]))
             if session.get("access") != "copy" or not session.get("copy_manifest"):
                 raise ValueError("This session has no disposable-copy review to show.")
             source = Path(session["workspace"]).resolve(strict=True)
             working = managed_copy_path(APP_DATA / "workspaces", session["session_id"], require_exists=True)
             return review_changes(source, working, session["copy_manifest"])
         if command == "copy_apply":
-            session = self.sessions.load(str(message["sessionId"]))
+            session = self._load_session_state(str(message["sessionId"]))
             source = Path(session["workspace"]).resolve(strict=True)
             working = managed_copy_path(APP_DATA / "workspaces", session["session_id"], require_exists=True)
             changes = review_changes(source, working, session.get("copy_manifest") or {})
@@ -1189,7 +1204,9 @@ class AgentService:
         active_operations = active_operations if isinstance(active_operations, dict) else {}
         active = run_state.get("active_operation")
         if not active_operations and isinstance(active, dict):active_operations[str(active.get("operationId", "legacy-active"))] = active
-        active_call_ids = {str(operation.get("toolCallId")) for operation in active_operations.values()
+        uncertain = run_state.get("uncertain_operations", [])
+        uncertain = uncertain if isinstance(uncertain, list) else []
+        active_call_ids = {str(operation.get("toolCallId")) for operation in [*active_operations.values(), *uncertain]
                            if isinstance(operation, dict) and operation.get("toolCallId") is not None}
         for call in batch["calls"]:
             if not isinstance(call, dict):
@@ -1375,7 +1392,7 @@ class AgentService:
             if reasoning not in capabilities.get("values", []):
                 raise ValueError("The selected model does not advertise that reasoning choice.")
         session_id = options.get("sessionId")
-        state = self.sessions.load(str(session_id)) if session_id else self.sessions.create(str(source), model, int(options["context"]))
+        state = self._load_session_state(str(session_id)) if session_id else self.sessions.create(str(source), model, int(options["context"]))
         if Path(state["workspace"]).resolve(strict=True) != source:
             raise ValueError("Selected session belongs to a different project. Open that project's workspace explicitly first.")
         queued_prompt_id = options.get("queuedPromptId")
@@ -1420,7 +1437,8 @@ class AgentService:
         state.setdefault("plan", [])
         previous_checkpoint = state.get("task_checkpoint")
         previous_task = previous_checkpoint.get("current", previous_checkpoint) if isinstance(previous_checkpoint, dict) else None
-        new_task = not isinstance(previous_task, dict) or previous_task.get("status") in {"completed", "cancelled", "failed", "stopped"}
+        new_task = (not isinstance(previous_task, dict) or not previous_task.get("task_id")
+                    or previous_task.get("status") in {"completed", "cancelled", "failed", "stopped"})
         if new_task:
             seed_intent = "plan" if access == "plan" and task_intent == "auto" else task_intent
             state["plan"] = initial_task_plan(prompt, seed_intent)
