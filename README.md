@@ -23,6 +23,10 @@ The first-run checklist in the app reports runtime, model, and workspace readine
 
 These saved historical screenshots are included to show earlier product states. They are not screenshots of the release candidate:
 
+The early Home concept explored the orbital visual language that later informed the adaptive local-model display. This crop shows the previous static version; it does not represent the current interactive model slots:
+
+![Historical Home orbit concept](docs/screenshots/history/home-orbit-concept-2026-10-31.png)
+
 ![Historical Home inference-source panel](docs/screenshots/history/home-inference-2026-10-31.png)
 
 This saved capture shows a real project-development acceptance session. It predates the current updater and transcript-follow refinements, so it is historical workflow evidence rather than a current packaged-build screenshot:
