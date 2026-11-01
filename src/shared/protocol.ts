@@ -102,6 +102,7 @@ export type ActivityRecord = {
   items?: Array<{ title?: string; text?: string; status?: string; source?: 'workbench' | 'agent' }>;
   acceptanceCriteria?: string[];
   omittedTurns?: number;
+  omittedOperationGroups?: number;
   retainedTurns?: number;
   configuredContext?: number;
   inputBudget?: number;

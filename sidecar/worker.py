@@ -54,6 +54,14 @@ from providers.registry import ProviderRegistry  # noqa: E402
 APP_DATA = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "LocalAgentWorkbench"
 
 
+def _saved_operation_result(state: dict[str, Any], operation_id: str) -> str | None:
+    """Read a completed result only from the session captured by the active turn."""
+    for row in state.get("activity_events", []):
+        if isinstance(row, dict) and row.get("operationId") == operation_id and isinstance(row.get("result"), str):
+            return row["result"]
+    return None
+
+
 class RequestScopedOllama:
     """Translate a closed HTTP stream into cancellation when this request was cancelled."""
 
@@ -258,6 +266,7 @@ class AgentService:
                             "omittedTurns": int(event.get("omittedTurns", 0)), "retainedTurns": int(event.get("retainedTurns", 0)),
                             "configuredContext": int(event.get("configuredContext", turn.context)),
                             "inputBudget": int(event.get("inputBudget", 0)), "reason": event.get("reason", ""),
+                            "omittedOperationGroups": int(event.get("omittedOperationGroups", 0)),
                             "checkpointIncluded": bool(event.get("checkpointIncluded", False)),
                             "checkpointEstimate": int(event.get("checkpointEstimate", 0)), "timestamp": time.time()}
                 rows.append(activity)
@@ -568,7 +577,7 @@ class AgentService:
             tools = [{"name": item["function"]["name"],
                       "description": item["function"].get("description", ""),
                       "source": "built-in",
-                      "permission": "read-only" if item["function"]["name"] in {"list_files", "search_files", "read_file", "git_diff", "update_plan", "skill"} else "approval-controlled"}
+                      "permission": "read-only" if item["function"]["name"] in {"list_files", "search_files", "read_file", "read_operation_result", "git_diff", "update_plan", "skill"} else "approval-controlled"}
                      for item in registry.schemas]
             tools.extend({"name": item["function"]["name"],
                           "description": item["function"].get("description", ""),
@@ -1320,6 +1329,7 @@ class AgentService:
                 task_checkpoint=state["task_checkpoint"],
                 skills_enabled=turn.skills_enabled, skill_sources=turn.skill_sources,
                 task_intent=str(turn.session.get("task_intent", "auto")),
+                operation_result_lookup=lambda operation_id: _saved_operation_result(state, operation_id),
             )
             chosen_runtime = self.providers.runtime_for(turn.model, engine.runtime, state.get("provider_id"))
             engine.runtime = RequestScopedOllama(chosen_runtime)

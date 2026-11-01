@@ -293,7 +293,7 @@ def test_model_info_reports_known_missing_tool_capability(service):
 def test_tool_catalog_lists_real_tools_and_unimplemented_integrations(service):
     catalog = service.handle("tool_catalog", {})
     names = {item["name"] for item in catalog["tools"]}
-    assert {"list_files", "search_files", "read_file", "write_file", "edit_file", "apply_patch", "run_command"} <= names
+    assert {"list_files", "search_files", "read_file", "read_operation_result", "write_file", "edit_file", "apply_patch", "run_command"} <= names
     assert all(item["source"] == "built-in" for item in catalog["tools"])
     integrations = {item["name"]: item for item in catalog["integrations"]}
     assert integrations["Local and remote MCP tools"]["status"] == "available"
@@ -494,6 +494,34 @@ def test_tool_catalog_exposes_mcp_schema_capability_warning(service):
     assert "if" in row["description"]
     assert "does not support" in server["detail"]
     assert "1 discovered tool schema" in integration["detail"]
+
+
+def test_saved_operation_result_lookup_is_limited_to_captured_session_state():
+    captured = {"activity_events": [
+        {"operationId": "op-current", "result": "saved output"},
+        {"operationId": "op-other", "result": "other output"},
+    ]}
+    assert worker._saved_operation_result(captured, "op-current") == "saved output"
+    assert worker._saved_operation_result(captured, "op-missing") is None
+
+
+def test_compaction_activity_records_in_task_exchange_omissions(service, tmp_path, monkeypatch):
+    project = tmp_path / "compaction-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    controller = {"session": state, "turn_id": "turn-compact", "checkpoint_lock": threading.RLock(),
+                  "last_checkpoint": time.monotonic(), "last_journal_flush": time.monotonic() - 1,
+                  "journal_pending": []}
+    monkeypatch.setattr(service, "emit", lambda _event: None)
+
+    service._publish_run_event(controller, SimpleNamespace(workspace=project), {
+        "type": "context_compacted", "omittedTurns": 0, "retainedTurns": 1,
+        "omittedOperationGroups": 7, "configuredContext": 4096, "inputBudget": 2560,
+    })
+
+    saved = service.sessions.load(state["session_id"], str(project))
+    row = next(item for item in saved["activity_events"] if item["kind"] == "context")
+    assert row["omittedOperationGroups"] == 7
 
 
 def test_run_errors_are_persisted_as_rehydratable_activity(service, tmp_path, monkeypatch):

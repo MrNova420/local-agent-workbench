@@ -188,4 +188,15 @@ describe('durable live activity state', () => {
     expect(markup).toContain('Show next 16,000 characters');
     expect(markup).toContain('24,000 remaining');
   });
+
+  it('shows within-task exchange omissions in the persisted compaction event', () => {
+    const record: ActivityRecord = {
+      id: 'compact-1', sessionId: 's-1', turnId: 't-1', kind: 'context', status: 'compacted',
+      omittedTurns: 0, omittedOperationGroups: 6, retainedTurns: 1, inputBudget: 57_344,
+      configuredContext: 65_536, checkpointIncluded: true, checkpointEstimate: 800,
+    };
+    const markup = renderToStaticMarkup(createElement(ActivityFeed, { entries: [record], mode: 'sidebar', surface: 'sidebar' }));
+    expect(markup).toContain('0 earlier turns and 6 in-task exchange groups omitted');
+    expect(markup).toContain('57,344 input budget');
+  });
 });
