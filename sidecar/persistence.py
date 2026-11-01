@@ -194,6 +194,10 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
     elif kind in {"complete", "generation_complete", "cancelled", "error", "stopped_after_operation"}:
         run["status"] = {"complete": "completed", "generation_complete": "completed",
                          "cancelled": "cancelled", "error": "failed", "stopped_after_operation": "stopped"}[kind]
+        run["workflow_outcome"] = str(event.get("workflowOutcome", {
+            "complete": "discussion", "generation_complete": "discussion", "cancelled": "cancelled",
+            "error": "failed", "stopped_after_operation": "stopped",
+        }[kind]))
         run["active_operation"] = None
         if kind in {"complete", "generation_complete"}:
             run["verification"] = copy.deepcopy(event.get("verification", {"status": "unknown", "steps": []}))
@@ -220,6 +224,7 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
             task = checkpoint.get("current", checkpoint)
             if isinstance(task, dict):
                 task["status"] = run["status"]
+                task["workflow_outcome"] = run["workflow_outcome"]
                 task["updated_at"] = event.get("timestamp", time.time())
                 if kind in {"complete", "generation_complete"}:
                     task["verification"] = copy.deepcopy(run["verification"])

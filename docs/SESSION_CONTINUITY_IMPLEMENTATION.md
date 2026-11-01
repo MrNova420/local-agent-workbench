@@ -17,6 +17,8 @@
 - Full JSON snapshots are now written at important boundaries and at a slower interval during streaming, instead of once per second. Temporary Windows PermissionError replace failures receive bounded exponential retry. The save result reports app and project success independently; the UI no longer claims the app copy succeeded when it did not.
 - Recovery replays post-snapshot partial text, reasoning, plan updates, operation start/output/result, generation usage, and terminal state. Text already received before a provider error is retained in the transcript. Malformed or unreadable journal records are surfaced in the Activity Trace and a warning; original journal bytes are preserved. Interrupted writes remain uncertain and are never automatically retried.
 - Before a follow-up inference request clears the previous request's streaming buffer, its completed assistant text and reasoning are copied into the recoverable message checkpoint. Terminal replay also updates the task checkpoint status and blocker/verification fields.
+- Terminal workflow outcomes are stored separately from run completion: discussion, plan-only, blocked, changed, inspected, command-completed, and command-failed. The renderer labels these from host-observed actions; it does not equate command completion with passing tests. A new task clears the previous task's visible plan, while active follow-ups keep it.
+- The sidecar now forwards the engine's successful terminal outcome to the renderer only after session persistence, matching cancellation/error ordering. A missing successful terminal event is surfaced as a failure rather than silently labeled discussion; queued persistence and renderer checks cover this boundary.
 
 ## Verification queue (not run in this implementation phase)
 
@@ -26,8 +28,9 @@
 4. Exercise live Plan updates from model update_plan through sidecar, JSONL, renderer, and reopened session.
 5. Confirm long streaming output and Unicode survive a process restart with no duplication, loss, or automatic replay of completed operations.
 6. Confirm received text/reasoning remains visible after provider errors, and malformed journal data is reported without being rewritten or discarded.
-7. Verify cached prompt-token reporting for Ollama and llama.cpp and distinguish provider-exact counts from estimates in the UI.
-8. Run the full engine, sidecar, renderer, typecheck, packaged-app, and visible acceptance gates only after all implementation work is complete.
+7. Verify the full success event path emits the observed outcome after persistence, errors remain terminal, missing completion evidence fails closed, and resumed sessions preserve the distinction between command completion and test success.
+8. Verify cached prompt-token reporting for Ollama and llama.cpp and distinguish provider-exact counts from estimates in the UI.
+9. Run the full engine, sidecar, renderer, typecheck, packaged-app, and visible acceptance gates only after all implementation work is complete.
 
 ## Remaining reliability work
 
@@ -35,6 +38,6 @@
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.
 - Add persisted context/input usage presentation and distinguish actual runtime allocation from selected context where the provider exposes it.
-- Continue the approved core harness plan: assembled-prompt/source preview and exact skill-inclusion evidence, provider capability reporting, permissions and process containment, developer tooling parity, workflow state, transcript rendering after reopen, and remaining product backlog. Workbench-owned skill enable/source controls are implemented but unverified. See MASTER_ROADMAP.md, CORE_HARNESS_READINESS.md, and PRODUCT_BACKLOG.md.
+- Continue the approved core harness plan: host-generated substantial-task plans and explicit task intent, assembled-prompt/source preview and exact skill-inclusion evidence, provider capability reporting, permissions and process containment, developer tooling parity, task-specific verification contracts, transcript rendering after reopen, and remaining product backlog. Workbench-owned skill enable/source controls and host-observed terminal outcomes are implemented but unverified. See MASTER_ROADMAP.md, CORE_HARNESS_READINESS.md, and PRODUCT_BACKLOG.md.
 
 No live model, app process, OpenCode setting, selected token value, model reasoning default, or runtime placement was changed for this work.

@@ -78,6 +78,14 @@ function shortPath(value?: string) {
 function fmt(n?: number) { return n == null ? '—' : new Intl.NumberFormat().format(n); }
 function secs(ms: number) { return `${Math.floor(ms / 1000)}s`; }
 function tokenDelay(ms: number | null) { return ms == null ? '—' : `${(ms / 1000).toFixed(1)}s`; }
+function workflowOutcomeLabel(value: unknown): string | null {
+  const labels: Record<string, string> = {
+    discussion: 'Discussion only', plan_only: 'Plan recorded · no edits', blocked: 'Blocked', changed: 'Changes made · not verified',
+    inspected: 'Changes inspected', command_completed: 'Command completed · not a test claim', command_failed: 'Command failed',
+    cancelled: 'Cancelled', failed: 'Failed', interrupted: 'Interrupted', stopped: 'Stopped after operation',
+  };
+  return typeof value === 'string' ? labels[value] || value.replaceAll('_', ' ') : null;
+}
 
 function Icon({ name }: { name: 'spark' | 'folder' | 'arrow' | 'close' | 'play' | 'stop' | 'clock' | 'cpu' | 'memory' | 'branch' | 'chevron' | 'plus' | 'terminal' | 'check' | 'refresh' }) {
   const paths: Record<string, React.ReactNode> = {
@@ -175,6 +183,7 @@ export default function App() {
   const [connected, setConnected] = useState<'checking' | 'yes' | 'no'>('checking');
   const [running, setRunning] = useState(false);
   const [phase, setPhase] = useState('Ready');
+  const [workflowOutcome, setWorkflowOutcome] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [runMetrics, setRunMetrics] = useState<RunMetrics>(emptyRunMetrics);
@@ -275,6 +284,7 @@ export default function App() {
       const loaded = response as Session;
       setSessionConflict(null);
       setPhase(restoredRunPhase(loaded.run_state?.status));
+      setWorkflowOutcome(typeof loaded.run_state?.workflow_outcome === 'string' ? loaded.run_state.workflow_outcome : loaded.run_state?.status === 'interrupted' ? 'interrupted' : null);
       const root = loaded.workspace;
       setModel(loaded.model);
       const rows: ChatMessage[] = restoreTranscriptMessages(loaded.messages, loaded.turns);
@@ -333,6 +343,7 @@ export default function App() {
     const recovered = await request<{ state: Session; prompt?: string; action: string }>({ command: 'session_recover', sessionId: recoverySession.session_id, action });
     setRecoverySession(null);
     setSession(recovered.state);
+    setWorkflowOutcome(typeof recovered.state.run_state?.workflow_outcome === 'string' ? recovered.state.run_state.workflow_outcome : null);
     const restored: ChatMessage[] = restoreTranscriptMessages(recovered.state.messages, recovered.state.turns);
     const partial = typeof recovered.state.run_state?.partial_content === 'string' ? recovered.state.run_state.partial_content : '';
     const partialThinking = typeof recovered.state.run_state?.partial_thinking === 'string' ? recovered.state.run_state.partial_thinking : '';
@@ -358,7 +369,7 @@ export default function App() {
     };
     setPrompt(''); setRunning(true); setPhase('Recovering interrupted task'); setStartedAt(Date.now()); setElapsed(0);
     try { await request({ command: 'run_start', options: run }); }
-    catch (error) { setRunning(false); setPhase('Recovery failed'); notify(`Could not continue the interrupted task: ${(error as Error).message}`, 'bad'); }
+    catch (error) { setRunning(false); setPhase('Recovery failed'); setWorkflowOutcome('failed'); notify(`Could not continue the interrupted task: ${(error as Error).message}`, 'bad'); }
   }
 
   useEffect(() => {
@@ -373,6 +384,7 @@ export default function App() {
         setInstalled(false);
         setModelPreloading(false);
         if (event.type === 'service_exit') {
+          setWorkflowOutcome('interrupted');
           setApproval(null);
           setRunning(false);
           setPhase((current) => nextRunPhase(current, event));
@@ -513,6 +525,7 @@ export default function App() {
       if (event.type === 'complete') {
         setApproval(null);
         setRunning(false); setPhase((current) => nextRunPhase(current, event));
+        setWorkflowOutcome(typeof event.workflowOutcome === 'string' ? event.workflowOutcome : 'discussion');
         const verification = event.verification;
         const verificationStatus = verification && typeof verification === 'object' && 'status' in verification ? String(verification.status) : 'unknown';
         if (event.implementationRequested && event.projectChanged && verificationStatus === 'command_failed') {
@@ -525,17 +538,20 @@ export default function App() {
         setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
       }
       if (event.type === 'cancelled') {
+        setWorkflowOutcome('cancelled');
         setApproval(null); setRunning(false); setPhase((current) => nextRunPhase(current, event)); setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
         setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
         setRunMetrics((current) => endGeneration(current));
         notify('This request was cancelled. Runtime processes and model state were left alone.', 'warn');
       }
       if (event.type === 'stopped_after_operation') {
+        setWorkflowOutcome('stopped');
         setApproval(null); setRunning(false); setPhase('Stopped after active operation'); setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
         setRunMetrics((current) => endGeneration(current));
         notify('The active operation was saved. No further model or tool calls were started.', 'warn');
       }
       if (event.type === 'error') {
+        setWorkflowOutcome('failed');
         setApproval(null);
         setRunning(false); setPhase((current) => nextRunPhase(current, event)); setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
         setTrace((current) => [...current, { id: crypto.randomUUID(), title: 'Run failed', description: String(event.error || 'The task failed.'), kind: 'error', time: Date.now() }]);
@@ -706,10 +722,10 @@ export default function App() {
     };
     if (options.approvalMode === 'auto') setOptions((current) => ({ ...current, approvalMode: 'per-action' }));
     setMessages((current) => [...current, { role: 'user', content: task }]);
-    setTrace([]); setPlan([]); setPrompt(''); setRunning(true); setPhase('Connecting to Ollama');
+    setTrace([]); setPlan([]); setWorkflowOutcome(null); setPrompt(''); setRunning(true); setPhase('Connecting to Ollama');
     setStartedAt(Date.now()); setElapsed(0); setRunMetrics(emptyRunMetrics());
     try { await request({ command: 'run_start', options: run }); }
-    catch (error) { setRunning(false); setPhase('Run failed'); notify((error as Error).message, 'bad'); }
+    catch (error) { setRunning(false); setPhase('Run failed'); setWorkflowOutcome('failed'); notify((error as Error).message, 'bad'); }
   }
 
   async function toggleHarnessProfile() {
@@ -874,7 +890,7 @@ export default function App() {
         onHome={() => setView('landing')}
       />}
       {view === 'session' && <SessionRoom
-        root={workspace} session={session} messages={messages} activities={activities} activityMode={activityMode} plan={plan} phase={phase}
+        root={workspace} session={session} messages={messages} activities={activities} activityMode={activityMode} plan={plan} phase={phase} workflowOutcome={workflowOutcome}
         elapsed={elapsed} running={running} prompt={prompt} setPrompt={setPrompt} promptRef={promptRef}
         options={options} setOptions={setOptions} files={availableFiles} telemetry={telemetry}
         runMetrics={runMetrics} onRun={startRun} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
@@ -1025,10 +1041,10 @@ function ProjectHome({ root, tab, setTab, files, sessions, onNew, onOpenSession,
   </section>;
 }
 
-function SessionRoom({ root, session, messages, activities, activityMode, plan, phase, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
+function SessionRoom({ root, session, messages, activities, activityMode, plan, phase, workflowOutcome, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
   root: string; session: Session | null; messages: ChatMessage[]; activities: ActivityRecord[]; activityMode: ActivityMode; plan: Array<{ title?: string; text?: string; status?: string }>;
   phase: string; elapsed: number; running: boolean; prompt: string; setPrompt: (value: string) => void;
-  promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
+  workflowOutcome: string | null; promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
   setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>; files: ProjectFile[];
   telemetry: TelemetryView;
   runMetrics: RunMetrics; appliedSettings: AppliedSettings | null;
@@ -1070,6 +1086,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
   return <section className="session-view">
     <div className="session-commandline"><button className="crumb-back" onClick={onBack}>PROJECT / {shortPath(root).toUpperCase()}</button><span className="crumb-slash">/</span><span className="session-crumb">SESSION {session?.session_id.slice(-8).toUpperCase()}</span><span className="commandline-spacer"/><button className="inline-command" onClick={onTools}>TOOLS</button><button className="inline-command" onClick={onMcp}>MCP</button><button className="inline-command" onClick={onDiff}>CHANGES</button><span className={`phase-chip ${running ? 'is-running' : ''}`}><i/>{running ? phase.toUpperCase() : phase.toUpperCase()}</span><span className="run-elapsed"><Icon name="clock"/> {running ? secs(elapsed) : '—'}</span></div>
     <div className="task-route" aria-label="Task execution phases">{steps.map((step, index) => <div className={`route-step ${index < currentStep ? 'done' : ''} ${index === currentStep ? 'current' : ''}`} key={step}><span className="route-node">{index < currentStep ? <Icon name="check"/> : `0${index + 1}`}</span><span>{step === 'Waiting for first token' ? 'Prefill / waiting' : step}</span></div>)}</div>
+    {workflowOutcome && <div className={`workflow-outcome outcome-${workflowOutcome}`} role="status"><span>OBSERVED OUTCOME</span><strong>{workflowOutcomeLabel(workflowOutcome)}</strong><small>{workflowOutcome === 'command_completed' ? 'Command exit was successful; this does not alone prove tests passed.' : workflowOutcome === 'changed' ? 'Project changes exist without a recorded verification step.' : workflowOutcome === 'inspected' ? 'A post-change inspection completed; semantic correctness is not implied.' : 'Based on the host-observed tools and terminal status.'}</small></div>}
     <div className="session-main-grid">
       <section className="transcript-plane" aria-label="Conversation transcript">
         {!messages.length ? <div className="transcript-empty"><div className="empty-symbol"><Icon name="spark"/></div><span className="eyebrow-line">NEW WORK UNIT / {shortPath(root).toUpperCase()}</span><h2>What should we<br/>work through?</h2><p>The model sees selected, relevant project files as needed. You control any action that can change the workspace.</p><div className="starter-prompts"><button onClick={() => setPrompt('Inspect this project and explain its architecture and how to run it.')}>Map the project <Icon name="arrow"/></button><button onClick={() => setPrompt('Review this project for the highest-priority bug and propose a fix.')}>Find a bug <Icon name="arrow"/></button><button onClick={() => setPrompt('Add a focused feature to this project and verify it with the existing tests.')}>Build a feature <Icon name="arrow"/></button></div></div> : <div className="message-list" ref={transcriptRef} onScroll={updateTranscriptFollow}>{messages.map((message, index) => <Fragment key={`${message.turnId || 'legacy'}-${index}-${message.role}`}><article className={`message-card message-${message.role}`}>

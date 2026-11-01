@@ -188,11 +188,15 @@ class AgentService:
                                 result = results.get(call_id, "Not executed: the process was interrupted before this operation started.")
                                 checkpoint.append({"role": "tool", "tool_name": str(call.get("name", "unknown_tool")), "content": result})
                             run_state["safe_messages"] = checkpoint
-                elif event.get("type") == "complete":
+                elif event.get("type") in {"complete", "generation_complete"}:
                     run_state["implementation_requested"] = bool(event.get("implementationRequested", False))
                     run_state["project_changed"] = bool(event.get("projectChanged", False))
                     run_state["action_denied"] = bool(event.get("actionDenied", False))
                     run_state["verification"] = copy.deepcopy(event.get("verification", {"status": "unknown", "steps": []}))
+                    run_state["workflow_outcome"] = str(event.get("workflowOutcome", "discussion"))
+                elif event.get("type") in {"error", "cancelled", "stopped_after_operation"}:
+                    run_state["workflow_outcome"] = {"error": "failed", "cancelled": "cancelled",
+                                                     "stopped_after_operation": "stopped"}[str(event.get("type"))]
 
             kind = event.get("type")
             activity: dict[str, Any] | None = None
@@ -1032,6 +1036,10 @@ class AgentService:
         turn_started_at = time.time()
         state.setdefault("activity_events", [])
         state.setdefault("plan", [])
+        previous_checkpoint = state.get("task_checkpoint")
+        previous_task = previous_checkpoint.get("current", previous_checkpoint) if isinstance(previous_checkpoint, dict) else None
+        if not isinstance(previous_task, dict) or previous_task.get("status") in {"completed", "cancelled", "failed", "stopped"}:
+            state["plan"] = []
         state["task_checkpoint"] = begin_task(
             state.get("task_checkpoint"),
             prompt=prompt,
@@ -1060,7 +1068,7 @@ class AgentService:
             "safe_messages": [*copy.deepcopy(state.get("messages", [])), {"role": "user", "content": prompt}],
             "safe_prompt_included": True, "partial_content": "", "request_first_token_seconds": None,
             "partial_thinking": "", "active_operation": None, "tool_batch": None,
-            "completed_tool_results": {}, "settings": {"model": model, "provider_id": provider.provider_id,
+            "completed_tool_results": {}, "workflow_outcome": None, "settings": {"model": model, "provider_id": provider.provider_id,
                 "context": state["context"], "max_tokens": state["max_tokens"], "reasoning": reasoning,
                 "harness_profile": harness_profile, "skills_enabled": skills_enabled,
                 "skill_sources": skill_sources},
@@ -1089,7 +1097,15 @@ class AgentService:
 
     def _run_turn(self, controller: dict[str, Any], turn: TurnContext) -> None:
         state = controller["session"]
-        relay = AgentEventRelay(lambda event: self._publish_run_event(controller, turn, event))
+        completion_event: dict[str, Any] | None = None
+
+        def publish_engine_event(event: dict[str, Any]) -> None:
+            nonlocal completion_event
+            if event.get("type") == "generation_complete":
+                completion_event = copy.deepcopy(event)
+            self._publish_run_event(controller, turn, event)
+
+        relay = AgentEventRelay(publish_engine_event)
 
         def update_turn_record(status: str, transcript_saved: bool | None = None) -> None:
             for record in reversed(state.get("turns", [])):
@@ -1110,6 +1126,7 @@ class AgentService:
                 run_state = state.get("run_state")
                 if isinstance(run_state, dict):
                     run_state["status"] = "cancelled"
+                    run_state["workflow_outcome"] = "cancelled"
                     run_state["active_operation"] = None
                     run_state["safe_messages"] = copy.deepcopy(state.get("messages", []))
                     run_state["partial_content"] = ""
@@ -1197,6 +1214,7 @@ class AgentService:
                                      if isinstance(record, dict) and record.get("turn_id") == controller["turn_id"]), 0)
             update_turn_record("running", saved_user_count > int(prior_user_count))
             terminal = relay.terminal_event
+            successful_completion = completion_event
             run_state = state.get("run_state")
             if isinstance(run_state, dict):
                 if terminal and terminal.get("type") in {"error", "cancelled", "stopped_after_operation"}:
@@ -1207,11 +1225,16 @@ class AgentService:
                         if last.get("role") != "assistant" or any(last.get(key, "") != value for key, value in partial.items()):
                             messages = [*messages, {"role": "assistant", **partial}]
                             state["messages"] = messages
+                has_success_event = successful_completion is not None
                 run_state["status"] = (
                     "failed" if terminal and terminal.get("type") == "error"
                     else "cancelled" if terminal and terminal.get("type") == "cancelled"
                     else "stopped" if terminal and terminal.get("type") == "stopped_after_operation"
-                    else "completed"
+                    else "completed" if has_success_event else "failed"
+                )
+                run_state["workflow_outcome"] = (
+                    {"error": "failed", "cancelled": "cancelled", "stopped_after_operation": "stopped"}.get(str(terminal.get("type")), "failed")
+                    if terminal else str(successful_completion.get("workflowOutcome", "discussion")) if successful_completion else "failed"
                 )
                 run_state["active_operation"] = None
                 run_state["safe_messages"] = copy.deepcopy(messages)
@@ -1220,6 +1243,10 @@ class AgentService:
                 update_turn_record(str(run_state["status"]))
             if terminal and terminal.get("type") == "error":
                 state["last_error"] = {"message": str(terminal.get("error", "Run failed.")), "occurred_at": time.time()}
+            elif not terminal and not completion_event:
+                state["last_error"] = {"message": "The engine returned without a terminal completion event.", "occurred_at": time.time()}
+                finish_task(state.get("task_checkpoint", {}), "failed",
+                            blocker="The engine returned without a terminal completion event.")
             else:
                 state.pop("last_error", None)
             state["working_workspace"] = str(turn.workspace)
@@ -1229,13 +1256,21 @@ class AgentService:
             if not (saved["app_saved"] and saved["project_saved"]):
                 self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"], "error": saved["error"] or "Session storage is unavailable."})
             self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
-            relay.emit_terminal_after_persist()
+            if terminal:
+                relay.emit_terminal_after_persist()
+            elif completion_event:
+                self.emit({**completion_event, "type": "complete", "sessionId": state["session_id"],
+                           "turnId": controller["turn_id"], "workspace": str(turn.workspace), "timestamp": time.time()})
+            else:
+                self.emit({"type": "error", "error": "The engine returned without a terminal completion event.",
+                           "sessionId": state["session_id"], "turnId": controller["turn_id"], "workspace": str(turn.workspace)})
         except Exception as exc:
             finish_task(state.get("task_checkpoint", {}), "failed", blocker=f"{type(exc).__name__}: {exc}")
             state["messages"] = state.get("messages", [])
             update_turn_record("failed")
             if isinstance(state.get("run_state"), dict):
                 state["run_state"]["status"] = "failed"
+                state["run_state"]["workflow_outcome"] = "failed"
                 state["run_state"]["active_operation"] = None
             state["last_error"] = {"message": f"{type(exc).__name__}: {exc}", "occurred_at": time.time()}
             try:

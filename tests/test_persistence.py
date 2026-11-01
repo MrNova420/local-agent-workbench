@@ -131,13 +131,14 @@ class MirroredSessionStoreTests(unittest.TestCase):
                 {"_journal_event_id": "next-request", "_journal_recorded_at_ns": 4, "type": "phase", "phase": "waiting"},
                 {"_journal_event_id": "final-text", "_journal_recorded_at_ns": 5, "type": "text", "text": "Page is ready."},
                 {"_journal_event_id": "complete", "_journal_recorded_at_ns": 6, "type": "generation_complete",
-                 "verification": {"status": "not_verified"}},
+                 "verification": {"status": "not_verified"}, "workflowOutcome": "changed"},
             ])
 
             recovered = store.load(state["session_id"], str(root))["state"]
             messages = recovered["messages"]
 
             self.assertEqual(recovered["run_state"]["status"], "completed")
+            self.assertEqual(recovered["run_state"]["workflow_outcome"], "changed")
             self.assertEqual(messages[1]["content"], "Build the page")
             self.assertEqual(messages[3]["content"], "Wrote index.html")
             self.assertEqual(messages[-1]["content"], "Page is ready.")
@@ -221,6 +222,8 @@ class MirroredSessionStoreTests(unittest.TestCase):
             self.assertEqual(recovered["last_error"]["message"], "connection lost")
             self.assertEqual(recovered["task_checkpoint"]["current"]["status"], "failed")
             self.assertIn("connection lost", recovered["task_checkpoint"]["current"]["blockers"])
+            self.assertEqual(recovered["run_state"]["workflow_outcome"], "failed")
+            self.assertEqual(recovered["task_checkpoint"]["current"]["workflow_outcome"], "failed")
 
     def test_waiting_for_followup_model_call_checkpoints_prior_assistant_text(self):
         with tempfile.TemporaryDirectory() as temp:
