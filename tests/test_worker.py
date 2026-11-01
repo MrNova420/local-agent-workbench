@@ -1187,6 +1187,54 @@ def test_engine_failure_is_saved_with_the_session(service, tmp_path, monkeypatch
     assert saved["run_state"]["workflow_outcome"] == "response_missing"
 
 
+def test_incomplete_provider_stream_preserves_partial_reasoning_and_request_failure(service, tmp_path, monkeypatch):
+    class IncompleteStreamEngine:
+        def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
+            self.state = {}
+            self.runtime = object()
+            self.event = event
+
+        def run(self, prompt, messages):
+            messages.append({"role": "user", "content": prompt})
+            self.event({"type": "prompt_manifest", "request_index": 1, "messages": []})
+            self.event({"type": "request_dispatched", "provider": "ollama", "request_index": 1})
+            self.event({"type": "request_headers", "provider": "ollama", "request_index": 1,
+                        "http_status": 200, "header_wait_seconds": 0.5})
+            self.event({"type": "phase", "phase": "waiting"})
+            self.event({"type": "phase", "phase": "reasoning", "elapsed": 3.0})
+            self.event({"type": "thinking", "text": "partial reasoning before disconnect"})
+            self.event({"type": "request_error", "provider": "ollama", "request_index": 1,
+                        "phase": "streaming_response", "cancelled": False,
+                        "error": "Ollama stream closed without its final done=true record."})
+            self.event({"type": "error", "error": "Ollama stream closed without its final done=true record."})
+            return messages
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(worker, "AgentEngine", IncompleteStreamEngine)
+    project = tmp_path / "incomplete-stream-project"
+    project.mkdir()
+    service.handle("run_start", {"options": {
+        "workspace": str(project), "prompt": "inspect this project", "model": "model-a:latest",
+        "context": 4096, "maxTokens": 128, "temperature": 0.2,
+        "access": "ask", "approvalMode": "per-action",
+    }})
+    controller = service.active
+    assert controller is not None
+    session_id = controller["session"]["session_id"]
+    controller["thread"].join(3)
+
+    saved = service.sessions.load(session_id)
+    assert saved["run_state"]["status"] == "failed"
+    assert saved["last_error"]["message"].endswith("done=true record.")
+    assert any(row.get("role") == "assistant" and row.get("thinking") == "partial reasoning before disconnect"
+               for row in saved["messages"])
+    prompt = next(row for row in saved["activity_events"] if row.get("kind") == "prompt")
+    assert prompt["providerRequest"]["dispatch_status"] == "request_failed"
+    assert prompt["providerRequest"]["failure_phase"] == "streaming_response"
+
+
 def test_worker_exception_is_added_to_persisted_activity(service, tmp_path, monkeypatch):
     class RaisingEngine:
         def __init__(self, root, model, context, access, approval, event, approve, **kwargs):

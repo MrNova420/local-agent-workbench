@@ -711,3 +711,5 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - Regression cases added, not run. No test/typecheck/build/UI/live-model verification performed; all remain queued.
 
 - Ollama streams now fail visibly if EOF arrives without `done: true`; partial streamed text and reasoning stay in the run checkpoint. This specifically addresses incomplete responses being mistaken for finished reasoning. Regression coverage exists but remains unrun; current paired engine pin is `9d3b4d7e9bd36e3fd05f84a5b7451a78afc6bad1`.
+
+- Added an app-side integration regression that drives an incomplete streaming response through the worker relay, then checks the persisted partial reasoning, terminal failure state, and prompt-activity request error details. It remains queued with all other verification.
