@@ -153,7 +153,9 @@ function publishUpdateState(patch: Partial<typeof updateState>) {
 
 function checkForUpdateNow() {
   if (!updaterStarted || !updateState.supported) return { ...updateState };
-  if (updateCheckInProgress) return { ...updateState };
+  // Electron downloads available updates during the check. Do not duplicate a
+  // download or overwrite a ready-to-install state with a later background check.
+  if (updateCheckInProgress || updateState.status === 'downloading' || updateState.status === 'downloaded') return { ...updateState };
   updateCheckInProgress = true;
   publishUpdateState({ status: 'checking', error: undefined });
   try { autoUpdater.checkForUpdates(); }
