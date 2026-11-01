@@ -467,3 +467,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 
 - Resource telemetry now separates the Agent Workbench sidecar from detected Ollama/llama.cpp worker CPU and resident memory. Where NVIDIA reports compute-process memory, the worker PID is matched and runtime-process VRAM is shown separately; system GPU utilization/power and device VRAM remain explicitly device-wide. No selected-model GPU percentage is inferred.
 - Added mocked telemetry coverage and advanced the app's engine pin to `8e5702467fd7b36249a0574831a5d0261ad89ee3`. Tests, typecheck, packaged UI, and live hardware evidence remain queued; no model or runtime settings changed.
+
+## 2026-11-01 command timeout controls (verification queued)
+
+- Approved commands no longer receive a hidden 120-second timeout or a fixed one-hour ceiling. Omit `timeout_seconds` for an unbounded command wait controlled by completion or the user Cancel action; explicit positive timeouts remain supported with no silent cap.
+- Added queued engine coverage. App pin advanced to `f540259cfe195e6e076e848a516cebb2aebbe47f`; tests, typecheck, package, and long-command UI acceptance remain queued. No command was run.
