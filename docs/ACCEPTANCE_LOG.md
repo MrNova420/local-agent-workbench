@@ -603,3 +603,7 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 
 - Engine commit 53f067c6c6190db0f23afa5065abd191599243f2 bounds each read_file result using the selected run context/output budget. Large files, including long single-line files, can be read as UTF-8-safe chunks with a precise continuation cursor. The operation clearly marks excerpts and reports its budget in the tool schema; it does not change either selected inference setting.
 - Added continuation coverage for Unicode line columns; full engine and live context/output acceptance remain queued.
+
+## 2026-11-01 selected-context read budget assertion (verification queued)
+
+- Added a source regression that checks a 65,536 context / 8,192 output run derives a 14,080-byte per-read budget while retaining both selected settings unchanged. This assertion is queued with the complete suite and has not been executed.
