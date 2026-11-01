@@ -438,4 +438,4 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Remote exception detail is not copied into the user-facing result, avoiding accidental disclosure of endpoint-provided credential text. Added mocked engine and journal-replay regressions; they remain queued. No MCP server, app, model, or test suite was run.
 - Paired engine commit: `ed1d27f86414bb97b208683d6625e41c87e723ea`. The compact activity row also surfaces “inspect before retry” without requiring expansion; a queued renderer assertion covers that cue.
 - A separate queued MCP adapter regression covers timeout after dispatch and asserts that the uncertain result does not echo raw exception text. It has not been run.
-- The exact paired engine pin now includes that timeout regression (`70b6f2ea34dfdb4ef59be1d9af99415a4943a147`).
+- The exact paired engine pin now includes that timeout regression and its implementation note (`11255ad9ea2e289afdd53b74821f6fbff2866577`).
