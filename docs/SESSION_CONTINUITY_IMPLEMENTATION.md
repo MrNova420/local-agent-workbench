@@ -28,7 +28,7 @@
 4. Exercise live Plan updates from model update_plan through sidecar, JSONL, renderer, and reopened session.
 5. Confirm long streaming output and Unicode survive a process restart with no duplication, loss, or automatic replay of completed operations.
 6. Confirm received text/reasoning remains visible after provider errors, and malformed journal data is reported without being rewritten or discarded.
-7. Verify the full success event path emits the observed outcome after persistence, errors remain terminal, missing completion evidence fails closed, and resumed sessions preserve the distinction between command completion and test success.
+7. Verify the full success event path emits the observed outcome after persistence, errors remain terminal, missing completion evidence fails closed, and resumed sessions preserve the distinction between command completion and test success. Worker regressions now assert event order and the fail-closed state; still unrun.
 8. Verify cached prompt-token reporting for Ollama and llama.cpp and distinguish provider-exact counts from estimates in the UI.
 9. Run the full engine, sidecar, renderer, typecheck, packaged-app, and visible acceptance gates only after all implementation work is complete.
 
