@@ -856,6 +856,7 @@ export default function App() {
       const result = await request<{ answered: boolean }>({ command: 'question_reply', questionId: agentQuestion.questionId, answer: answer.trim() });
       if (!result.answered) {
         setQuestionAnswering(false);
+        setAgentQuestion((current) => current?.questionId === agentQuestion.questionId ? null : current);
         notify('That question is no longer waiting for an answer.', 'warn');
       }
     } catch (error) {

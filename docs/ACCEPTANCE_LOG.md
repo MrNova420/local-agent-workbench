@@ -646,3 +646,4 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - Added a desktop-only `ask_user` structured tool for material implementation choices. The host presents a non-dismissible answer dialog, stores question/answer activity, and returns the answer to the paused tool batch; it never substitutes for file or command approval.
 - Resume recovery marks unanswered prompts interrupted without labeling them uncertain side effects, and preserves an already journaled answer if the app stops between answer and tool completion.
 - Engine, sidecar, persistence, and activity-rendering regressions were added but intentionally not run. Typecheck, package, and visible interaction acceptance remain queued.
+- A stale question reply now dismisses only the matching obsolete dialog and reports that the run is no longer waiting, avoiding a stuck non-dismissible modal. Renderer interaction verification remains queued.
