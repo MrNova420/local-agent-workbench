@@ -5,6 +5,9 @@ export type RunMetrics = {
   lastRequestPromptTokens: number | null;
   estimatedInputTokens: number | null;
   cachedPromptTokens: number;
+  usageResponses: number;
+  promptTokenReports: number;
+  cachedPromptReports: number;
   promptEvalNanoseconds: number;
   modelLoadNanoseconds: number;
   decodeNanoseconds: number;
@@ -22,6 +25,9 @@ export function emptyRunMetrics(): RunMetrics {
     lastRequestPromptTokens: null,
     estimatedInputTokens: null,
     cachedPromptTokens: 0,
+    usageResponses: 0,
+    promptTokenReports: 0,
+    cachedPromptReports: 0,
     promptEvalNanoseconds: 0,
     modelLoadNanoseconds: 0,
     decodeNanoseconds: 0,
@@ -81,24 +87,32 @@ export function endGeneration(metrics: RunMetrics, nowMs = Date.now()): RunMetri
 export function addGenerationUsage(metrics: RunMetrics, usage: unknown): RunMetrics {
   if (!usage || typeof usage !== 'object') return endGeneration(metrics);
   const row = usage as Record<string, unknown>;
-  const promptTokens = typeof row.prompt_eval_count === 'number' && Number.isFinite(row.prompt_eval_count) ? Math.max(0, Math.floor(row.prompt_eval_count)) : 0;
-  const cachedPromptTokens = typeof row.prompt_eval_cached_count === 'number' && Number.isFinite(row.prompt_eval_cached_count) ? Math.max(0, Math.min(promptTokens || Infinity, Math.floor(row.prompt_eval_cached_count))) : 0;
+  const hasPromptTokens = typeof row.prompt_eval_count === 'number' && Number.isFinite(row.prompt_eval_count);
+  const hasCachedPromptTokens = typeof row.prompt_eval_cached_count === 'number' && Number.isFinite(row.prompt_eval_cached_count);
+  const promptTokens = hasPromptTokens ? Math.max(0, Math.floor(row.prompt_eval_count as number)) : 0;
+  const cachedPromptTokens = hasCachedPromptTokens ? Math.max(0, Math.min(promptTokens || Infinity, Math.floor(row.prompt_eval_cached_count as number))) : 0;
   const promptEvalNanoseconds = typeof row.prompt_eval_duration === 'number' && Number.isFinite(row.prompt_eval_duration) ? Math.max(0, row.prompt_eval_duration) : 0;
   const modelLoadNanoseconds = typeof row.load_duration === 'number' && Number.isFinite(row.load_duration) ? Math.max(0, row.load_duration) : 0;
   const hasCount = typeof row.eval_count === 'number' && Number.isFinite(row.eval_count);
   const hasDuration = typeof row.eval_duration === 'number' && Number.isFinite(row.eval_duration);
-  if (!hasCount || !hasDuration) return { ...endGeneration(metrics), promptTokens: metrics.promptTokens + promptTokens, lastRequestPromptTokens: typeof row.prompt_eval_count === 'number' && Number.isFinite(row.prompt_eval_count) ? promptTokens : metrics.lastRequestPromptTokens, cachedPromptTokens: metrics.cachedPromptTokens + cachedPromptTokens, promptEvalNanoseconds: metrics.promptEvalNanoseconds + promptEvalNanoseconds, modelLoadNanoseconds: metrics.modelLoadNanoseconds + modelLoadNanoseconds };
+  const usageTotals = {
+    usageResponses: metrics.usageResponses + 1,
+    promptTokenReports: metrics.promptTokenReports + Number(hasPromptTokens),
+    cachedPromptReports: metrics.cachedPromptReports + Number(hasCachedPromptTokens),
+    promptTokens: metrics.promptTokens + promptTokens,
+    cachedPromptTokens: metrics.cachedPromptTokens + cachedPromptTokens,
+    lastRequestPromptTokens: hasPromptTokens ? promptTokens : metrics.lastRequestPromptTokens,
+    promptEvalNanoseconds: metrics.promptEvalNanoseconds + promptEvalNanoseconds,
+    modelLoadNanoseconds: metrics.modelLoadNanoseconds + modelLoadNanoseconds,
+  };
+  if (!hasCount || !hasDuration) return { ...endGeneration(metrics), ...usageTotals };
 
   const tokens = Math.max(0, Math.floor(row.eval_count as number));
   const duration = Math.max(0, row.eval_duration as number);
   return {
     ...metrics,
     outputTokens: metrics.outputTokens + tokens,
-    promptTokens: metrics.promptTokens + promptTokens,
-    lastRequestPromptTokens: typeof row.prompt_eval_count === 'number' && Number.isFinite(row.prompt_eval_count) ? promptTokens : metrics.lastRequestPromptTokens,
-    cachedPromptTokens: metrics.cachedPromptTokens + cachedPromptTokens,
-    promptEvalNanoseconds: metrics.promptEvalNanoseconds + promptEvalNanoseconds,
-    modelLoadNanoseconds: metrics.modelLoadNanoseconds + modelLoadNanoseconds,
+    ...usageTotals,
     decodeNanoseconds: metrics.decodeNanoseconds + duration,
     pendingCharacters: 0,
     generationStartedAtMs: null,

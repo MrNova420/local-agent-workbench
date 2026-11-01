@@ -139,6 +139,25 @@ def test_session_run_settings_persist_skill_controls_and_inference_values(servic
     assert service.sessions.load(session["session_id"], str(workspace))["state"]["skills_enabled"] is False
 
 
+def test_switching_away_from_session_approval_revokes_saved_chat_grant(service, tmp_path):
+    workspace = tmp_path / "revoke-chat-approval"
+    workspace.mkdir()
+    session = service.sessions.create(str(workspace), "model-a:latest", 4096)
+    session["session_approval_granted"] = True
+    service.sessions.save(session)
+    settings = {
+        "model": "model-a:latest", "context": 4096, "maxTokens": 1024,
+        "temperature": 0.2, "access": "ask", "approvalMode": "per-action",
+        "keepAlive": "30m", "reasoning": None, "harnessProfile": "standard", "taskIntent": "auto",
+        "skillsEnabled": True, "skillSources": ["project", "user"],
+    }
+
+    saved = service.handle("session_run_settings", {"sessionId": session["session_id"], "settings": settings})
+
+    assert saved["approval_mode"] == "per-action"
+    assert saved["session_approval_granted"] is False
+
+
 def test_permission_rules_are_validated_persisted_and_locked_during_runs(service):
     rules = [{"tool": "write_file", "decision": "deny", "path_glob": "generated/**"}]
     saved = service.handle("permission_rules_set", {"rules": rules})
@@ -1185,6 +1204,43 @@ def test_approval_reply_signals_only_matching_pending_action(service):
     assert service.approval_reply("missing", True) is False
     assert service.approval_reply("action-1", True) is True
     assert result == {"done": True, "approved": True}
+
+
+def test_per_session_approval_is_mirrored_before_approval_is_accepted(service, tmp_path, monkeypatch):
+    project = tmp_path / "session-approval-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    condition = threading.Condition()
+    result = {"done": False, "approved": False}
+    controller = {"session": state, "approval_mode": "per-session", "checkpoint_lock": threading.RLock(),
+                  "pending": {"action-1": (condition, result)}}
+    service.active = controller
+    events = []
+    monkeypatch.setattr(service, "emit", events.append)
+
+    assert service.approval_reply("action-1", True) is True
+    stored = service.sessions.load(state["session_id"], str(project))["state"]
+    assert stored["session_approval_granted"] is True
+    assert result == {"done": True, "approved": True}
+
+
+def test_per_session_approval_fails_closed_when_mirror_save_fails(service, tmp_path, monkeypatch):
+    project = tmp_path / "session-approval-save-failure"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    condition = threading.Condition()
+    result = {"done": False, "approved": False}
+    controller = {"session": state, "approval_mode": "per-session", "checkpoint_lock": threading.RLock(),
+                  "pending": {"action-1": (condition, result)}}
+    service.active = controller
+    monkeypatch.setattr(service.sessions, "save", lambda _state: {"app_saved": True, "project_saved": False, "error": "fixture lock"})
+    events = []
+    monkeypatch.setattr(service, "emit", events.append)
+
+    assert service.approval_reply("action-1", True) is False
+    assert state["session_approval_granted"] is False
+    assert result == {"done": False, "approved": False}
+    assert events[-1]["type"] == "session_mirror_error"
 
 
 def test_ask_user_pauses_for_answer_and_resumes_with_saved_tool_result(service, tmp_path, monkeypatch):

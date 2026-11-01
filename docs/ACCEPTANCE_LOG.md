@@ -658,3 +658,10 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 
 - Added a saved follow-up queue to the active chat: prompts may be drafted during inference, remain attached to that session/project, and start only after explicit user selection. Queue mutations do not cancel or steer the active request.
 - Queue persistence, mirror behavior, project isolation, exact one-time consumption, and renderer interaction regressions are added but intentionally unrun. No typecheck, package, app launch, or model request was performed.
+
+# 2026-11-01 — Small-output long-file workflow and controls (source only)
+
+- Engine source adds access-controlled atomic `append_file` chunks so a large file can be assembled across responses while preserving the selected output cap and full-file inspection path. Sidecar activity and task verification recognize appended files as project changes.
+- App source adds opt-in saved-chat session approval with deny/ask precedence and mirror fail-closed behavior; exact installed local model picks; and cache metrics that do not treat absent provider counters as zero.
+- The existing update-feed URL and packaged-install gating match Electron's documented GitHub feed shape. The installed previous-version update and workspace/session recovery canary is still pending. No updater installation or app restart was performed.
+- Related engine, sidecar, renderer, and updater regression cases are queued. No tests, typecheck, packaging, UI session, or model request was run; configured model/context/output/reasoning values and the running Flint model were left unchanged.

@@ -14,6 +14,9 @@ describe('per-run Ollama measurements', () => {
     expect(restored.estimatedInputTokens).toBe(4300);
     expect(restored.outputTokens).toBe(50);
     expect(restored.cachedPromptTokens).toBe(5500);
+    expect(restored.usageResponses).toBe(2);
+    expect(restored.promptTokenReports).toBe(2);
+    expect(restored.cachedPromptReports).toBe(2);
   });
   it('keeps the first model-token delay for the whole task', () => {
     const first = recordFirstToken(emptyRunMetrics(), 38.5);
@@ -40,8 +43,30 @@ describe('per-run Ollama measurements', () => {
     });
     expect(metrics.promptTokens).toBe(1000);
     expect(metrics.cachedPromptTokens).toBe(640);
+    expect(metrics.cachedPromptReports).toBe(1);
     expect(metrics.promptEvalNanoseconds).toBe(500_000_000);
     expect(metrics.modelLoadNanoseconds).toBe(2_000_000_000);
+  });
+
+  it('tracks missing cache counts as unavailable instead of a provider-reported zero', () => {
+    const metrics = addGenerationUsage(emptyRunMetrics(), {
+      prompt_eval_count: 1200, eval_count: 8, eval_duration: 1_000_000_000,
+    });
+    expect(metrics.promptTokens).toBe(1200);
+    expect(metrics.cachedPromptTokens).toBe(0);
+    expect(metrics.usageResponses).toBe(1);
+    expect(metrics.promptTokenReports).toBe(1);
+    expect(metrics.cachedPromptReports).toBe(0);
+  });
+
+  it('identifies partially reported cache counters across multiple model calls', () => {
+    const first = addGenerationUsage(emptyRunMetrics(), {
+      prompt_eval_count: 1200, prompt_eval_cached_count: 500, eval_count: 8, eval_duration: 1_000_000_000,
+    });
+    const partial = addGenerationUsage(first, { prompt_eval_count: 900, eval_count: 7, eval_duration: 1_000_000_000 });
+    expect(partial.usageResponses).toBe(2);
+    expect(partial.cachedPromptReports).toBe(1);
+    expect(partial.promptTokenReports).toBe(2);
   });
 
   it('does not report a rate without measured decode time', () => {

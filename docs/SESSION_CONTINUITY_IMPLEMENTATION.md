@@ -4,7 +4,7 @@
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
-**Current paired engine source:** `69fcb9995fe03fd271276c799c34e37f194c9750` (unpublished; regressions intentionally queued).
+**Current paired engine source:** `644ae1b5c831f60a08024c9777734bce83c33ad0` (unpublished; regressions intentionally queued).
 
 ## Implemented in this source batch
 
@@ -43,6 +43,10 @@
 - The required cancel chooser now waits for explicit sidecar acknowledgment; a failed IPC call leaves it open, and a no-longer-active run is reported instead of silently looking canceled. Finish-after-current-operation receives the same acceptance check. Mocked and visible chooser tests remain queued.
 - App-close choices also wait for host acknowledgment. Cancel-and-close validates cancellation acceptance and waits for run-idle before shutdown; failures keep the modal available instead of silently closing.
 - The active chat supports a durable follow-up queue: prompts can be drafted during inference without changing the active request, are saved in both session mirrors, remain project-bound, and start only after explicit user selection. Queue removal is persisted with the selected prompt's new run snapshot to avoid automatic replay. No queue-size or prompt-length cap is added.
+- Large generated files can now be constructed across model responses with `write_file` followed by ordered `append_file` chunks. Appends use an atomic replacement assembled with streaming file copies, require the existing project file, honor the same access/approval/path rules, and become durable changed-file evidence. This preserves the selected per-request output cap without imposing a file-size ceiling; runtime acceptance remains queued.
+- Approval mode now includes a saved-chat-session grant: the first action opens the ordinary exact-action dialog; choosing “Approve this session” saves the grant to both mirrors before the action is released. Matching explicit deny/ask policies retain precedence, and changing away from this mode clears the stored grant. The UX and mirror-failure paths remain unverified.
+- Prompt cache reporting now distinguishes full, partial, and missing provider counters. A missing cached-token field is no longer counted as zero; actual KV allocation/precision stays unavailable unless a runtime reports it. Model Library featured picks are derived from exact installed tags and display the locally observed quantization metadata; all other installed models and Hugging Face search remain available.
+- Updater source uses the Electron public release feed for packaged Windows x64 Squirrel installs, downloads in the background while idle, and waits for an explicit restart/install click. The beta.2-to-beta.3 installed upgrade and workspace recovery canary remains pending; no new release is being published in this work.
 
 ## Verification queue (not run in this implementation phase)
 
@@ -60,10 +64,15 @@
 12. Verify the implemented conditional/dependency/property-name/tuple-prefix/contains schema cases and confirm `format` is treated as annotation metadata rather than an asserted constraint.
 13. Run one active user turn past its input budget and verify compaction keeps complete tool exchanges, retrieves an omitted output by operation ID/range, records the exact omission count, and continues without restarting the task.
 14. Queue multiple follow-ups during a long active run, verify no interruption and correct ordering after resume, remove one, explicitly start another, and fault-inject a crash around consumption to prove the task is neither silently auto-started nor duplicated.
+15. With 4K and 8K output settings, construct and inspect a file larger than one response using successive append chunks; verify approval/access and crash recovery on every chunk, exact final byte content, and no context/output setting changes.
+16. Verify per-session approval survives resume and later turns, is cleared when switching to per-action, and fails closed when either mirror cannot persist the grant; confirm deny and forced-ask permission rules keep priority.
+17. Verify cache counters display exact, partial, and unavailable states without treating absent fields as zero; compare Ollama and llama.cpp returns and separately label actual KV allocation/precision as unavailable where unsupported.
+18. Verify the installed-model recommendation order, exact tag/quantization labels, selection without implicit loading/downloading, and continued access to all other installed models and Hub search.
+19. On the exact packaged beta predecessor, verify feed discovery/download, active-run prevention, explicit install/restart, installed version, session/project recovery, and behavior when no update or a download error is returned.
 
 ## Remaining reliability work
 
-- The paired app currently pins engine `69fcb9995fe03fd271276c799c34e37f194c9750` in `core-revision.txt`; CI and the Windows release workflow read that pin. The engine records provider-specific request data, uncertain MCP effects, safe tool-preparation metadata, MCP schema capability gaps, within-task compaction and result lookup, and separate local runtime worker CPU/RAM/NVIDIA process VRAM measurements where available. JSON Schema `format` remains an annotation without value validation; GPU load remains device-wide. Reconcile and build the packaged app only after implementation is complete.
+- The paired app currently pins engine `644ae1b5c831f60a08024c9777734bce83c33ad0` in `core-revision.txt`; CI and the Windows release workflow read that pin. The engine records provider-specific request data, uncertain MCP effects, safe tool-preparation metadata, MCP schema capability gaps, within-task compaction and result lookup, and separate local runtime worker CPU/RAM/NVIDIA process VRAM measurements where available. JSON Schema `format` remains an annotation without value validation; GPU load remains device-wide. Reconcile and build the packaged app only after implementation is complete.
 - Finish-after-operation drains every independent read that was already launched as part of a validated concurrent batch before stopping ahead of the next model request. Writes, commands, and MCP actions remain sequential; they are not silently parallelized.
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.

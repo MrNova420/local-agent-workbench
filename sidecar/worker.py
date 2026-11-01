@@ -929,7 +929,7 @@ class AgentService:
             task_intent = str(settings.get("taskIntent", "auto"))
             skills_enabled = settings.get("skillsEnabled")
             skill_sources = settings.get("skillSources")
-            if access not in {"copy", "plan", "ask", "edit"} or approval_mode not in {"per-action", "per-task", "auto"}:
+            if access not in {"copy", "plan", "ask", "edit"} or approval_mode not in {"per-action", "per-task", "per-session", "auto"}:
                 raise ValueError("Invalid access or approval setting.")
             if harness_profile not in {"standard", "small-model"} or task_intent not in {"auto", "discuss", "plan", "implement"} or not isinstance(skills_enabled, bool):
                 raise ValueError("Invalid workflow or skill setting.")
@@ -943,6 +943,8 @@ class AgentService:
                 if reasoning not in capabilities.get("values", []):
                     raise ValueError("The selected model does not advertise that reasoning choice.")
             state = self.sessions.load(str(message["sessionId"]))
+            if approval_mode != "per-session":
+                state["session_approval_granted"] = False
             state.update(model=model, model_id=model, provider_id=provider.provider_id, provider=provider.provider_id,
                          context=context, max_tokens=max_tokens, temperature=float(temperature), access=access,
                          approval_mode="per-action" if approval_mode == "auto" else approval_mode,
@@ -1342,7 +1344,7 @@ class AgentService:
             raise ValueError(f"Model is not currently installed in Ollama: {model}")
         access = str(options.get("access", "ask"))
         approval_mode = str(options.get("approvalMode", "per-action"))
-        if access not in {"copy", "plan", "ask", "edit"} or approval_mode not in {"per-action", "per-task", "auto"}:
+        if access not in {"copy", "plan", "ask", "edit"} or approval_mode not in {"per-action", "per-task", "per-session", "auto"}:
             raise ValueError("Invalid access or approval setting.")
         reasoning = options.get("reasoning")
         harness_profile = str(options.get("harnessProfile", "standard"))
@@ -1383,6 +1385,8 @@ class AgentService:
             task_intent=task_intent,
             skills_enabled=skills_enabled, skill_sources=skill_sources,
         )
+        if approval_mode != "per-session":
+            state["session_approval_granted"] = False
         if state["context"] < 1024 or state["max_tokens"] < 1 or not 0 <= state["temperature"] <= 2:
             raise ValueError("Context, output token, or temperature setting is outside the supported range.")
         working = source
@@ -1470,7 +1474,7 @@ class AgentService:
         controller = {"cancel": threading.Event(), "engine": None, "pending": {}, "pending_questions": {}, "session": turn.session, "source": source, "working": working,
                      "turn_id": turn_id, "checkpoint_lock": threading.RLock(), "last_checkpoint": time.monotonic(),
                      "last_journal_flush": time.monotonic(), "journal_pending": [], "current_operation_id": None,
-                     "stop_after_operation": False, "accepting_queue": True}
+                     "stop_after_operation": False, "accepting_queue": True, "approval_mode": approval_mode}
         with self.active_lock:
             self.active = controller
         saved = self.sessions.save(controller["session"])
@@ -1599,6 +1603,7 @@ class AgentService:
                 operation_result_lookup=lambda operation_id: _saved_operation_result(state, operation_id),
                 permission_rules=run_permission_rules,
                 ask_user=lambda args: self._ask_user(controller, turn, args),
+                session_approval_granted=bool(state.get("session_approval_granted", False)),
             )
             chosen_runtime = self.providers.runtime_for(turn.model, engine.runtime, state.get("provider_id"))
             engine.runtime = RequestScopedOllama(chosen_runtime)
@@ -1712,9 +1717,27 @@ class AgentService:
 
     def approval_reply(self, action_id: str, approved: bool) -> bool:
         with self.active_lock:
-            pending = self.active.get("pending", {}).get(action_id) if self.active else None
+            controller = self.active
+            pending = controller.get("pending", {}).get(action_id) if controller else None
         if not pending:
             return False
+        if approved and controller and controller.get("approval_mode") == "per-session":
+            state = controller["session"]
+            with controller["checkpoint_lock"]:
+                previous = bool(state.get("session_approval_granted", False))
+                state["session_approval_granted"] = True
+                saved = self.sessions.save(state)
+                if not (saved.get("app_saved") and saved.get("project_saved")):
+                    state["session_approval_granted"] = previous
+                    rollback = self.sessions.save(state)
+                    self.emit({"type": "session_mirror_error", "sessionId": state["session_id"],
+                               "appSaved": saved.get("app_saved", False), "projectSaved": saved.get("project_saved", False),
+                               "error": "; ".join(part for part in (saved.get("error"),
+                                   "grant rollback saved to both mirrors" if rollback.get("app_saved") and rollback.get("project_saved")
+                                   else f"grant rollback incomplete (app={rollback.get('app_saved')}, project={rollback.get('project_saved')})") if part)
+                                   or "Session-wide approval could not be saved; the action was not approved."})
+                    return False
+                self.emit({"type": "session_approval_state", "sessionId": state["session_id"], "approved": True})
         condition, result = pending
         with condition:
             result.update(done=True, approved=approved)

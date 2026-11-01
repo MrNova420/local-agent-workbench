@@ -1,5 +1,5 @@
 export type AccessMode = 'copy' | 'plan' | 'ask' | 'edit';
-export type ApprovalMode = 'per-action' | 'per-task' | 'auto';
+export type ApprovalMode = 'per-action' | 'per-task' | 'per-session' | 'auto';
 export type ReasoningChoice = boolean | string | null;
 export type HarnessProfile = 'standard' | 'small-model';
 export type TaskIntent = 'auto' | 'discuss' | 'plan' | 'implement';
@@ -104,7 +104,7 @@ export type ActivityRecord = {
   status: string;
   source?: 'workbench' | 'agent';
   approvalStatus?: 'waiting' | 'approved' | 'denied' | 'cancelled';
-  approvalMode?: 'per-action' | 'per-task';
+  approvalMode?: 'per-action' | 'per-task' | 'per-session';
   timestamp?: number;
   startedAt?: number;
   completedAt?: number;

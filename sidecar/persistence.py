@@ -477,7 +477,8 @@ class MirroredSessionStore:
         metadata = self.identity.read(root, create=True) or {}
         state = self.app.create(str(root), model, context, options)
         state.update(workspace_id=metadata["workspace_id"], activity_events=[], plan=[], run_state=None,
-                     task_checkpoint={}, usage_events=[], journal_cursor_ns=0, task_intent="auto")
+                     task_checkpoint={}, usage_events=[], journal_cursor_ns=0, task_intent="auto",
+                     session_approval_granted=False)
         self._set_git_exclude(root, not bool(metadata.get("track_sessions", False)))
         return state
 
