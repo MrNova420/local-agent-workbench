@@ -26,6 +26,7 @@
 - The plan tool now accepts optional task-specific acceptance criteria. The engine carries them through compaction checkpoints; the sidecar stores them in the plan activity journal; session restoration reads the latest plan snapshot; and the Plan panel presents criteria separately from checklist progress. A new task's explicit empty snapshot prevents stale criteria from a previous task resurfacing. Source-only, regression coverage queued.
 - ToolRegistry now initializes its plan state before the first inference request; review found the engine accessed the field before the first model `update_plan` call could create it. A queued regression covers the initial empty state.
 - Approved commands stopped after launch or terminated by timeout are now marked `uncertain` because partial file effects may already exist. Their possible effects trigger workspace inspection; the renderer warns before the user treats the result as a clean cancel or definite failure. A queued regression distinguishes these from cancellation before launch.
+- The active-task checkpoint explicitly instructs the model to inspect the saved operation result and workspace before requesting or repeating an uncertain operation; uncertain operations are never automatically replayed. The continuity regression is queued.
 
 ## Verification queue (not run in this implementation phase)
 
@@ -42,7 +43,7 @@
 
 ## Remaining reliability work
 
-- The shared engine is pinned at `536b37050566e64c67476de013629a83c089089b` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. Reconcile and build the packaged app only after implementation is complete.
+- The shared engine is pinned at `d4bf35cfb7d949b71a2e98242b0ccff421b1296a` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. Reconcile and build the packaged app only after implementation is complete.
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.
 - Add persisted context/input usage presentation and distinguish actual runtime allocation from selected context where the provider exposes it.

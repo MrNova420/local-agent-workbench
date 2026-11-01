@@ -373,6 +373,11 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 
 - The app now pins engine `536b37050566e64c67476de013629a83c089089b`. An approved command stopped after launch or terminated by timeout is recorded as uncertain because it may have left partial files; it prompts a bounded workspace inspection and the renderer warns the user. A command denied or canceled before launch is not reported as having possible effects.
 - A mock status regression was added but not run. All tests, typecheck, package, visible acceptance, updater canary, and exact-model measurement remain queued.
+
+## 2026-11-01 uncertain-operation recovery source follow-up (verification queued)
+
+- The app now pins engine `d4bf35cfb7d949b71a2e98242b0ccff421b1296a`. The compacted task checkpoint carries an explicit instruction to inspect saved output and workspace state before repeating an uncertain operation and forbids automatic replay.
+- A queued continuity regression checks that the uncertain operation reference and review requirement survive compaction. No tests or runtime checks were run.
 - Added Workbench-owned skill enablement/source selection, captured it per run, excluded the skill tool when disabled, and added a sidecar command that persists session run settings. Added queued regressions for source filtering, disabled-skill exclusion, captured turn settings, and session persistence; they have not been run.
 - Run Configuration now writes selected model and settings to both session mirrors rather than relying on the next run to persist them; changes are refused while a task is active. Switching model selection resets reasoning to that model's default before the user chooses an override.
 - Terminal turns now persist an observed workflow outcome distinct from “the run ended”; the worksheet labels discussion, plan-only, blocked, changed, inspected, command-completed, and command-failed evidence. A new task clears stale plan rows. Added queued engine, sidecar, and renderer coverage; no tests or UI verification were run.
