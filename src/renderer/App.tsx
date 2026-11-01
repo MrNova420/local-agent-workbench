@@ -14,6 +14,7 @@ import { nextHarnessProfile } from '../shared/harness-profile';
 import { isNearTranscriptEnd } from '../shared/transcript-follow';
 import { readVerificationEvidence, verificationEvidenceLabel, type VerificationEvidence } from '../shared/verification-evidence';
 import { readPlanAcceptanceCriteria } from '../shared/plan-criteria';
+import { parsePermissionCommandPrefix } from '../shared/permission-rules';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; turnId?: string; thinking?: string; streaming?: boolean; recoveredPartial?: boolean };
 type PlanItem = { title?: string; text?: string; status?: string; source?: 'workbench' | 'agent' };
@@ -908,12 +909,7 @@ export default function App() {
           base.path_glob = draft.value.trim();
         }
         if (draft.scope === 'command') {
-          if (!draft.value.trim()) throw new Error(`Rule ${draft.tool} needs a command prefix.`);
-          if (draft.tool === 'run_command' || (draft.tool === '*' && draft.value.trim().startsWith('['))) {
-            const prefix = JSON.parse(draft.value) as unknown;
-            if (!Array.isArray(prefix) || !prefix.length || prefix.some((token) => typeof token !== 'string' || !token)) throw new Error('For run_command, enter a JSON array of argv tokens, such as ["python", "-m", "pytest"].');
-            base.command_prefix = prefix as string[];
-          } else base.command_prefix = draft.value.trim();
+          base.command_prefix = parsePermissionCommandPrefix(draft.tool as '*' | 'run_command' | 'run_shell', draft.value);
         }
         return base;
       });
@@ -1451,7 +1447,7 @@ function PermissionRulesModal({ rules, setRules, tools, loading, running, onClos
         <label className="settings-field"><span>Tool</span><select value={rule.tool} onChange={(event) => { const tool = event.target.value; update(index, { tool, ...((rule.scope === 'command' && !['*', 'run_command', 'run_shell'].includes(tool)) || (rule.scope === 'path' && ['run_command', 'run_shell'].includes(tool)) ? { scope: 'tool' as const, value: '' } : {}) }); }}><option value="*">All tools</option>{toolNames.map((name) => <option value={name} key={name}>{name}</option>)}</select></label>
         <label className="settings-field"><span>Decision</span><select value={rule.decision} onChange={(event) => update(index, { decision: event.target.value as PermissionRuleDraft['decision'] })}><option value="allow">Allow</option><option value="ask">Ask every time</option><option value="deny">Deny</option></select></label>
         <label className="settings-field"><span>Match scope</span><select value={rule.scope} onChange={(event) => update(index, { scope: event.target.value as PermissionRuleDraft['scope'], value: '' })}><option value="tool">Every call to this tool</option><option value="path" disabled={['run_command', 'run_shell'].includes(rule.tool)}>Project path glob</option><option value="command" disabled={!['*', 'run_command', 'run_shell'].includes(rule.tool)}>Command prefix</option></select></label>
-        {rule.scope !== 'tool' && <label className="settings-field permission-rule-scope"><span>{rule.scope === 'path' ? 'Relative path pattern' : 'Command prefix'}</span><input value={rule.value} placeholder={rule.scope === 'path' ? 'src/generated/**' : rule.tool === 'run_shell' ? 'python -m pytest' : '["python", "-m", "pytest"]'} onChange={(event) => update(index, { value: event.target.value })}/><small>{rule.scope === 'path' ? 'For multi-file patches, deny/ask matches any affected path; allow applies only when every target matches.' : rule.tool === 'run_shell' ? 'Matches the beginning of the PowerShell command.' : 'For run_command, use a JSON array of exact argv prefix tokens.'}</small></label>}
+        {rule.scope !== 'tool' && <label className="settings-field permission-rule-scope"><span>{rule.scope === 'path' ? 'Relative path pattern' : 'Command prefix'}</span><input value={rule.value} placeholder={rule.scope === 'path' ? 'src/generated/**' : rule.tool === 'run_shell' ? 'python -m pytest' : '["python", "-m", "pytest"]'} onChange={(event) => update(index, { value: event.target.value })}/><small>{rule.scope === 'path' ? 'For multi-file patches, deny/ask matches any affected path; allow applies only when every target matches.' : rule.tool === 'run_shell' ? 'Matches the beginning of the PowerShell command.' : rule.tool === '*' ? 'Wildcard command rules use JSON argv tokens and match both run_command and run_shell.' : 'Use a JSON array of exact argv prefix tokens.'}</small></label>}
         <Button kind="quiet" onClick={() => setRules((current) => current.filter((_, row) => row !== index))}>Remove</Button>
       </div>)}
       {!rules.length && <div className="empty-state">No persistent overrides. Actions continue to use the run’s selected approval mode.</div>}

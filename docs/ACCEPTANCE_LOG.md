@@ -522,3 +522,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Project change review now omits `.agent-workbench` from non-Git project snapshots and from Git diffs, including session files explicitly added to Git. This keeps mirrored conversation/tool history out of the model-facing change review while preserving the user's choice to track those files in Git.
 - Added regression cases for both non-Git and Git-tracked project review paths. They remain unrun with the deferred verification pass; no project/session data was read from the user's workspace.
 
+## 2026-11-01 wildcard command permission consistency (verification queued)
+
+- Wildcard command permission rules now require a JSON argv prefix, which the policy evaluator applies consistently to both direct `run_command` argv and parsed `run_shell` commands. Shell-only rules retain their readable text prefix form.
+- Added shared parser coverage for wildcard and command-specific formats. Tests and typecheck remain queued; no permission settings were changed in user data.
+
