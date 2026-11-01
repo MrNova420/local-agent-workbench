@@ -1,6 +1,9 @@
+import importlib
 from types import SimpleNamespace
 
-from sidecar import telemetry as telemetry_module
+from sidecar import worker
+
+telemetry_module = importlib.import_module(worker.Telemetry.__module__)
 
 
 class FakeProcess:
