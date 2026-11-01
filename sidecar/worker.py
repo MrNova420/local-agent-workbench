@@ -944,7 +944,17 @@ class AgentService:
         try:
             if controller["cancel"].is_set():
                 update_turn_record("cancelled")
-                self.sessions.save(state)
+                run_state = state.get("run_state")
+                if isinstance(run_state, dict):
+                    run_state["status"] = "cancelled"
+                    run_state["active_operation"] = None
+                    run_state["safe_messages"] = copy.deepcopy(state.get("messages", []))
+                    run_state["partial_content"] = ""
+                    run_state["partial_thinking"] = ""
+                saved = self.sessions.save(state)
+                if not saved["project_saved"]:
+                    self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "error": saved["error"] or "Project session mirror is unavailable."})
+                self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
                 self.emit({"type": "cancelled", "elapsed": 0, "sessionId": state["session_id"]})
                 return
             mcp_tools = list(turn.mcp_tools)

@@ -423,6 +423,42 @@ def test_cancel_interrupts_current_engine_without_unloading_ollama(service):
     assert service.runtime.cancelled is False
 
 
+def test_cancel_before_worker_thread_starts_persists_terminal_run_state(service, tmp_path, monkeypatch):
+    deferred = []
+    events = []
+    service.emit = events.append
+    real_start = threading.Thread.start
+
+    def defer_run_thread(thread):
+        if thread.name == "agent-run":
+            deferred.append(thread)
+            return None
+        return real_start(thread)
+
+    monkeypatch.setattr(threading.Thread, "start", defer_run_thread)
+    project = tmp_path / "pre-cancel-project"
+    project.mkdir()
+    service.handle("run_start", {"options": {
+        "workspace": str(project), "prompt": "hello", "model": "model-a:latest",
+        "context": 4096, "maxTokens": 128, "temperature": 0.2,
+        "access": "ask", "approvalMode": "per-action",
+    }})
+    controller = service.active
+    assert controller is not None and len(deferred) == 1
+    session_id = controller["session"]["session_id"]
+
+    service.cancel()
+    real_start(deferred[0])
+    deferred[0].join(3)
+
+    saved = service.sessions.load(session_id)
+    assert saved["run_state"]["status"] == "cancelled"
+    assert saved["turns"][-1]["status"] == "cancelled"
+    assert saved["turns"][-1]["transcript_saved"] is False
+    assert any(event["type"] == "cancelled" for event in events)
+    assert any(event["type"] == "run_idle" for event in events)
+
+
 def test_keep_alive_is_not_passed_as_an_ollama_generation_option(service, tmp_path, monkeypatch):
     captured = {}
     engines = []
