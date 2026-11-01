@@ -421,3 +421,7 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Paired source pin advanced to engine `021dfadc7916acb6977362b7a65724c35b7ce3bd`. Ollama and llama.cpp inference now expose the active HTTP socket before waiting for headers, so the existing request-only Cancel path can interrupt header waits as well as generation. Connection establishment is bounded separately; after it connects there is no request/header/model-response deadline.
 - The request activity now persists its lifecycle (prepared, dispatched/waiting, response headers and status, stream end, failure phase, or cancellation), and session replay restores that state. The trace now describes the request as prepared or waiting until the corresponding transport event confirms progress.
 - Added a delayed-header local-provider cancellation regression and updated mocked stream/persistence/renderer cases. None have been run; no model/app was launched and no inference settings or model ownership were changed.
+
+## 2026-11-01 llama reasoning phase attribution (verification queued)
+
+- The paired engine pin is now `c7f8fbb48d5df4f7e22f2261f55722a69b28f91e`. llama.cpp now reports a reasoning phase while only reasoning tokens arrive, then switches to generation when answer text or tool-call output begins, matching the Ollama phase behavior. A mocked transition regression was added but remains unrun.
