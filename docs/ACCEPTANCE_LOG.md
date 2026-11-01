@@ -500,6 +500,11 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Added checkpoint, context-budget, and renderer regressions; they remain queued. No context/output/reasoning value changed, and no model request ran.
 - The app pin now advances to `bb87dc5f6fdee5f0ef8ca89f0312044ad4ee3ecc`; app, sidecar, and engine source are paired at this revision.
 - Added worker, journal-replay, and renderer regressions, including repeated progress updates coalescing to one call row. They remain unrun with the broader verification pass.
+
+## 2026-11-01 observed task-plan progression (verification queued)
+
+- Engine commits `4597a3f68fbe9c15c71626471d99bc6930dfcaea` and `8f909654763e608942161ca2789098f617242304` advance the Workbench starter checklist from observed project reads, writes, commands, and final verification outcomes. Existing agent-authored plans are left intact, including after resume; saved acceptance criteria are forwarded with host progress.
+- The paired app source is pinned at `8f909654763e608942161ca2789098f617242304`. A focused engine regression covers host progression and agent plan ownership. It has not been run; no visible UI/session acceptance has been performed for this change.
 ## 2026-11-01 selected Ollama settings authority (verification queued)
 
 - Fixed a request-construction precedence bug where generic runtime options could overwrite the selected context, output-token cap, and temperature. The selected controls now win; unrelated supported runtime options still pass through. Conflicts are included in provider request provenance and surfaced in the activity detail.
