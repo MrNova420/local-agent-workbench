@@ -42,6 +42,7 @@
 - Mocked resource-attribution coverage is owned by the engine repository alongside `telemetry.py`; it remains queued and unrun.
 - The required cancel chooser now waits for explicit sidecar acknowledgment; a failed IPC call leaves it open, and a no-longer-active run is reported instead of silently looking canceled. Finish-after-current-operation receives the same acceptance check. Mocked and visible chooser tests remain queued.
 - App-close choices also wait for host acknowledgment. Cancel-and-close validates cancellation acceptance and waits for run-idle before shutdown; failures keep the modal available instead of silently closing.
+- The active chat supports a durable follow-up queue: prompts can be drafted during inference without changing the active request, are saved in both session mirrors, remain project-bound, and start only after explicit user selection. Queue removal is persisted with the selected prompt's new run snapshot to avoid automatic replay. No queue-size or prompt-length cap is added.
 
 ## Verification queue (not run in this implementation phase)
 
@@ -58,6 +59,7 @@
 11. Configure a mocked MCP tool with nested unsupported keywords and verify discovery reports the exact schema capability gap, Tool Catalog shows the server/tool warning, attempted arguments fail closed, and no unsupported effect is dispatched.
 12. Verify the implemented conditional/dependency/property-name/tuple-prefix/contains schema cases and confirm `format` is treated as annotation metadata rather than an asserted constraint.
 13. Run one active user turn past its input budget and verify compaction keeps complete tool exchanges, retrieves an omitted output by operation ID/range, records the exact omission count, and continues without restarting the task.
+14. Queue multiple follow-ups during a long active run, verify no interruption and correct ordering after resume, remove one, explicitly start another, and fault-inject a crash around consumption to prove the task is neither silently auto-started nor duplicated.
 
 ## Remaining reliability work
 
