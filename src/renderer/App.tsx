@@ -1336,6 +1336,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
               <div><small>UNCACHED PROMPT TOKENS · THIS RUN</small><strong>{promptCacheComplete ? fmt(Math.max(0, runMetrics.promptTokens - runMetrics.cachedPromptTokens)) : 'Unavailable until all responses report counts'}</strong></div>
               <div><small>UNCACHED PREFILL TIME · THIS RUN</small><strong>{runMetrics.promptEvalNanoseconds ? `${(runMetrics.promptEvalNanoseconds / 1e9).toFixed(2)} s` : 'Not reported'}</strong></div>
               <div><small>MODEL LOAD TIME · THIS RUN</small><strong>{runMetrics.modelLoadNanoseconds ? `${(runMetrics.modelLoadNanoseconds / 1e9).toFixed(2)} s` : 'Not reported'}</strong></div>
+              <div><small>CACHED PROMPT TOKENS · CURRENT SLOT</small><strong>{telemetry.kvSlot?.cachedTokens != null ? fmt(telemetry.kvSlot.cachedTokens) : model.startsWith('gguf::') ? 'Not reported by slot' : 'Not exposed by Ollama'}</strong></div>
               <div><small>SLOT CONTEXT TOKENS</small><strong>{telemetry.kvSlot ? `${telemetry.kvSlot.processing ? 'ACTIVE' : 'RETAINED'} · ${fmt(telemetry.kvSlot.contextTokens ?? undefined)} / ${fmt(telemetry.kvSlot.contextLimit ?? undefined)}` : model.startsWith('gguf::') ? 'Slot telemetry unavailable' : 'Not exposed by Ollama'}</strong></div>
               <div><small>KV ALLOCATION BYTES</small><strong>Not exposed by runtime</strong></div>
               <div><small>KV CACHE TYPE / PRECISION</small><strong>Not exposed by runtime</strong></div>
