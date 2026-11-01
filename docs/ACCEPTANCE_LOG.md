@@ -562,3 +562,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Run settings now describe the small-model profile as adaptive tool sizing with useful read batching and full-task continuation, explicitly without a fixed action or runtime limit or inference-setting changes.
 - Visual acceptance remains queued.
 
+## 2026-11-01 replay plan next action after interruption (verification queued)
+
+- Session journal replay now derives the checkpoint's next action from the restored plan items, so an agent-authored plan update recovered after a crash does not leave the prior or generic next action behind.
+- Added coverage to the existing plan/operation journal recovery case. Persistence tests remain queued.
+

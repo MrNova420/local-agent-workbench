@@ -210,6 +210,7 @@ class MirroredSessionStoreTests(unittest.TestCase):
             self.assertEqual(recovered["plan"][0]["title"], "Build")
             self.assertEqual(recovered["activity_events"][0].get("acceptanceCriteria"), ["The page renders without errors."])
             self.assertEqual(recovered["task_checkpoint"]["current"]["acceptance_criteria"], ["The page renders without errors."])
+            self.assertEqual(recovered["task_checkpoint"]["current"]["next_action"], "Build")
             self.assertEqual(recovered["run_state"]["active_operation"]["operationId"], "op-1")
             self.assertTrue(any(row.get("operationId") == "op-1" for row in recovered["activity_events"]))
 

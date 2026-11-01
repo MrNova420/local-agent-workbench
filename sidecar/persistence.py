@@ -247,6 +247,10 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
             if isinstance(task, dict):
                 if isinstance(event.get("items"), list):
                     task["plan"] = copy.deepcopy(event["items"])
+                    pending = next((item for item in event["items"] if isinstance(item, dict)
+                                    and str(item.get("status", "pending")).casefold() in {"pending", "in_progress", "in progress"}), None)
+                    task["next_action"] = (str((pending or {}).get("title") or (pending or {}).get("text")
+                                               or "Continue the active task plan.") if pending else "")
                 if criteria_included:
                     task["acceptance_criteria"] = copy.deepcopy(acceptance_criteria)
                     task["acceptance_criteria_source"] = "agent" if event.get("source") != "workbench" else "awaiting_agent_refinement"
