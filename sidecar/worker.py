@@ -144,7 +144,9 @@ class AgentService:
         run_state = state.get("run_state")
         enriched = {**event, "sessionId": state["session_id"], "turnId": controller["turn_id"],
                     "workspace": str(turn.workspace), "timestamp": event.get("at", time.time())}
-        force_save = event.get("type") in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "prompt_manifest", "inference_settings", "request_dispatched", "request_headers", "request_complete", "request_error", "approval_request", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete"}
+        event_kind = event.get("type")
+        force_journal = event_kind in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "prompt_manifest", "inference_settings", "request_dispatched", "request_headers", "request_complete", "request_error", "approval_request", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
+        force_snapshot = event_kind in {"context_compacted", "approval_request", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
         with controller["checkpoint_lock"]:
             if isinstance(run_state, dict):
                 if event.get("type") == "phase" and event.get("phase") == "waiting":
@@ -449,7 +451,7 @@ class AgentService:
                 pending.append(journal_event)
 
             now = time.monotonic()
-            flush_journal = force_save or now - controller["last_journal_flush"] >= 0.5
+            flush_journal = force_journal or now - controller["last_journal_flush"] >= 0.5
             if flush_journal and pending:
                 journal_rows = pending[:]
                 journal_result = self.sessions.append_events(state["session_id"], str(state["workspace"]), journal_rows)
@@ -475,7 +477,7 @@ class AgentService:
                 else:
                     controller["journal_error_reported"] = False
 
-            if force_save or now - controller["last_checkpoint"] >= 8.0:
+            if force_snapshot or now - controller["last_checkpoint"] >= 8.0:
                 controller["last_checkpoint"] = now
                 saved = self.sessions.save(state)
                 if not (saved["app_saved"] and saved["project_saved"]):

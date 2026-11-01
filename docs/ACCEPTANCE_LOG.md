@@ -532,3 +532,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - If saved permission rules are unreadable or invalid, the sidecar now preserves the source file, starts with no persistent overrides, and sends a startup warning to the app. The selected per-run approval mode remains in effect; the UI prompts the user to review Settings before relying on saved overrides.
 - Saving a replacement policy clears the warning. A sidecar regression covers malformed JSON preservation and safe fallback; tests, typecheck, and packaged startup acceptance remain queued.
 
+## 2026-11-01 journal-first provider telemetry checkpoints (verification queued)
+
+- Provider dispatch/header/completion, request settings, usage, prompt manifests, tool batches/results, and plan events still flush to both append-only journals immediately, but no longer force a full session JSON replacement for each event. Full snapshots remain periodic (8 seconds) and forced at compaction, approval, and terminal boundaries.
+- Added a recovery regression ensuring journal replay restores provider request status, exact usage, plan progress, and complete tool results without an intermediate snapshot. It is queued; fault-injection and long-run save-lock acceptance remain pending.
+

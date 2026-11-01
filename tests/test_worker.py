@@ -533,6 +533,50 @@ def test_tool_call_progress_is_live_safe_and_durable(service, tmp_path, monkeypa
     assert assembled["status"] == "assembled"
 
 
+def test_provider_telemetry_flushes_journal_without_rewriting_full_session_snapshots(service, tmp_path, monkeypatch):
+    project = tmp_path / "journal-first-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    state["run_state"] = {"status": "running", "turn_id": "turn-journal", "settings": {},
+                          "partial_content": "", "partial_thinking": "", "active_operation": None}
+    controller = {"session": state, "turn_id": "turn-journal", "checkpoint_lock": threading.RLock(),
+                  "last_checkpoint": time.monotonic(), "last_journal_flush": time.monotonic(),
+                  "journal_pending": []}
+    snapshot_writes = []
+    monkeypatch.setattr(service.sessions, "save", lambda snapshot: snapshot_writes.append(snapshot))
+    monkeypatch.setattr(service, "emit", lambda _event: None)
+    turn = SimpleNamespace(workspace=project)
+
+    for event in (
+        {"type": "prompt_manifest", "activityId": "turn-journal-request-1", "request_index": 1,
+         "messages": [{"role": "system", "characters": 10, "estimated_tokens": 5}]},
+        {"type": "inference_settings", "request_index": 1, "requested_context": 4096},
+        {"type": "request_dispatched", "request_index": 1},
+        {"type": "request_headers", "request_index": 1},
+        {"type": "request_complete", "request_index": 1},
+        {"type": "generation_usage", "request_index": 1, "usage": {"eval_count": 2}},
+        {"type": "tool_batch", "request_index": 2, "assistantMessage": {"role": "assistant"},
+         "calls": [{"id": "call-1", "name": "write_file"}]},
+        {"type": "tool_start", "operationId": "op-1", "toolCallId": "call-1", "name": "write_file",
+         "arguments": {"path": "src/app.py"}, "startedAt": time.time()},
+        {"type": "tool_done", "operationId": "op-1", "toolCallId": "call-1", "name": "write_file",
+         "result": "written", "status": "completed", "affectedFiles": ["src/app.py"], "completedAt": time.time()},
+        {"type": "plan", "items": [{"title": "Implement changes", "status": "completed"}],
+         "acceptanceCriteria": ["File updated"]},
+    ):
+        service._publish_run_event(controller, turn, event)
+
+    assert snapshot_writes == []
+    assert controller["journal_pending"] == []
+    replayed = service.sessions.load(state["session_id"], str(project))["state"]
+    prompt_rows = [row for row in replayed["activity_events"] if row.get("kind") == "prompt"]
+    assert len(prompt_rows) == 1
+    assert prompt_rows[0]["status"] == "response_stream_ended"
+    assert prompt_rows[0]["providerUsage"] == {"eval_count": 2}
+    assert replayed["plan"][0]["status"] == "completed"
+    assert next(row for row in replayed["activity_events"] if row.get("operationId") == "op-1")["result"] == "written"
+
+
 def test_tool_catalog_exposes_mcp_schema_capability_warning(service):
     service.mcp.servers = {"demo": {"command": "demo"}}
     service.mcp.clients["demo"] = (object(), object())
