@@ -8,7 +8,7 @@ Deliver **1:1 user-facing feature and workflow parity with Codex and OpenCode** 
 
 ## Current active source state (2026-11-01)
 
-- Unpublished app source pins engine commit `e4d49f7dcac12d457f49505356fa3fa5d3ac5434` in `core-revision.txt`. These commits are isolated in worktrees and have not been pushed or packaged.
+- Unpublished app source pins engine commit `153cf691edfd7757fc2ecbcc3c5aa488e7aa97a5` in `core-revision.txt`. These commits are isolated in worktrees and have not been pushed or packaged.
 - The Ollama request adapter now prevents generic runtime options from silently overriding selected context, output-token, and temperature controls. Conflicts are recorded in request provenance and called out in activity details. A regression is queued; settings were not changed and no inference was run.
 - Cancelled, partial, uncertain, and otherwise incomplete commands now produce an explicit incomplete-verification outcome even when other project files changed. Their run result stays in the evidence record; no command is labeled as a passing test from exit status alone. Regression coverage is queued.
 - Oversized checkpoints now have a budgeted inference-only summary. The full checkpoint remains on disk; the summary preserves the active goal/plan and latest progress and reports any history categories omitted. The Activity Trace displays these counts. Regression coverage is queued and unrun.
@@ -325,3 +325,5 @@ The section above records an earlier checkpoint and its evidence; it is not the 
 - Git change review now explicitly labels omitted untracked files when the bounded preview reaches its file or size guard. The existing guard remains to keep the review UI responsive; this is not a complete-diff claim. Regression coverage is added and queued.
 
 - Large project-file reads now page to a per-run budget derived from selected context/output, with resumable line/column offsets and explicit incomplete-result markers. No fixed provider deadline or selected inference limit changed. Regression and live model acceptance are queued.
+
+- File listing and text search now paginate to the run's context-derived tool-output budget. Oversized matching lines identify the exact file/line for complete read_file retrieval; offsets preserve remaining results. Regression coverage remains queued.

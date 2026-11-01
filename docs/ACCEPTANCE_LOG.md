@@ -607,3 +607,8 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 ## 2026-11-01 selected-context read budget assertion (verification queued)
 
 - Added a source regression that checks a 65,536 context / 8,192 output run derives a 14,080-byte per-read budget while retaining both selected settings unchanged. This assertion is queued with the complete suite and has not been executed.
+
+## 2026-11-01 context-aware file discovery pages (verification queued)
+
+- Engine commit 153cf691edfd7757fc2ecbcc3c5aa488e7aa97a5 extends the selected-context read budget to file listing and text search. Listing and search now return resumable result pages; large matching lines point to their exact file line instead of filling a model request. No context/output setting is changed.
+- Added coverage for page continuation and large matching-line disclosure; the complete suites remain queued.

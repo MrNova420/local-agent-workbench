@@ -4,7 +4,7 @@
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
-**Current paired engine source:** `e4d49f7dcac12d457f49505356fa3fa5d3ac5434` (unpublished; regressions intentionally queued).
+**Current paired engine source:** `153cf691edfd7757fc2ecbcc3c5aa488e7aa97a5` (unpublished; regressions intentionally queued).
 
 ## Implemented in this source batch
 
@@ -74,3 +74,5 @@ No live model, app process, OpenCode setting, selected token value, model reason
 - Session reopen now recovers a missing Plan snapshot from the latest turn's durable plan event. It preserves an explicit empty snapshot and filters journal fallback by the latest turn to avoid reviving an older task checklist. Renderer recovery coverage is added and queued.
 
 - Engine-managed read_file calls now use an excerpt budget derived from the run's selected context and output values. Oversized files and long single lines stream in bounded UTF-8 chunks; the tool reports the exact next line/column, and the dynamic budget is disclosed in the tool schema. No context/output setting is changed, and the remainder is never silently discarded. Regression coverage is queued.
+
+- File discovery now shares the same per-run context-derived response budget: listing pages stop at a continuation offset, search pages report large matching lines with a read_file cursor, and both disclose page/scan limits. This reduces oversized tool exchanges without changing selected model context/output. Regression cases are queued.
