@@ -59,7 +59,7 @@ def test_non_git_project_review_excludes_private_workbench_session_data(tmp_path
     assert "nested private conversation" not in result
 
 
-def test_git_project_review_excludes_opted_in_workbench_session_data(tmp_path):
+def test_git_project_review_includes_explicitly_tracked_workbench_session_data(tmp_path):
     root = tmp_path / "project"
     root.mkdir()
     _git(root, "init", "-q")
@@ -74,5 +74,5 @@ def test_git_project_review_excludes_opted_in_workbench_session_data(tmp_path):
     result = workspace_diff_text(root)
 
     assert "app.py" in result
-    assert "private.json" not in result
-    assert "private changed content" not in result
+    assert "private.json" in result
+    assert "private changed content" in result

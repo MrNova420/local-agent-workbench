@@ -78,8 +78,7 @@ def workspace_diff_text(workspace: str | Path) -> str:
     if repository != root:
         return _project_files_diff(root)
 
-    tracked = _git(root, "diff", "--no-ext-diff", "--", ".",
-                   ":(exclude,glob).agent-workbench/**", ":(exclude,glob)**/.agent-workbench/**")
+    tracked = _git(root, "diff", "--no-ext-diff", "--")
     if tracked.returncode != 0:
         return (tracked.stdout + tracked.stderr).strip() or "Could not read this project's Git diff."
     chunks = [tracked.stdout] if tracked.stdout else []
@@ -88,7 +87,6 @@ def workspace_diff_text(workspace: str | Path) -> str:
         untracked = [
             record[3:] for record in status.stdout.split("\0")
             if record.startswith("?? ") and record[3:]
-            and ".agent-workbench" not in Path(record[3:]).parts
         ]
         for name in untracked[:_MAX_FILES]:
             chunk = _new_file_diff(root, Path(name))

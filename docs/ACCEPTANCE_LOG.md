@@ -519,8 +519,10 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 
 ## 2026-11-01 project review session-data boundary (verification queued)
 
-- Project change review now omits `.agent-workbench` from non-Git project snapshots and from Git diffs, including session files explicitly added to Git. This keeps mirrored conversation/tool history out of the model-facing change review while preserving the user's choice to track those files in Git.
-- Added regression cases for both non-Git and Git-tracked project review paths. They remain unrun with the deferred verification pass; no project/session data was read from the user's workspace.
+- Non-Git project snapshot review omits `.agent-workbench`; Git project review follows Git tracking, preserving the per-project opt-in to track session history. Engine retrieval/search continues to exclude `.agent-workbench`, whether or not the user tracks it.
+- Added regression cases for the unversioned and explicitly tracked paths. They remain unrun with the deferred verification pass; no project/session data was read from the user's workspace.
+
+The initial Git-diff exclusion was reversed in the later `Respect opt-in session tracking in Git review` commit because hiding explicitly tracked files contradicted the approved per-project opt-in.
 
 ## 2026-11-01 wildcard command permission consistency (verification queued)
 
