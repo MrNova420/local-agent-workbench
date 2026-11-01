@@ -153,6 +153,7 @@
 .home-session-row>button em{font-style:normal;color:#65758a}
 .session-history-ready,.session-history-warning{color:#91d8b5;font:7px var(--mono);white-space:nowrap}
 .session-history-warning{color:#d8b777}
+.token-controls-note{display:block;margin:7px 0 12px;color:#8496a9;font:9px/1.5 var(--mono)}
 @media(prefers-reduced-motion:reduce){.visual-orbit.orbit-motion{animation:none!important}}
 .window-control-buttons button.window-close:hover{background:#b83e50;color:white}
 @media(max-width:1220px){.topbar>.top-settings:nth-last-child(2){display:none}.model-control{min-width:170px}.workspace-chip{min-width:125px}}
