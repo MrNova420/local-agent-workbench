@@ -671,3 +671,11 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 
 - The engine now continues implementation while plan, operation, changed-file, or verification evidence advances; it has no fixed continuation count or runtime deadline. Repeating an unchanged no-progress state ends with a durable `implementation_incomplete` checkpoint and resumable instructions.
 - The app pins engine `7203d1123852fb3669fc2c5d1a2c86ce5df73d5b`. Regressions are queued and unrun; no settings or active model were changed.
+
+# 2026-11-01 — Home/session recovery and wording-independent continuation (source only)
+
+- Engine continuation uses host-observed project changes, post-effect inspection, denials, and open plan work. It does not parse phrases in assistant prose, and a command alone does not satisfy an implementation request. The original system prompt was retained; no context, output, or reasoning setting changed.
+- Home now distinguishes first model sync, refresh, confirmed empty inventory, and failure. Last-known model dots remain visible while refreshing and after a failed refresh; exact local model IDs receive stable repeatable positions. Optional slow orbit motion persists and stops while a model card is open; reduced-motion preferences disable it.
+- Home workspace and session history refresh independently from the active project session list. All app-wide sessions are visible with conflict/recovery/workspace status; available moved projects can be matched by saved identity. Corrupt/unreadable workspace history produces an error without overwriting the file, and does not prevent opening a valid project.
+- Window controls now use a 20×14 top-right idle hit target, expanding on hover or keyboard focus. Packaged behavior remains unverified.
+- Engine and app/sidecar tests are authored but intentionally unrun. No typecheck, package build, app launch, visual acceptance, or live model request was performed.

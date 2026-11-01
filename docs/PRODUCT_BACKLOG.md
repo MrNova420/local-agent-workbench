@@ -173,6 +173,14 @@ The app and shared engine have independent public MIT-licensed Git repositories 
 - Explore an opt-in project-scoped file-operation profile that keeps normal project development available while making each operation's root visible. Keep commands/MCP separately permissioned and clearly host-scoped until a real Windows containment mechanism exists.
 - Preserve current full-development behavior by default. Do not describe a project-root policy or approval dialog as an OS sandbox.
 - Compare safe file-root enforcement, generated-file/build directories, external toolchains, command execution, and MCP before choosing boundaries; add a real contained mode only with an explicit capability and recovery design.
+
+### B-020: Home session recovery visibility
+
+**Status:** Source now shows the complete saved-session list, recovery/conflict/workspace status, and resume actions for available projects. Renderer and sidecar regressions and packaged acceptance remain queued.
+
+- Keep app-wide session history separate from the active project's session tab.
+- Make conflicts, interrupted runs, partial operations, recovery issues, and unavailable workspaces visible before resume.
+- Resolve moved workspaces through workspace identity where possible; never discard app-side history when the project directory is unavailable.
 ### B-011: Provider-accurate live KV-cache telemetry
 
 **Priority:** High; telemetry is implemented in source in both runtime adapters, with end-to-end packaged evidence pending.

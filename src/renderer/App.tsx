@@ -1110,7 +1110,7 @@ export default function App() {
 
     <main className="main-stage">
       {view === 'landing' && <Landing
-        workspaces={workspaces} workspaceSearch={workspaceSearch} workspaceHistoryStatus={workspaceHistoryStatus} sessions={homeSessions} sessionHistoryStatus={sessionHistoryStatus} models={models} modelLabels={displayModelLabels} modelCatalogStatus={modelCatalogStatus} model={model} modelPreloading={modelPreloading} context={options.context}
+        workspaces={workspaces} workspaceSearch={workspaceSearch} workspaceHistoryStatus={workspaceHistoryStatus} sessions={homeSessions} sessionHistoryStatus={sessionHistoryStatus} onOpenSession={(id, root) => void loadSession(id, root)} models={models} modelLabels={displayModelLabels} modelCatalogStatus={modelCatalogStatus} model={model} modelPreloading={modelPreloading} context={options.context}
         connected={connected} telemetry={telemetry} onChoose={chooseWorkspace} onOpen={showProject}
         onModel={selectModel} onRefresh={() => { void refreshHome().catch((error) => notify(`Could not refresh saved history: ${(error as Error).message}`, 'warn')); void refreshModels(); }}
         onModelInfo={(name) => request<ModelInfo>({ command: 'model_info', model: name })}
@@ -1213,8 +1213,9 @@ export default function App() {
   </div>;
 }
 
-function Landing({ workspaces, workspaceSearch, workspaceHistoryStatus, sessions, sessionHistoryStatus, models, modelLabels, modelCatalogStatus, model, modelPreloading, context, connected, telemetry, onChoose, onOpen, onModel, onModelInfo, onRefresh, onSearch, onPin, onRemove, onLibrary, onInstallOllama }: {
+function Landing({ workspaces, workspaceSearch, workspaceHistoryStatus, sessions, sessionHistoryStatus, onOpenSession, models, modelLabels, modelCatalogStatus, model, modelPreloading, context, connected, telemetry, onChoose, onOpen, onModel, onModelInfo, onRefresh, onSearch, onPin, onRemove, onLibrary, onInstallOllama }: {
   workspaces: WorkspaceHistoryEntry[]; workspaceSearch: string; workspaceHistoryStatus: 'loading' | 'ready' | 'error'; sessions: SessionSummary[]; sessionHistoryStatus: 'loading' | 'ready' | 'error'; models: string[]; modelLabels: Record<string, string>; modelCatalogStatus: 'loading' | 'refreshing' | 'ready' | 'error'; model: string; modelPreloading: boolean; context: number; connected: string;
+  onOpenSession: (id: string, workspace: string) => void;
   telemetry: TelemetryView;
   onChoose: () => void; onOpen: (root: string) => void; onModel: (name: string) => void; onModelInfo: (name: string) => Promise<ModelInfo>; onRefresh: () => void;
   onSearch: (value: string) => void; onPin: (root: string, pinned: boolean) => void; onRemove: (root: string) => void; onLibrary: () => void; onInstallOllama: () => void;
@@ -1252,8 +1253,22 @@ function Landing({ workspaces, workspaceSearch, workspaceHistoryStatus, sessions
           <button className="workspace-history-action remove" title="Remove from workspace history" onClick={() => onRemove(entry.path)}>Remove</button>
         </div>)}</div> : <div className="empty-inline" role={workspaceHistoryStatus === 'error' ? 'alert' : undefined}><span className="empty-art"><Icon name="folder"/></span><span><b>{workspaceHistoryStatus === 'error' ? 'Saved workspace history could not be loaded.' : workspaceSearch ? 'No workspaces match this search.' : 'No workspace has been opened here yet.'}</b><small>{workspaceHistoryStatus === 'error' ? 'Your history has not been removed. Refresh to try again.' : 'Open a project folder to add it to persistent local history.'}</small></span></div>}
       </div>
+      <div className="landing-column home-sessions-column">
+        <div className="section-heading"><div><span className="section-number">02</span><h2>Recent sessions</h2></div><span className="source-status">{sessionHistoryStatus === 'loading' ? 'SYNCING' : sessionHistoryStatus === 'error' ? 'LAST SYNC FAILED' : `${sessions.length} SAVED`}</span></div>
+        {sessionHistoryStatus === 'loading' && !sessions.length ? <div className="empty-inline" role="status"><span><b>Loading saved sessions…</b><small>Session history remains in the app library and project folders.</small></span></div> : sessions.length ? <div className="home-session-list">{sessions.map((row) => {
+          const relocatedWorkspace = row.workspace_id ? workspaces.find((entry) => entry.available && entry.workspace_id === row.workspace_id)?.path : undefined;
+          const sessionWorkspace = relocatedWorkspace || row.workspace;
+          const canResume = row.workspace_available !== false || Boolean(relocatedWorkspace);
+          return <div className={`home-session-row${canResume ? '' : ' unavailable'}`} key={row.session_id}>
+            <button disabled={!canResume} onClick={() => onOpenSession(row.session_id, sessionWorkspace)} title={canResume ? `Resume in ${sessionWorkspace}` : 'The project folder is unavailable. The saved session remains in the app library.'}>
+              <strong>{row.model_id || shortModel(row.model)}</strong><small>{sessionWorkspace}</small><em>{new Date(row.updated_at * 1000).toLocaleString()} · {row.session_id.slice(0, 8)}</em>
+            </button>
+            <span className={row.sync_conflict || row.uncertain_operation || (row.recovery_issue_count || 0) > 0 || !canResume || ['interrupted', 'failed', 'cancelled', 'stopped'].includes(row.recovery_status || '') ? 'session-history-warning' : 'session-history-ready'}>{row.sync_conflict ? `SYNC CONFLICT · ${row.recommended_source || 'choose copy'}` : row.uncertain_operation ? 'REVIEW PARTIAL OPERATION' : (row.recovery_issue_count || 0) > 0 ? 'REVIEW RECOVERY' : !canResume ? 'PROJECT UNAVAILABLE' : (row.recovery_status || 'ready').toUpperCase()}</span>
+          </div>;
+        })}</div> : <div className="empty-inline" role={sessionHistoryStatus === 'error' ? 'alert' : undefined}><span><b>{sessionHistoryStatus === 'error' ? 'Saved sessions could not be loaded.' : 'No saved sessions yet.'}</b><small>{sessionHistoryStatus === 'error' ? 'Your session history was not cleared. Refresh to try again.' : 'Start a task in a project and its saved session will appear here.'}</small></span></div>}
+      </div>
       <div className="landing-column engine-column">
-        <div className="section-heading"><div><span className="section-number">02</span><h2>Inference source</h2></div><span className={`source-status ${connected}`}>{connected === 'yes' ? 'REACHABLE' : connected === 'no' ? 'OFFLINE' : 'CHECKING'}</span></div>
+        <div className="section-heading"><div><span className="section-number">03</span><h2>Inference source</h2></div><span className={`source-status ${connected}`}>{connected === 'yes' ? 'REACHABLE' : connected === 'no' ? 'OFFLINE' : 'CHECKING'}</span></div>
         <label className="model-picker-card"><span className="picker-symbol"><Icon name="spark"/></span><span className="picker-content"><small>LOCAL MODEL</small><select value={model} disabled={modelPreloading} onChange={(e) => onModel(e.target.value)}>{!models.length && <option value="">{modelCatalogStatus === 'loading' || modelCatalogStatus === 'refreshing' ? 'Syncing model inventory…' : modelCatalogStatus === 'error' ? 'Model inventory unavailable' : 'No installed models'}</option>}{models.map((name) => <option key={name} value={name}>{modelLabels[name] || shortModel(name)}</option>)}</select><span>{modelPreloading ? 'Model warming; selection returns when ready.' : modelCatalogStatus === 'error' ? 'The last successful inventory is retained; refresh to reconnect.' : 'Choose Ollama models or add Hugging Face GGUF files.'}</span></span><Icon name="chevron"/></label>
         <Button kind="outline" onClick={onLibrary}>Browse Hugging Face / add local models</Button>
         {connected === 'no' && <div className="setup-help" role="status"><b>Ollama is not responding</b><span>Use the official Windows installer, then check the connection again. Existing model data is not changed.</span><div><Button kind="outline" onClick={onInstallOllama}>Open Ollama setup</Button><button onClick={onRefresh}>Check connection</button></div></div>}

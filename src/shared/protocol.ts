@@ -216,11 +216,13 @@ export type SessionSummary = {
   model_id?: string;
   updated_at: number;
   workspace_id?: string;
+  workspace_available?: boolean;
   sync_conflict?: boolean;
   recommended_source?: 'app' | 'project';
   sources?: Array<'app' | 'project'>;
   recovery_status?: string | null;
   uncertain_operation?: string | null;
+  recovery_issue_count?: number;
 };
 
 export type WorkspaceHistoryEntry = {

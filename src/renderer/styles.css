@@ -143,6 +143,16 @@
 @keyframes model-orbit-c{to{transform:translate(-50%,-50%) rotate(393deg)}}
 .catalog-stale-note{display:block;margin-top:8px;color:#d5b779;font:8px var(--mono)}
 .workspace-history-stale{display:block;margin-top:7px;color:#d5b779;font:8px var(--mono)}
+.home-session-list{display:grid;gap:7px;max-height:360px;overflow:auto;padding-right:4px;scrollbar-color:#34495a #0c121b;scrollbar-width:thin}
+.home-session-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;border:1px solid rgba(150,175,202,.1);border-radius:8px;background:linear-gradient(110deg,rgba(19,29,42,.75),rgba(11,17,27,.64));padding:9px 10px}
+.home-session-row>button{display:grid;gap:4px;min-width:0;text-align:left;border:0;background:none;cursor:pointer}
+.home-session-row>button:disabled{cursor:not-allowed;opacity:.62}
+.home-session-row>button strong,.home-session-row>button small,.home-session-row>button em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.home-session-row>button strong{color:#dce6ed;font-size:10px;font-weight:600}
+.home-session-row>button small,.home-session-row>button em{color:#77889a;font:8px var(--mono)}
+.home-session-row>button em{font-style:normal;color:#65758a}
+.session-history-ready,.session-history-warning{color:#91d8b5;font:7px var(--mono);white-space:nowrap}
+.session-history-warning{color:#d8b777}
 @media(prefers-reduced-motion:reduce){.visual-orbit.orbit-motion{animation:none!important}}
 .window-control-buttons button.window-close:hover{background:#b83e50;color:white}
 @media(max-width:1220px){.topbar>.top-settings:nth-last-child(2){display:none}.model-control{min-width:170px}.workspace-chip{min-width:125px}}

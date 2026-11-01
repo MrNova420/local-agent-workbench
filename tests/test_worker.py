@@ -509,6 +509,18 @@ def test_corrupt_workspace_history_is_reported_without_being_replaced(service):
     assert history.read_text(encoding="utf-8") == original
 
 
+def test_app_session_list_keeps_sessions_when_their_workspace_is_unavailable(service, tmp_path):
+    project = tmp_path / "moved-project"
+    project.mkdir()
+    created = service.handle("session_new", {"workspace": str(project), "model": "model-a:latest", "context": 8192})
+    project.rename(tmp_path / "moved-project-away")
+
+    rows = service.handle("sessions_list", {})
+
+    assert rows[0]["session_id"] == created["session_id"]
+    assert rows[0]["workspace_available"] is False
+
+
 def test_activity_mode_is_saved_in_both_session_copies_and_restored(service, tmp_path):
     project = tmp_path / "activity-mode-project"
     project.mkdir()
