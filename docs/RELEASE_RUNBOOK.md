@@ -14,6 +14,14 @@ The current distributable is a **Windows 10/11 x64** Squirrel.Windows installer 
 6. Install the previous release in a clean Windows x64 environment. Verify update discovery, background download, visible ready state, no restart during a task, explicit restart/install, and recovery of workspace/session data afterward.
 7. Verify the downloaded artifacts against `SHA256SUMS.txt`; verify the release page, setup instructions, screenshots, changelog, and platform limitations before announcing it.
 
+## Patch cadence and version labels
+
+- Give every published patch a new, strictly increasing SemVer tag and matching `package.json` version (for example, `v0.1.0-beta.3`, then `v0.1.0-beta.4`). Never move or reuse a published tag.
+- The tag workflow packages the exact app commit and checks out the shared engine commit pinned by both workflows. Push the paired engine commit first whenever that pin changes.
+- Keep the beta designation in the tag, app version, release title, and notes. Leave GitHub's **prerelease** checkbox off because the configured Electron public update feed does not discover GitHub-marked prereleases.
+- Publish only after the final verification and artifact review. A tag triggers the public release workflow; it is not a staging channel. Users get background download and a visible **Restart and update** action in Settings, never a forced restart during a run.
+- Attach the complete Squirrel set (`RELEASES`, Setup executable, full `.nupkg`) and portable ZIP plus checksums to every update release. A tag or Setup executable by itself cannot update an installed Squirrel app.
+
 The tag workflow performs typecheck, app/sidecar and engine tests, packages the Windows app, writes checksums, and publishes the required assets. If GitHub Actions is unavailable, use the exact same steps locally and record the limitation; do not claim the workflow passed.
 
 ## Update safety behavior

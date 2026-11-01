@@ -6,6 +6,7 @@ The product target is full 1:1 user-facing feature and workflow parity with Code
 
 - The user reports a successful simple website project task completed in roughly 2–3 hours on their PC. This validates one real long-running project workflow; it does not establish speed, broad reliability, code quality, or release readiness. See `ACCEPTANCE_LOG.md`.
 - Public beta `v0.1.0-beta.2` is published with a Windows x64 installer, portable ZIP, Squirrel update assets, and SHA-256 manifest. Local source checks and packaged UI/sidecar checks passed; GitHub Actions could not acquire a runner. Squirrel install/update-cycle acceptance remains open for a later release.
+- Future patches use new increasing beta SemVer tags; tags trigger public release automation, so do not tag until final verification. See `RELEASE_RUNBOOK.md` for the paired engine pin, updater-compatible GitHub release flags, and complete Squirrel asset set.
 - The README now contains three relevant historical Workbench screenshots; each is labeled historical. Current release-build Home/chat/worksheet captures remain a follow-up because the user-specific Home contains private workspace paths.
 - Keep the user's context/output/reasoning values unchanged. The next core-development batch remains isolated from the published beta.
 
