@@ -25,6 +25,12 @@ class MirroredSessionStoreTests(unittest.TestCase):
                                   "request_options": {"num_ctx": 65536, "num_predict": 8192},
                                   "estimated_input_tokens": 4100,
                                   "input_estimate_method": "conservative estimate"})
+        _replay_run_event(state, {"type": "request_dispatched", "turnId": "turn-provider", "request_index": 2})
+        self.assertEqual(state["activity_events"][0]["status"], "awaiting_response_headers")
+        _replay_run_event(state, {"type": "request_headers", "turnId": "turn-provider", "request_index": 2,
+                                  "http_status": 200, "http_reason": "OK", "header_wait_seconds": 1.25})
+        _replay_run_event(state, {"type": "request_complete", "turnId": "turn-provider", "request_index": 2,
+                                  "provider_done": True})
         _replay_run_event(state, {"type": "generation_usage", "turnId": "turn-provider",
                                   "request_index": 2, "usage": {"prompt_eval_count": 4000,
                                                                      "prompt_eval_cached_count": 3200,
@@ -39,6 +45,9 @@ class MirroredSessionStoreTests(unittest.TestCase):
         self.assertEqual(prompt["providerRequest"]["tool_count"], 8)
         self.assertEqual(prompt["providerUsage"]["prompt_eval_count"], 4000)
         self.assertEqual(prompt["providerUsage"]["prompt_eval_cached_count"], 3200)
+        self.assertEqual(prompt["status"], "response_stream_ended")
+        self.assertEqual(prompt["providerRequest"]["http_status"], 200)
+        self.assertEqual(prompt["providerRequest"]["header_wait_seconds"], 1.25)
 
     def test_new_task_plan_snapshot_clears_prior_acceptance_criteria_on_replay(self):
         state = {

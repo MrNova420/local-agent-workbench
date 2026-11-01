@@ -415,3 +415,9 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 
 - Paired source pin advanced to engine `4f12fd6eed7aeb708767a4de50474bbdd31a4241`. Each prompt activity now receives the exact provider request settings and the corresponding provider-returned token/timing counters, correlated by turn and request index. Both are saved in the session snapshot and reconstructed from the mirrored event journal; the Activity Trace separates request settings, estimates, and provider-returned metrics. Legacy sessions say when exact request data was not captured.
 - Added mocked regression cases for Ollama default-versus-explicit reasoning fields, llama.cpp effective context, sidecar live correlation, journal recovery, and request-card rendering. These tests have not been run. No app, model, typecheck, package, visual acceptance, or external service was used. Context/output/reasoning choices and runtime placement remain unchanged.
+
+## 2026-11-01 cancellable response-header wait (verification queued)
+
+- Paired source pin advanced to engine `021dfadc7916acb6977362b7a65724c35b7ce3bd`. Ollama and llama.cpp inference now expose the active HTTP socket before waiting for headers, so the existing request-only Cancel path can interrupt header waits as well as generation. Connection establishment is bounded separately; after it connects there is no request/header/model-response deadline.
+- The request activity now persists its lifecycle (prepared, dispatched/waiting, response headers and status, stream end, failure phase, or cancellation), and session replay restores that state. The trace now describes the request as prepared or waiting until the corresponding transport event confirms progress.
+- Added a delayed-header local-provider cancellation regression and updated mocked stream/persistence/renderer cases. None have been run; no model/app was launched and no inference settings or model ownership were changed.

@@ -125,7 +125,7 @@ class AgentService:
         run_state = state.get("run_state")
         enriched = {**event, "sessionId": state["session_id"], "turnId": controller["turn_id"],
                     "workspace": str(turn.workspace), "timestamp": event.get("at", time.time())}
-        force_save = event.get("type") in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "prompt_manifest", "inference_settings", "approval_request", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete"}
+        force_save = event.get("type") in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "prompt_manifest", "inference_settings", "request_dispatched", "request_headers", "request_complete", "request_error", "approval_request", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete"}
         with controller["checkpoint_lock"]:
             if isinstance(run_state, dict):
                 if event.get("type") == "phase" and event.get("phase") == "waiting":
@@ -259,7 +259,7 @@ class AgentService:
                             if key not in {"type", "activityId", "sessionId", "turnId", "workspace", "timestamp", "at"}}
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
                             "workspace": str(turn.workspace), "kind": "prompt", "name": f"Model request {int(event.get('request_index', 0))}",
-                            "status": "sent", "promptManifest": manifest, "timestamp": time.time()}
+                            "status": "prepared", "promptManifest": manifest, "timestamp": time.time()}
                 rows.append(activity)
             elif kind == "inference_settings":
                 request_index = event.get("request_index")
@@ -277,6 +277,33 @@ class AgentService:
                                     "estimated_input_tokens", "input_estimate_method")
                         if key in event
                     }
+                    activity["providerRequest"]["dispatch_status"] = "prepared"
+            elif kind in {"request_dispatched", "request_headers", "request_complete", "request_error"}:
+                request_index = event.get("request_index")
+                activity = next((item for item in reversed(rows)
+                                 if item.get("kind") == "prompt"
+                                 and item.get("turnId") == controller["turn_id"]
+                                 and isinstance(item.get("promptManifest"), dict)
+                                 and item["promptManifest"].get("request_index") == request_index), None)
+                if activity is not None:
+                    provider_request = activity.setdefault("providerRequest", {"request_index": request_index})
+                    if kind == "request_dispatched":
+                        activity["status"] = "awaiting_response_headers"
+                        provider_request["dispatch_status"] = "awaiting_response_headers"
+                    elif kind == "request_headers":
+                        activity["status"] = "response_headers_received"
+                        provider_request.update(dispatch_status="response_headers_received",
+                                                http_status=event.get("http_status"),
+                                                http_reason=event.get("http_reason"),
+                                                header_wait_seconds=event.get("header_wait_seconds"))
+                    elif kind == "request_complete":
+                        activity["status"] = "response_stream_ended"
+                        provider_request.update(dispatch_status="response_stream_ended",
+                                                provider_done=event.get("provider_done"))
+                    else:
+                        activity["status"] = "cancelled_during_request" if event.get("cancelled") else "request_failed"
+                        provider_request.update(dispatch_status=activity["status"],
+                                                failure_phase=event.get("phase"), request_error=event.get("error"))
             elif kind == "generation_usage":
                 request_index = event.get("request_index")
                 activity = next((item for item in reversed(rows)

@@ -128,6 +128,7 @@ describe('durable live activity state', () => {
       promptManifest: { request_index: 1, configured_context: 65536, maximum_output_tokens: 8192, messages: [] },
       providerRequest: {
         provider: 'ollama', model: 'ornith:latest', request_api: '/api/chat', request_index: 1,
+        dispatch_status: 'response_stream_ended', provider_done: true,
         requested_context: 65536, max_output_tokens: 8192, reasoning_override: null,
         reasoning_field_sent: false, keep_alive: '30m', request_options: { num_ctx: 65536, num_predict: 8192 },
         estimated_input_tokens: 4096,
@@ -136,7 +137,8 @@ describe('durable live activity state', () => {
     };
     const trace = renderToStaticMarkup(createElement(ActivityFeed, { entries: [record], mode: 'sidebar', surface: 'sidebar' }));
 
-    expect(trace).toContain('Provider request actually sent');
+    expect(trace).toContain('Provider request settings and dispatch');
+    expect(trace).toContain('Response stream ended');
     expect(trace).toContain('ollama');
     expect(trace).toContain('ornith:latest');
     expect(trace).toContain('Reasoning override');
@@ -149,6 +151,10 @@ describe('durable live activity state', () => {
     expect(trace).toContain('Cached prompt tokens');
     expect(trace).toContain('2,048');
     expect(trace).toContain('30.00 s');
+    const waiting = renderToStaticMarkup(createElement(ActivityFeed, { entries: [{ ...record, status: 'awaiting_response_headers',
+      providerRequest: { ...record.providerRequest, dispatch_status: 'awaiting_response_headers' } }], mode: 'sidebar', surface: 'sidebar' }));
+    expect(waiting).toContain('waiting for response headers');
+    expect(waiting).toContain('Cancel interrupts this request');
   });
 
   it('labels capped tool scans as partial rather than complete in activity views', () => {

@@ -112,6 +112,33 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
                             "estimated_input_tokens", "input_estimate_method")
                 if key in event
             }
+            prompt["providerRequest"]["dispatch_status"] = "prepared"
+            prompt["status"] = "prepared"
+    elif kind in {"request_dispatched", "request_headers", "request_complete", "request_error"}:
+        request_index = event.get("request_index")
+        prompt = next((item for item in reversed(state.setdefault("activity_events", []))
+                       if item.get("kind") == "prompt"
+                       and item.get("turnId") == event.get("turnId", run.get("turn_id"))
+                       and isinstance(item.get("promptManifest"), dict)
+                       and item["promptManifest"].get("request_index") == request_index), None)
+        if prompt is not None:
+            provider_request = prompt.setdefault("providerRequest", {"request_index": request_index})
+            if kind == "request_dispatched":
+                prompt["status"] = "awaiting_response_headers"
+                provider_request["dispatch_status"] = "awaiting_response_headers"
+            elif kind == "request_headers":
+                prompt["status"] = "response_headers_received"
+                provider_request.update(dispatch_status="response_headers_received",
+                                        http_status=event.get("http_status"), http_reason=event.get("http_reason"),
+                                        header_wait_seconds=event.get("header_wait_seconds"))
+            elif kind == "request_complete":
+                prompt["status"] = "response_stream_ended"
+                provider_request.update(dispatch_status="response_stream_ended",
+                                        provider_done=event.get("provider_done"))
+            else:
+                prompt["status"] = "cancelled_during_request" if event.get("cancelled") else "request_failed"
+                provider_request.update(dispatch_status=prompt["status"], failure_phase=event.get("phase"),
+                                        request_error=event.get("error"))
     elif kind == "tool_batch":
         run["tool_batch"] = {"assistant_message": copy.deepcopy(event.get("assistantMessage")),
                              "calls": copy.deepcopy(event.get("calls", [])),
@@ -215,7 +242,7 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
             "id": event.get("activityId") or event.get("_journal_event_id") or uuid.uuid4().hex,
             "turnId": event.get("turnId", run.get("turn_id")), "sessionId": state["session_id"],
             "workspace": event.get("workspace", state.get("workspace")), "kind": "prompt",
-            "name": f"Model request {int(event.get('request_index', 0))}", "status": "sent",
+            "name": f"Model request {int(event.get('request_index', 0))}", "status": "prepared",
             "promptManifest": manifest, "timestamp": event.get("timestamp", time.time()),
         })
     elif kind == "generation_usage":

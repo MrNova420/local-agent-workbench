@@ -93,8 +93,12 @@ def test_provider_request_settings_update_the_matching_prompt_activity_and_strea
                         "reasoning_field_sent": False, "keep_alive": "30m",
                         "request_options": {"num_ctx": 65536, "num_predict": 8192},
                         "estimated_input_tokens": 600, "input_estimate_method": "conservative estimate"})
+            self.event({"type": "request_dispatched", "request_index": 1})
+            self.event({"type": "request_headers", "request_index": 1, "http_status": 200,
+                        "http_reason": "OK", "header_wait_seconds": 0.75})
             self.event({"type": "generation_usage", "request_index": 1,
                         "usage": {"prompt_eval_count": 580, "prompt_eval_cached_count": 120, "eval_count": 45}})
+            self.event({"type": "request_complete", "request_index": 1, "provider_done": True})
             self.event({"type": "generation_complete", "workflowOutcome": "discussion",
                         "verification": {"status": "not_verified", "steps": []}})
             return messages
@@ -121,6 +125,9 @@ def test_provider_request_settings_update_the_matching_prompt_activity_and_strea
     assert prompt["providerRequest"]["api_model"] == "model-a:latest"
     assert prompt["providerRequest"]["tool_count"] == 12
     assert prompt["providerUsage"] == {"prompt_eval_count": 580, "prompt_eval_cached_count": 120, "eval_count": 45}
+    assert prompt["status"] == "response_stream_ended"
+    assert prompt["providerRequest"]["http_status"] == 200
+    assert prompt["providerRequest"]["header_wait_seconds"] == 0.75
     assert any(event.get("type") == "inference_settings" for event in events)
     assert any(event.get("type") == "activity_event" and event.get("activity", {}).get("providerRequest")
                for event in events)
