@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
-import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, SkillSource, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
+import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, SkillSource, TaskIntent, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
 import { nextRunPhase, restoredRunPhase, runStepProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordInputEstimate, recordStreamedText, restoreRunMetrics, type RunMetrics } from '../shared/run-metrics';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice, readRunTokenPreferences } from '../shared/model-controls';
@@ -14,6 +14,7 @@ import { nextHarnessProfile } from '../shared/harness-profile';
 import { isNearTranscriptEnd } from '../shared/transcript-follow';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; turnId?: string; thinking?: string; streaming?: boolean; recoveredPartial?: boolean };
+type PlanItem = { title?: string; text?: string; status?: string; source?: 'workbench' | 'agent' };
 type Session = {
   session_id: string;
   workspace: string;
@@ -29,13 +30,14 @@ type Session = {
   temperature?: number;
   keep_alive?: string;
   harness_profile?: HarnessProfile;
+  task_intent?: TaskIntent;
   working_workspace?: string;
   copy_manifest?: Record<string, string>;
   last_error?: { message: string; occurred_at: number };
   activity_mode?: ActivityMode;
   activity_events?: ActivityRecord[];
   turns?: Array<{ turn_id?: string; prompt?: string; started_at?: number; finished_at?: number; status?: string; transcript_saved?: boolean }>;
-  plan?: Array<{ title?: string; text?: string; status?: string }>;
+  plan?: PlanItem[];
   usage_events?: Array<{ turn_id?: string; first_token_seconds?: number; estimated_input_tokens?: number; usage?: Record<string, unknown> }>;
   recovery_issues?: string[];
   skills_enabled?: boolean;
@@ -53,6 +55,8 @@ type TelemetryView = {
 };
 type AppliedSettings = { model: string; context: number; maxOutput: number; reasoning: boolean | string | null; estimatedInput: number | null };
 
+function normalizeTaskIntent(value: unknown): TaskIntent { return value === 'discuss' || value === 'plan' || value === 'implement' ? value : 'auto'; }
+
 const initialOptions = {
   ...readRunTokenPreferences(localStorage.getItem('agent-run-token-preferences')),
   temperature: 0.2,
@@ -61,6 +65,7 @@ const initialOptions = {
   approvalMode: 'per-action' as ApprovalMode,
   reasoning: null as boolean | string | null,
   harnessProfile: 'standard' as HarnessProfile,
+  taskIntent: normalizeTaskIntent(localStorage.getItem('agent-task-intent')),
   skillsEnabled: localStorage.getItem('agent-skills-enabled') !== 'false',
   skillSources: (() => {
     try {
@@ -171,7 +176,7 @@ export default function App() {
   const [cancelChoiceOpen, setCancelChoiceOpen] = useState(false);
   const [closeChoiceOpen, setCloseChoiceOpen] = useState(false);
   const [trace, setTrace] = useState<TraceRow[]>([]);
-  const [plan, setPlan] = useState<Array<{ title?: string; text?: string; status?: string }>>([]);
+  const [plan, setPlan] = useState<PlanItem[]>([]);
   const [diff, setDiff] = useState('');
   const [diffLoading, setDiffLoading] = useState(false);
   const [diffError, setDiffError] = useState('');
@@ -328,6 +333,7 @@ export default function App() {
         approvalMode: loaded.approval_mode === 'per-task' ? 'per-task' : 'per-action',
         reasoning: loaded.reasoning ?? null,
         harnessProfile: loaded.harness_profile === 'small-model' ? 'small-model' : (localStorage.getItem('agent-harness-profile') === 'small-model' ? 'small-model' : 'standard'),
+        taskIntent: normalizeTaskIntent(loaded.task_intent ?? localStorage.getItem('agent-task-intent')),
         skillsEnabled: loaded.skills_enabled ?? initialOptions.skillsEnabled,
         skillSources: Array.isArray(loaded.skill_sources) && loaded.skill_sources.every((source) => source === 'project' || source === 'user') ? loaded.skill_sources : initialOptions.skillSources,
       });
@@ -364,6 +370,7 @@ export default function App() {
       keepAlive: recovered.state.keep_alive || '30m',
       reasoning: (settings.reasoning ?? recovered.state.reasoning ?? null) as boolean | string | null,
       harnessProfile: settings.harness_profile === 'small-model' || recovered.state.harness_profile === 'small-model' ? 'small-model' : 'standard',
+      taskIntent: normalizeTaskIntent(settings.task_intent ?? recovered.state.task_intent),
       skillsEnabled: typeof settings.skills_enabled === 'boolean' ? settings.skills_enabled : (recovered.state.skills_enabled ?? initialOptions.skillsEnabled),
       skillSources: Array.isArray(settings.skill_sources) && settings.skill_sources.every((source) => source === 'project' || source === 'user') ? settings.skill_sources as SkillSource[] : (recovered.state.skill_sources || initialOptions.skillSources),
     };
@@ -421,7 +428,7 @@ export default function App() {
         // Plan updates are delivered through the same durable activity event stream
         // used by the chat cards and Activity Trace, rather than as a second UI-only event.
         if (activityEvent.activity?.kind === 'plan' && Array.isArray(activityEvent.activity.items)) {
-          setPlan(activityEvent.activity.items as typeof plan);
+          setPlan(activityEvent.activity.items as PlanItem[]);
         }
         if (activityEvent.activity && shouldRefreshWorkspaceForActivity(activityEvent.activity)) {
           const root = activityEvent.activity.workspace || workspace;
@@ -497,7 +504,7 @@ export default function App() {
         });
       }
       if (event.type === 'plan') {
-        const items = Array.isArray(event.items) ? event.items as typeof plan : [];
+        const items = Array.isArray(event.items) ? event.items as PlanItem[] : [];
         setPlan(items);
       }
       if (event.type === 'approval_request') {
@@ -718,6 +725,7 @@ export default function App() {
       access: options.access, approvalMode: options.approvalMode, keepAlive: options.keepAlive,
       reasoning: normalizeReasoningChoice(options.reasoning, modelInfo?.reasoning ?? null),
       harnessProfile: options.harnessProfile,
+      taskIntent: options.taskIntent,
       skillsEnabled: options.skillsEnabled, skillSources: options.skillSources,
     };
     if (options.approvalMode === 'auto') setOptions((current) => ({ ...current, approvalMode: 'per-action' }));
@@ -822,6 +830,7 @@ export default function App() {
     localStorage.setItem('agent-activity-default', activityDefault);
     localStorage.setItem('agent-ask-activity', String(askActivityChoice));
     localStorage.setItem('agent-harness-profile', options.harnessProfile);
+    localStorage.setItem('agent-task-intent', options.taskIntent);
     localStorage.setItem('agent-skills-enabled', String(options.skillsEnabled));
     localStorage.setItem('agent-skill-sources', JSON.stringify(options.skillSources));
     localStorage.setItem('agent-run-token-preferences', JSON.stringify({ context: options.context, maxTokens: options.maxTokens }));
@@ -833,6 +842,7 @@ export default function App() {
           model, context: options.context, maxTokens: options.maxTokens, temperature: options.temperature,
           access: options.access, approvalMode: options.approvalMode, keepAlive: options.keepAlive,
           reasoning: options.reasoning, harnessProfile: options.harnessProfile,
+          taskIntent: options.taskIntent,
           skillsEnabled: options.skillsEnabled, skillSources: options.skillSources,
         } });
         const activitySaved = await request<{ app_saved: boolean; project_saved: boolean }>({ command: 'session_activity_mode', sessionId: session.session_id, activityMode });
@@ -1042,7 +1052,7 @@ function ProjectHome({ root, tab, setTab, files, sessions, onNew, onOpenSession,
 }
 
 function SessionRoom({ root, session, messages, activities, activityMode, plan, phase, workflowOutcome, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
-  root: string; session: Session | null; messages: ChatMessage[]; activities: ActivityRecord[]; activityMode: ActivityMode; plan: Array<{ title?: string; text?: string; status?: string }>;
+  root: string; session: Session | null; messages: ChatMessage[]; activities: ActivityRecord[]; activityMode: ActivityMode; plan: PlanItem[];
   phase: string; elapsed: number; running: boolean; prompt: string; setPrompt: (value: string) => void;
   workflowOutcome: string | null; promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
   setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>; files: ProjectFile[];
@@ -1095,7 +1105,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
           {message.thinking && <details className="reasoning-trace"><summary>Model reasoning · {message.thinking.length.toLocaleString()} characters</summary><div>{message.thinking}</div></details>}
         </article>{message.role === 'user' && message.turnId && <ActivityFeed entries={activitiesByTurn.get(message.turnId) || []} mode={activityMode} surface="chat"/>}</Fragment>)}<div ref={endRef}/>{!followTranscript && <button className="jump-latest" onClick={() => { setFollowTranscript(true); if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight; }} aria-label="Jump to latest message">↓ Latest</button>}</div>}
         <div className="composer-shell">
-          <div className="composer-profile"><span className={`profile-chip access-${options.access}`}>{options.access.toUpperCase()}</span><span className="profile-chip approval-chip">{options.approvalMode === 'auto' ? 'AUTO APPROVE · THIS RUN' : options.approvalMode === 'per-task' ? 'PER TASK' : 'PER ACTION'}</span><span className="profile-chip capability-chip" title="Capability reported by the selected local runtime; support metadata may be unknown">TOOLS {modelInfo?.tool_support === 'supported' ? 'SUPPORTED' : modelInfo?.tool_support === 'unsupported' ? 'UNSUPPORTED' : 'UNKNOWN'}</span><button className={`profile-toggle ${options.harnessProfile === 'small-model' ? 'is-active' : ''}`} type="button" aria-pressed={options.harnessProfile === 'small-model'} title="Changes agent workflow guidance only; model settings and token limits stay unchanged" onClick={onToggleHarnessProfile} disabled={running}>Small-model {options.harnessProfile === 'small-model' ? 'on' : 'off'}</button><span className="profile-hint">{fmt(options.context)} context · {fmt(options.maxTokens)} output</span><button onClick={onSettings}>Adjust run</button></div>
+          <div className="composer-profile"><span className={`profile-chip access-${options.access}`}>{options.access.toUpperCase()}</span><span className="profile-chip approval-chip">{options.approvalMode === 'auto' ? 'AUTO APPROVE · THIS RUN' : options.approvalMode === 'per-task' ? 'PER TASK' : 'PER ACTION'}</span><span className="profile-chip capability-chip" title="Capability reported by the selected local runtime; support metadata may be unknown">TOOLS {modelInfo?.tool_support === 'supported' ? 'SUPPORTED' : modelInfo?.tool_support === 'unsupported' ? 'UNSUPPORTED' : 'UNKNOWN'}</span><span className="profile-chip intent-chip" title="Task intent guides the agent; file access and approval remain separate">INTENT {options.taskIntent.toUpperCase()}</span><button className={`profile-toggle ${options.harnessProfile === 'small-model' ? 'is-active' : ''}`} type="button" aria-pressed={options.harnessProfile === 'small-model'} title="Changes agent workflow guidance only; model settings and token limits stay unchanged" onClick={onToggleHarnessProfile} disabled={running}>Small-model {options.harnessProfile === 'small-model' ? 'on' : 'off'}</button><span className="profile-hint">{fmt(options.context)} context · {fmt(options.maxTokens)} output</span><button onClick={onSettings}>Adjust run</button></div>
           <textarea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={onEnter} placeholder="Describe the work. Use Shift + Enter to add detail…" rows={3} disabled={running} aria-label="Task prompt"/>
           <div className="composer-bottom"><span><kbd>ENTER</kbd> to run <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> reasoning {options.reasoning == null ? 'model default' : String(options.reasoning)}</span>{running ? <Button kind="danger" onClick={onCancel}><Icon name="stop"/> Cancel request</Button> : <Button kind="bright" onClick={onRun} disabled={!prompt.trim()}><Icon name="play"/> Run task</Button>}</div>
         </div>
@@ -1123,7 +1133,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
           </div>
           {telemetry.contextMismatch && <p className="context-warning" role="status">Ollama reports a smaller runtime context than requested. Available memory may limit allocation.</p>}
         </section>
-        <div className="sheet-section sheet-panel" style={panelStyle('plan')}><div className="sheet-heading"><h3>Plan</h3><span>{plan.length ? `${plan.length} steps` : 'Awaiting agent'}</span><SheetPanelControls panel="plan" layout={sheetLayout} onMove={movePanel} onResize={resizePanel}/></div>{plan.length ? <ol className="plan-list">{plan.map((item, index) => <li key={`${index}-${item.title || item.text}`}><span>{String(index + 1).padStart(2, '0')}</span><b>{item.title || item.text || 'Work item'}</b><small>{item.status || 'pending'}</small></li>)}</ol> : <p className="sheet-empty">A task checklist appears here when the agent creates one.</p>}</div>
+        <div className="sheet-section sheet-panel" style={panelStyle('plan')}><div className="sheet-heading"><h3>Plan</h3><span>{plan.length ? `${plan.length} steps · ${plan.every((item) => item.source === 'workbench') ? 'starter' : 'live'}` : 'Awaiting agent'}</span><SheetPanelControls panel="plan" layout={sheetLayout} onMove={movePanel} onResize={resizePanel}/></div>{plan.length ? <ol className="plan-list">{plan.map((item, index) => <li key={`${index}-${item.title || item.text}`}><span>{String(index + 1).padStart(2, '0')}</span><b>{item.title || item.text || 'Work item'}{item.title && item.text && item.title !== 'Requested outcome' && <small className="plan-detail">{item.text}</small>}</b><small>{item.status || 'pending'}</small></li>)}</ol> : <p className="sheet-empty">A checklist appears immediately for plan/build tasks and can be refined by the agent.</p>}</div>
         <div className="sheet-section trace-section sheet-panel" style={panelStyle('activity')}><div className="sheet-heading"><h3>Activity trace</h3><span>{activities.length} events</span><SheetPanelControls panel="activity" layout={sheetLayout} onMove={movePanel} onResize={resizePanel}/></div><ActivityFeed entries={activities} mode={activityMode} surface="sidebar"/></div>
         <div className="resource-summary sheet-panel" style={panelStyle('resources')}>
           <div className="resource-heading"><span>RESOURCE / SYSTEM</span><SheetPanelControls panel="resources" layout={sheetLayout} onMove={movePanel} onResize={resizePanel}/></div>
@@ -1299,7 +1309,8 @@ function SettingsModal({ model, modelLabel, modelInfo, options, setOptions, acti
     <label className="settings-field"><span>Reasoning</span><select value={String(selectedReasoningIndex)} onChange={(e) => { const value = reasoningValues[Number(e.target.value)] ?? null; setOptions((old) => ({ ...old, reasoning: normalizeReasoningChoice(value, reasoning ?? null) })); }}><option value="0">Model default</option>{reasoningValues.slice(1).map((value, index) => <option key={`${typeof value}-${String(value)}-${index}`} value={index + 1}>{typeof value === 'boolean' ? value ? 'On' : 'Off' : value}</option>)}</select><small>{reasoning ? `Model default: ${String(reasoning.default ?? 'not reported')}` : 'The model did not report reasoning controls; no override will be sent.'}</small></label>
     <div className="context-facts"><span>Advertised maximum <b>{modelInfo?.context_limit_known ? fmt(modelInfo.context ?? undefined) : 'Unknown'}</b></span><span>Runtime context <b>{modelInfo?.effective_context ? fmt(modelInfo.effective_context) : modelInfo?.provider === 'llama.cpp' ? 'Not loaded / allocation unverified' : 'Shown in the task signal panel'}</b></span></div>
     <label className="settings-field"><span>Keep model warm after a request</span><select value={options.keepAlive} onChange={(e) => setOptions((old) => ({ ...old, keepAlive: e.target.value }))}><option value="30m">30 minutes</option><option value="10m">10 minutes</option><option value="5m">5 minutes</option><option value="0">Unload when idle (Ollama setting)</option></select></label>
-    <div className="settings-fields select-fields"><label className="settings-field"><span>File access</span><select value={options.access} onChange={(e) => setOptions((old) => ({ ...old, access: e.target.value as AccessMode }))}><option value="copy">Copy workspace</option><option value="plan">Plan only</option><option value="ask">Ask before writes</option><option value="edit">Edit project</option></select></label><label className="settings-field"><span>Approval</span><select value={options.approvalMode} onChange={(e) => setOptions((old) => ({ ...old, approvalMode: e.target.value as ApprovalMode }))}><option value="per-action">Approve each action</option><option value="per-task">Approve for this task</option><option value="auto">Auto-approve actions · this run</option></select>{options.approvalMode === 'auto' && <small className="auto-approve-warning">Skips action prompts for this run. Commands and MCP still run with your Windows account permissions; this setting does not sandbox them to the selected project.</small>}</label></div>
+    <label className="settings-field"><span>Task intent</span><select value={options.taskIntent} onChange={(e) => setOptions((old) => ({ ...old, taskIntent: e.target.value as TaskIntent }))}><option value="auto">Automatic</option><option value="discuss">Discuss / investigate</option><option value="plan">Plan only</option><option value="implement">Implement</option></select><small>Discussion and Plan intent expose read-only project tools and omit MCP tools for that run. Implement and detected build requests seed a visible checklist; File access and approval still independently limit changes.</small>{options.taskIntent === 'implement' && options.access === 'plan' && <small className="auto-approve-warning">Read-only File access prevents implementation edits. Choose Ask before writes or another access mode to let the agent change files.</small>}</label>
+    <div className="settings-fields select-fields"><label className="settings-field"><span>File access</span><select value={options.access} onChange={(e) => setOptions((old) => ({ ...old, access: e.target.value as AccessMode }))}><option value="copy">Copy workspace</option><option value="plan">Read only</option><option value="ask">Ask before writes</option><option value="edit">Edit project</option></select></label><label className="settings-field"><span>Approval</span><select value={options.approvalMode} onChange={(e) => setOptions((old) => ({ ...old, approvalMode: e.target.value as ApprovalMode }))}><option value="per-action">Approve each action</option><option value="per-task">Approve for this task</option><option value="auto">Auto-approve actions · this run</option></select>{options.approvalMode === 'auto' && <small className="auto-approve-warning">Skips action prompts for this run. Commands and MCP still run with your Windows account permissions; this setting does not sandbox them to the selected project.</small>}</label></div>
     <label className="settings-field"><span>Harness workflow</span><select value={options.harnessProfile} onChange={(e) => setOptions((old) => ({ ...old, harnessProfile: e.target.value as HarnessProfile }))}><option value="standard">Standard</option><option value="small-model">Small-model workflow</option></select><small>Small-model workflow asks the agent to take shorter, sequential tool steps and inspect each result. It does not change model, context, output tokens, reasoning, temperature, access, or approvals.</small></label>
     <label className="activity-choice-toggle"><input type="checkbox" checked={options.skillsEnabled} onChange={(event) => setOptions((old) => ({ ...old, skillsEnabled: event.target.checked }))}/><span><b>Allow reusable skills for this app and session</b><small>When enabled, the model may load a relevant skill through its tool. Skill text is untrusted guidance and does not grant permissions.</small></span></label>
     <div className="settings-field"><span>Skill sources</span><div className="skill-source-choices"><label><input type="checkbox" checked={options.skillSources.includes('project')} disabled={options.skillSources.length === 1 && options.skillSources.includes('project')} onChange={(event) => setOptions((old) => ({ ...old, skillSources: event.target.checked ? [...new Set([...old.skillSources, 'project' as SkillSource])] : old.skillSources.filter((source) => source !== 'project') }))}/><span>Selected project and Git ancestors</span></label><label><input type="checkbox" checked={options.skillSources.includes('user')} disabled={options.skillSources.length === 1 && options.skillSources.includes('user')} onChange={(event) => setOptions((old) => ({ ...old, skillSources: event.target.checked ? [...new Set([...old.skillSources, 'user' as SkillSource])] : old.skillSources.filter((source) => source !== 'user') }))}/><span>User skill folders</span></label></div><small>The selected sources are captured per run. Workbench does not read or change Codex/OpenCode skill settings.</small></div>

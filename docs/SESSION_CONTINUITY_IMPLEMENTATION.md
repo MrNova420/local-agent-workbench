@@ -19,10 +19,11 @@
 - Before a follow-up inference request clears the previous request's streaming buffer, its completed assistant text and reasoning are copied into the recoverable message checkpoint. Terminal replay also updates the task checkpoint status and blocker/verification fields.
 - Terminal workflow outcomes are stored separately from run completion: discussion, plan-only, blocked, changed, inspected, command-completed, and command-failed. The renderer labels these from host-observed actions; it does not equate command completion with passing tests. A new task clears the previous task's visible plan, while active follow-ups keep it.
 - The sidecar now forwards the engine's successful terminal outcome to the renderer only after session persistence, matching cancellation/error ordering. A missing successful terminal event is saved as a failure with a checkpoint blocker rather than silently labeled discussion; queued worker and persistence checks cover event ordering and fail-closed recovery.
+- Task intent is now explicit (`auto`, `discuss`, `plan`, `implement`) and persisted per session and per turn. Build requests in Automatic mode plus explicit Plan/Implement tasks get a host-created checklist before inference; the model refines that same plan through `update_plan`. Discussion/Plan and Read-only access expose only read tools and suppress MCP tools for that turn; selected access/approval and model settings remain independent. This code is unverified.
 
 ## Verification queue (not run in this implementation phase)
 
-1. Unit-test task checkpoint continuation, legacy migration, task history, operation references, and plan updates.
+1. Unit-test task checkpoint continuation, legacy migration, task history, operation references, host-generated task-intent plans, read-only tool catalogs, and model plan updates.
 2. Fault-inject app/project snapshot lock errors, asymmetric one-store journal failure and targeted retry, both-store journal failure, duplicate journal records, truncated final JSONL lines, and restart between tool start and completion.
 3. Verify a completed response is reconstructed if the process exits after final stream events but before the session snapshot.
 4. Exercise live Plan updates from model update_plan through sidecar, JSONL, renderer, and reopened session.
@@ -34,10 +35,10 @@
 
 ## Remaining reliability work
 
-- Reconcile the exact shared-engine and desktop source revisions, update every engine SHA pin, and package only after implementation is complete.
+- The shared engine is pinned at `dd75d788d1d9c41ffa32350e20eb05bd4b26e6d0` in `core-revision.txt`, CI, and the Windows release workflow. Reconcile and build the packaged app only after implementation is complete.
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.
 - Add persisted context/input usage presentation and distinguish actual runtime allocation from selected context where the provider exposes it.
-- Continue the approved core harness plan: host-generated substantial-task plans and explicit task intent, assembled-prompt/source preview and exact skill-inclusion evidence, provider capability reporting, permissions and process containment, developer tooling parity, task-specific verification contracts, transcript rendering after reopen, and remaining product backlog. Workbench-owned skill enable/source controls and host-observed terminal outcomes are implemented but unverified. See MASTER_ROADMAP.md, CORE_HARNESS_READINESS.md, and PRODUCT_BACKLOG.md.
+- Continue the approved core harness plan: richer task-specific plan refinement and task verification contracts, assembled-prompt/source preview and exact skill-inclusion evidence, provider capability reporting, permissions and process containment, developer tooling parity, transcript rendering after reopen, and remaining product backlog. Workbench-owned skill enable/source controls, host-observed outcomes, and the initial task-intent/checklist path are implemented but unverified. See MASTER_ROADMAP.md, CORE_HARNESS_READINESS.md, and PRODUCT_BACKLOG.md.
 
 No live model, app process, OpenCode setting, selected token value, model reasoning default, or runtime placement was changed for this work.

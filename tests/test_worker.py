@@ -60,7 +60,7 @@ def test_session_run_settings_persist_skill_controls_and_inference_values(servic
         "settings": {
             "model": "model-a:latest", "context": 65536, "maxTokens": 8192,
             "temperature": 0.2, "access": "ask", "approvalMode": "per-action",
-            "keepAlive": "30m", "reasoning": None, "harnessProfile": "small-model",
+            "keepAlive": "30m", "reasoning": None, "harnessProfile": "small-model", "taskIntent": "implement",
             "skillsEnabled": False, "skillSources": ["project"],
         },
     })
@@ -69,7 +69,53 @@ def test_session_run_settings_persist_skill_controls_and_inference_values(servic
     assert saved["skill_sources"] == ["project"]
     assert saved["context"] == 65536
     assert saved["max_tokens"] == 8192
+    assert saved["task_intent"] == "implement"
     assert service.sessions.load(session["session_id"], str(workspace))["state"]["skills_enabled"] is False
+
+
+def test_plan_intent_seeds_live_checklist_and_enforces_read_only_builtin_tools(service, tmp_path, monkeypatch):
+    events = []
+    captured = {}
+    service.emit = events.append
+    service.mcp_tools = [{"type": "function", "function": {"name": "mcp__mutating_tool", "parameters": {"type": "object"}}}]
+
+    class CapturingEngine:
+        def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
+            captured.update(access=access, kwargs=kwargs)
+            self.event = event
+            self.state = {}
+            self.runtime = object()
+
+        def run(self, prompt, messages):
+            self.event({"type": "complete", "workflowOutcome": "plan_only",
+                        "verification": {"status": "not_verified", "steps": []}})
+            return messages
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(worker, "AgentEngine", CapturingEngine)
+    project = tmp_path / "plan-intent-project"
+    project.mkdir()
+    service.handle("run_start", {"options": {
+        "workspace": str(project), "prompt": "Plan a settings screen", "model": "model-a:latest",
+        "context": 4096, "maxTokens": 128, "temperature": 0.2,
+        "access": "edit", "approvalMode": "per-action", "taskIntent": "plan",
+    }})
+    controller = service.active
+    assert controller is not None
+    session_id = controller["session"]["session_id"]
+    controller["thread"].join(3)
+
+    saved = service.sessions.load(session_id)
+    assert captured["access"] == "plan"
+    assert captured["kwargs"]["task_intent"] == "plan"
+    assert captured["kwargs"]["mcp_tools"] == []
+    assert saved["task_intent"] == "plan"
+    assert saved["plan"][0]["title"] == "Use the task brief and project instructions as the objective"
+    assert saved["turns"][-1]["settings"]["task_intent"] == "plan"
+    assert saved["turns"][-1]["settings"]["effective_access"] == "plan"
+    assert any(event.get("type") == "activity_event" and event.get("activity", {}).get("kind") == "plan" for event in events)
 
 
 def test_session_run_settings_cannot_change_during_active_run(service, tmp_path):

@@ -2,6 +2,7 @@ export type AccessMode = 'copy' | 'plan' | 'ask' | 'edit';
 export type ApprovalMode = 'per-action' | 'per-task' | 'auto';
 export type ReasoningChoice = boolean | string | null;
 export type HarnessProfile = 'standard' | 'small-model';
+export type TaskIntent = 'auto' | 'discuss' | 'plan' | 'implement';
 export type SkillSource = 'project' | 'user';
 export type ReasoningCapability = {
   support: 'toggle' | 'levels' | 'unknown' | 'none';
@@ -23,6 +24,7 @@ export type RunOptions = {
   keepAlive: string;
   reasoning: ReasoningChoice;
   harnessProfile: HarnessProfile;
+  taskIntent: TaskIntent;
   skillsEnabled: boolean;
   skillSources: SkillSource[];
 };
@@ -57,7 +59,7 @@ export type WorkerCommand =
   | { command: 'sessions_list'; workspace?: string }
   | { command: 'session_new'; workspace: string; model: string; context: number; activityMode?: ActivityMode }
   | { command: 'session_activity_mode'; sessionId: string; activityMode: ActivityMode }
-  | { command: 'session_run_settings'; sessionId: string; settings: { model: string; context: number; maxTokens: number; temperature: number; access: AccessMode; approvalMode: ApprovalMode; keepAlive: string; reasoning: ReasoningChoice; harnessProfile: HarnessProfile; skillsEnabled: boolean; skillSources: SkillSource[] } }
+  | { command: 'session_run_settings'; sessionId: string; settings: { model: string; context: number; maxTokens: number; temperature: number; access: AccessMode; approvalMode: ApprovalMode; keepAlive: string; reasoning: ReasoningChoice; harnessProfile: HarnessProfile; taskIntent: TaskIntent; skillsEnabled: boolean; skillSources: SkillSource[] } }
   | { command: 'session_harness_profile'; sessionId: string; harnessProfile: HarnessProfile }
   | { command: 'session_recover'; sessionId: string; action: 'resume' | 'retry' | 'restore' }
   | { command: 'session_resume'; sessionId: string; workspace?: string; source?: 'app' | 'project' }
@@ -87,6 +89,7 @@ export type ActivityRecord = {
   kind: 'operation' | 'approval' | 'plan' | 'context' | 'error';
   name?: string;
   status: string;
+  source?: 'workbench' | 'agent';
   approvalStatus?: 'waiting' | 'approved' | 'denied' | 'cancelled';
   approvalMode?: 'per-action' | 'per-task';
   timestamp?: number;
@@ -96,7 +99,7 @@ export type ActivityRecord = {
   output?: Record<string, string>;
   result?: string;
   affectedFiles?: string[];
-  items?: Array<{ title?: string; text?: string; status?: string }>;
+  items?: Array<{ title?: string; text?: string; status?: string; source?: 'workbench' | 'agent' }>;
   omittedTurns?: number;
   retainedTurns?: number;
   configuredContext?: number;

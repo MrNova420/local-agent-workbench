@@ -28,7 +28,7 @@ if CORE_PATH.is_dir():
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from desktop_engine import AgentEngine, OllamaRuntime, RequestCancelled, ToolRegistry, Workspace  # noqa: E402
-from task_checkpoint import begin_task, finish_task, record_plan  # noqa: E402
+from task_checkpoint import begin_task, finish_task, initial_task_plan, record_plan  # noqa: E402
 from disposable_workspace import (  # noqa: E402
     apply_reviewed_changes,
     capture_manifest,
@@ -221,12 +221,19 @@ class AgentService:
                     activity.update(status=event.get("status", "completed"), result=event.get("result", ""),
                                     affectedFiles=event.get("affectedFiles", []), completedAt=event.get("completedAt", time.time()))
             elif kind == "plan":
-                state["plan"] = copy.deepcopy(event.get("items", []))
+                source = "workbench" if event.get("source") == "workbench" else "agent"
+                plan_items = copy.deepcopy(event.get("items", []))
+                if isinstance(plan_items, list):
+                    for item in plan_items:
+                        if isinstance(item, dict):
+                            item["source"] = source
+                state["plan"] = plan_items
                 checkpoint = state.get("task_checkpoint")
                 if isinstance(checkpoint, dict):
-                    record_plan(checkpoint, event.get("items", []))
+                    record_plan(checkpoint, plan_items)
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
-                            "workspace": str(turn.workspace), "kind": "plan", "status": "updated", "items": copy.deepcopy(event.get("items", [])), "timestamp": time.time()}
+                            "workspace": str(turn.workspace), "kind": "plan", "status": "updated", "source": source,
+                            "items": copy.deepcopy(plan_items), "timestamp": time.time()}
                 rows.append(activity)
             elif kind == "context_compacted":
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
@@ -617,11 +624,12 @@ class AgentService:
             access = str(settings.get("access", ""))
             approval_mode = str(settings.get("approvalMode", ""))
             harness_profile = str(settings.get("harnessProfile", ""))
+            task_intent = str(settings.get("taskIntent", "auto"))
             skills_enabled = settings.get("skillsEnabled")
             skill_sources = settings.get("skillSources")
             if access not in {"copy", "plan", "ask", "edit"} or approval_mode not in {"per-action", "per-task", "auto"}:
                 raise ValueError("Invalid access or approval setting.")
-            if harness_profile not in {"standard", "small-model"} or not isinstance(skills_enabled, bool):
+            if harness_profile not in {"standard", "small-model"} or task_intent not in {"auto", "discuss", "plan", "implement"} or not isinstance(skills_enabled, bool):
                 raise ValueError("Invalid workflow or skill setting.")
             if not isinstance(skill_sources, list) or not skill_sources or any(source not in {"project", "user"} for source in skill_sources):
                 raise ValueError("Select at least one valid skill source.")
@@ -637,7 +645,7 @@ class AgentService:
                          context=context, max_tokens=max_tokens, temperature=float(temperature), access=access,
                          approval_mode="per-action" if approval_mode == "auto" else approval_mode,
                          keep_alive=str(settings.get("keepAlive", "30m")), reasoning=reasoning,
-                         harness_profile=harness_profile, skills_enabled=skills_enabled,
+                         harness_profile=harness_profile, task_intent=task_intent, skills_enabled=skills_enabled,
                          skill_sources=list(dict.fromkeys(skill_sources)))
             state["persistence"] = self.sessions.save(state)
             return state
@@ -988,6 +996,9 @@ class AgentService:
         harness_profile = str(options.get("harnessProfile", "standard"))
         if harness_profile not in {"standard", "small-model"}:
             raise ValueError("Invalid harness workflow profile.")
+        task_intent = str(options.get("taskIntent", "auto"))
+        if task_intent not in {"auto", "discuss", "plan", "implement"}:
+            raise ValueError("Invalid task intent.")
         skills_enabled = options.get("skillsEnabled", True)
         skill_sources = options.get("skillSources", ["project", "user"])
         if not isinstance(skills_enabled, bool):
@@ -1012,6 +1023,7 @@ class AgentService:
             temperature=float(options["temperature"]), keep_alive=str(options.get("keepAlive", "30m")),
             reasoning=reasoning,
             harness_profile=harness_profile,
+            task_intent=task_intent,
             skills_enabled=skills_enabled, skill_sources=skill_sources,
         )
         if state["context"] < 1024 or state["max_tokens"] < 1 or not 0 <= state["temperature"] <= 2:
@@ -1038,8 +1050,10 @@ class AgentService:
         state.setdefault("plan", [])
         previous_checkpoint = state.get("task_checkpoint")
         previous_task = previous_checkpoint.get("current", previous_checkpoint) if isinstance(previous_checkpoint, dict) else None
-        if not isinstance(previous_task, dict) or previous_task.get("status") in {"completed", "cancelled", "failed", "stopped"}:
-            state["plan"] = []
+        new_task = not isinstance(previous_task, dict) or previous_task.get("status") in {"completed", "cancelled", "failed", "stopped"}
+        if new_task:
+            seed_intent = "plan" if access == "plan" and task_intent == "auto" else task_intent
+            state["plan"] = initial_task_plan(prompt, seed_intent)
         state["task_checkpoint"] = begin_task(
             state.get("task_checkpoint"),
             prompt=prompt,
@@ -1053,6 +1067,9 @@ class AgentService:
                 "harness_profile": harness_profile, "access": access,
                 "approval_mode": approval_mode, "skills_enabled": skills_enabled,
                 "skill_sources": skill_sources,
+                "task_intent": task_intent,
+                "requested_access": access,
+                "effective_access": "plan" if task_intent in {"discuss", "plan"} else access,
             },
             plan=copy.deepcopy(state.get("plan", [])),
         )
@@ -1062,6 +1079,13 @@ class AgentService:
         prior_user_messages = sum(1 for row in state.get("messages", []) if isinstance(row, dict) and row.get("role") == "user")
         turn_records.append({"turn_id": turn_id, "prompt": prompt, "started_at": turn_started_at,
                              "workspace": str(working), "approval_mode": approval_mode, "status": "running",
+                             "settings": {"model": model, "provider_id": provider.provider_id,
+                                 "context": state["context"], "max_tokens": state["max_tokens"],
+                                 "reasoning": reasoning, "temperature": state["temperature"],
+                                 "access": access, "effective_access": "plan" if task_intent in {"discuss", "plan"} else access,
+                                 "approval_mode": approval_mode, "keep_alive": state.get("keep_alive", "30m"),
+                                 "harness_profile": harness_profile, "task_intent": task_intent,
+                                 "skills_enabled": skills_enabled, "skill_sources": list(skill_sources)},
                              "transcript_saved": False, "prior_user_messages": prior_user_messages})
         state["run_state"] = {
             "status": "running", "turn_id": turn_id, "prompt": prompt, "started_at": turn_started_at,
@@ -1071,10 +1095,11 @@ class AgentService:
             "completed_tool_results": {}, "workflow_outcome": None, "settings": {"model": model, "provider_id": provider.provider_id,
                 "context": state["context"], "max_tokens": state["max_tokens"], "reasoning": reasoning,
                 "harness_profile": harness_profile, "skills_enabled": skills_enabled,
-                "skill_sources": skill_sources},
+                "skill_sources": skill_sources, "task_intent": task_intent,
+                "requested_access": access, "effective_access": "plan" if task_intent in {"discuss", "plan"} else access},
         }
         turn = TurnContext.capture(
-            workspace=working, model=model, context=state["context"], access=access,
+            workspace=working, model=model, context=state["context"], access="plan" if task_intent in {"discuss", "plan"} else access,
             approval_mode=approval_mode, max_tokens=state["max_tokens"],
             harness_profile=harness_profile,
             skills_enabled=skills_enabled, skill_sources=skill_sources,
@@ -1091,6 +1116,8 @@ class AgentService:
         if not (saved["app_saved"] and saved["project_saved"]):
             self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"], "error": saved["error"] or "Session storage is unavailable."})
         self.emit({"type": "run_started", "sessionId": state["session_id"], "turnId": turn_id})
+        if new_task and state.get("plan"):
+            self._publish_run_event(controller, turn, {"type": "plan", "items": copy.deepcopy(state["plan"]), "source": "workbench"})
         thread = threading.Thread(target=self._run_turn, args=(controller, turn), name="agent-run", daemon=True)
         controller["thread"] = thread
         thread.start()
@@ -1137,8 +1164,9 @@ class AgentService:
                 self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
                 self.emit({"type": "cancelled", "elapsed": 0, "sessionId": state["session_id"]})
                 return
-            mcp_tools = list(turn.mcp_tools)
-            if self.mcp.servers and not self.mcp.discovered:
+            read_only_access = turn.access == "plan"
+            mcp_tools = [] if read_only_access else list(turn.mcp_tools)
+            if not read_only_access and self.mcp.servers and not self.mcp.discovered:
                 mcp_tools = self.mcp.run(self.mcp.discover(), cancel_event=controller["cancel"])
                 self.mcp_tools = mcp_tools
                 failed = ", ".join(self.mcp.errors.values())
@@ -1197,6 +1225,7 @@ class AgentService:
                 mcp_call=lambda name, args: self.mcp.run(self.mcp.call(name, args), cancel_event=controller["cancel"]),
                 task_checkpoint=state["task_checkpoint"],
                 skills_enabled=turn.skills_enabled, skill_sources=turn.skill_sources,
+                task_intent=str(turn.session.get("task_intent", "auto")),
             )
             chosen_runtime = self.providers.runtime_for(turn.model, engine.runtime, state.get("provider_id"))
             engine.runtime = RequestScopedOllama(chosen_runtime)
