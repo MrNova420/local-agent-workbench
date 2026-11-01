@@ -282,7 +282,7 @@ Resume from the current two repository commits and this checklist. Do not treat 
 
 ### Current branch reconciliation note (2026-10-31)
 
-The section above records an earlier checkpoint and its evidence; it is not the current source tip. The active app branch now pins shared engine commit `e5158359cca2e780ca506cfd98e8b8015c63852a` in `core-revision.txt` and both workflows. Recent app/engine changes include persisted turn-to-activity placement, compact inline operation rows, current-model catalog refresh/filtering, hover-revealed controls, approval-safe command continuation, and explicit verification outcomes. Regression tests for the newest batch are queued, and the paired source has not yet been packaged or visibly accepted. The full ordered handoff is in [MASTER_ROADMAP.md](MASTER_ROADMAP.md). No model/token/reasoning settings were changed by this documentation checkpoint.
+The section above records an earlier checkpoint and its evidence; it is not the current release state. Beta.3 app source pins shared engine commit `e5158359cca2e780ca506cfd98e8b8015c63852a`; both repositories have been promoted to `main`. The newest source suites passed locally (140 engine, 53 renderer, 45 sidecar, typecheck), and beta.3 package/worker checks passed. GitHub Actions failed before steps started. Visible beta.3 acceptance remains pending because the prior package had an active task and was preserved; the actual installed updater cycle also remains pending. The full ordered handoff is in [MASTER_ROADMAP.md](MASTER_ROADMAP.md). No model/token/reasoning settings were changed for release preparation.
 
 ### Package and partial visible verification update (2026-10-31)
 

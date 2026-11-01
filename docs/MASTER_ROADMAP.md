@@ -1,18 +1,19 @@
 # Product roadmap and release state
 
-**Last reconciled:** 2026-10-31  
-**Scope of this checkpoint:** documentation and planning only. No app settings, model configuration, source behavior, package version, tag, or release was changed.
+**Last reconciled:** 2026-11-01
+**Current release:** `v0.1.0-beta.3` is published. This remains an unstable beta with visible app acceptance and the installed update canary open.
 
 This is the cross-repository execution order. It preserves the full approved product scope while separating core harness readiness from later parity and quality-of-life work. “Implemented in source” is not the same as tested, packaged, or accepted in a visible workflow.
 
 ## Current state
 
-- The public desktop app is `v0.1.0-beta.2`; the public paired Python engine is MIT licensed. This checkpoint does not advance that version.
-- The active app worktree is `workbench/core-chat-activity`. Its latest app change pins engine commit `e5158359cca2e780ca506cfd98e8b8015c63852a` in `core-revision.txt` and both GitHub workflows. The paired engine worktree has that commit. These post-beta changes are local branch history and are not yet part of the public beta/package.
+- The public desktop app is `v0.1.0-beta.3`, released from app commit `7a698c3d8b704ad38003c9b9d4959209afa79fd4`; it is marked Latest on GitHub. The paired engine main branch now includes commit `742ddb55a0fcdd7d0d205b29c04228cef5b9c0ff`, including the exact `e5158359cca2e780ca506cfd98e8b8015c63852a` SHA pinned by the app.
+- The app release contains Windows x64 Setup, Squirrel package/manifest, portable ZIP, and checksums. GitHub's beta.2 updater feed returned HTTP 200 with the beta.3 Setup URL; actual installed update/restart/data recovery is still unverified.
 - Recent changes include compact inline tool activity attached to its originating turn, persisted turn-to-activity mapping, live model-catalog refresh/deduplication and stale GGUF path filtering, hover-revealed window controls, an approval-safe prose-to-structured-command continuation, more accurate verification outcomes, and cancellation-before-worker-start state handling.
-- Regression tests have been added for recent work but were deliberately queued. The current app and engine worktree commits have not been rerun through the full verification gate, packaged, or visibly accepted. No current-build result should be inferred from older beta.2 evidence.
+- Local verification for beta.3 passed: 140 engine tests, 53 renderer tests, 45 sidecar tests, TypeScript typecheck, Windows package build, bundled worker ready/ping/shutdown, and Squirrel/ZIP integrity. Production dependency audit found zero vulnerabilities; 18 moderate findings remain in development dependencies.
+- The beta.3 package was not launched because the only existing Workbench window was actively generating a user task. That run was preserved, no duplicate app was opened, and no candidate model request was made. Visible acceptance is still pending.
 - The source implementation preserves the user's chosen context/output and model-default reasoning. No token/reasoning/model settings were altered in this planning checkpoint.
-- Hosted GitHub Actions previously could not acquire runners because of an account billing lock. Recheck this at the next verification pass; do not call a workflow pass if no runner starts.
+- GitHub Actions for both promoted main commits and the beta.3 tag failed before any steps started because a hosted runner was not allocated. Local checks are not reported as hosted CI passes; recheck runner availability on the next update.
 - User-reported evidence: one disposable website task eventually completed after about 2–3 hours and produced a functioning project, though visual quality was modest. This is a positive single-run report, not a speed, quality, or release guarantee.
 
 ## Source-of-truth map
@@ -29,6 +30,16 @@ This is the cross-repository execution order. It preserves the full approved pro
 
 Keep old evidence as history. When status changes, add a dated entry and update the current summary rather than rewriting past results as if they never happened.
 
+## Beta.3 release checkpoint
+
+- **Source promotion:** complete; engine was pushed to `main` before the app branch fast-forwarded `main`, and both remotes now match the release pins.
+- **Local source/package gates:** passed with the counts above. The initial test attempts exposed a stale deterministic-order assertion and a missing test environment variable; both were corrected before the passing full runs.
+- **Hosted CI:** blocked before steps ran for both repositories. No CI pass is claimed.
+- **Visible UI and installed updater:** pending. The prior beta.2 app was visibly still generating; it was left untouched to avoid losing work or starting a second app. The updater feed endpoint returned the beta.3 Setup URL, but no install/restart was performed.
+- **Live model measurement:** not run for this release. Preserve the user's selected context/output/reasoning and any active model run.
+- **Release:** public beta.3 is live, non-draft, and not GitHub-flagged as a prerelease so the configured updater feed can discover it. Beta designation remains in SemVer/tag/title.
+- Next after the existing task is idle: open one beta.3 packaged instance, finish the visible workflow and updater canary, then continue core harness reliability work. Do not reopen the old instance while the task is active.
+
 ## Ordered completion plan
 
 ### Gate 1 — Reconcile and promote the current source batch
@@ -36,11 +47,11 @@ Keep old evidence as history. When status changes, add a dated entry and update 
 1. Inspect both worktree histories and diffs, verify the app pin matches engine commit `e5158359cca2e780ca506cfd98e8b8015c63852a`, and confirm no unrelated/user data is included.
 2. Run the full verification set in Gate 2 against these exact commits. Fix failures before promotion; do not merge based on a green subset.
 3. Push/promote the engine commit first so CI can fetch it. Then promote the app commits whose workflows and package pin that immutable SHA. Preserve the separately published `main` histories and release baseline.
-4. Record final branch/commit IDs and evidence in both repositories. This is source promotion, not a release.
+4. Record final branch/commit IDs and evidence in both repositories. **Completed for beta.3:** engine main `742ddb5`; app main/tag `7a698c3`.
 
 ### Gate 2 — Source and fault-injection verification
 
-Run engine pytest; app sidecar pytest; renderer/Vitest; TypeScript typecheck; workflow validation; and focused fault-injection for:
+For the next source change, run engine pytest; app sidecar pytest; renderer/Vitest; TypeScript typecheck; workflow validation; and focused fault-injection for:
 
 - Ollama request options: selected context/output actually reach the request/runtime, reasoning remains unset unless explicitly supported and selected, and no unsolicited model load/unload occurs.
 - Tool protocol and schema errors, multiple calls, MCP discovery/calls/cleanup, long streamed command output, Unicode, and honest partial/failed/verified outcomes.
@@ -48,7 +59,7 @@ Run engine pytest; app sidecar pytest; renderer/Vitest; TypeScript typecheck; wo
 - Restored transcript turn mapping, full operation details, session migration, crash recovery, mirror conflict, project switching, and workspace boundaries.
 - Recent live-catalog, stale GGUF, approval state, window-control bridge, and canceled-turn renderer regressions.
 
-Fix hosted runner availability or clearly preserve it as a blocked external CI gate with reproducible local evidence. Never claim hosted CI passed when it failed before a runner started.
+**Beta.3 local source checks passed.** Hosted CI remains blocked before runner startup; never count that as a pass. Recheck the hosted runner on the next update.
 
 ### Gate 3 — Build and inspect the packaged application
 
@@ -57,9 +68,13 @@ Fix hosted runner availability or clearly preserve it as a blocked external CI g
 - Verify first-run setup/repair messaging, one-instance lifecycle, no model load on launch, and no stop/unload of externally loaded models.
 - Keep generated artifacts out of source history unless repository policy explicitly requires otherwise.
 
+**Beta.3 package gate:** passed locally; assets are published and their GitHub digests match the built artifacts. The Setup is unsigned.
+
 ### Gate 4 — Full visible user workflow
 
 Use one newly built packaged app instance and a disposable empty project. Close stale Workbench instances before opening it; do not create duplicate windows. Keep the user's PC available and do not steal focus if they are actively using it. Record screenshots without private paths or credentials.
+
+**Beta.3 visible gate:** pending because the existing app window had an active generation. Preserve that run and do not launch another instance until it is idle or the user closes it.
 
 1. Home: navigate into a workspace and back Home; verify recents persist independently, unavailable workspaces remain visible, and model dots show the actual zero/one/many installed models. Click a model dot and inspect the correct model details.
 2. Session: send a short hello, create a coding task, and verify model selection, captured context/output/reasoning, project path, and session identity.
@@ -76,7 +91,7 @@ Only after source, package, and visible workflow gates pass, perform the previou
 
 ### Gate 6 — Public release candidate
 
-Follow [RELEASE_RUNBOOK.md](RELEASE_RUNBOOK.md). Reconcile source, version manifests, engine SHA, changelog, screenshots, licensing, security reporting, installer, update assets, and checksums. Test update from the existing public installer. Only after all release gates pass, select the next SemVer version, then create a new immutable tag that triggers publication. The GitHub Release prerelease flag remains off under the currently configured public updater policy. A docs-only commit never creates a release tag.
+Follow [RELEASE_RUNBOOK.md](RELEASE_RUNBOOK.md). Beta.3 was published at the user's request before visible acceptance and installed-update canary; its release notes state these limitations. For subsequent releases, reconcile source, version manifests, engine SHA, changelog, screenshots, licensing, security reporting, installer, update assets, and checksums. Run visible app acceptance before tagging; the actual update canary runs immediately after publication. The GitHub Release prerelease flag remains off under the current updater policy. A docs-only commit never creates a release tag.
 
 ## Core harness work after the current batch
 
@@ -106,10 +121,9 @@ Keep these visible, but work them after the current core gate unless evidence ma
 
 | Evidence tier | Required proof | Current position |
 |---|---|---|
-| Source | Unit/integration/fault tests and typecheck on exact commits | Newest regression batch queued |
-| Hosted CI | Workflows complete on GitHub runners | Previously blocked before runner startup by account billing lock |
-| Package | Installer/ZIP/manifest/checksum and bundled worker | Older beta.2 evidence exists; current source package pending |
-| Visible UI | Complete single-instance disposable-project workflow | Older partial evidence exists; current source acceptance pending |
+| Source | Unit/integration/fault tests and typecheck on exact commits | Beta.3 local suites passed; hosted jobs failed before steps due to runner allocation |
+| Package | Installer/ZIP/manifest/checksum and bundled worker | Beta.3 assets published; local build, worker smoke, and archive checks passed |
+| Visible UI | Complete single-instance disposable-project workflow | Pending; existing beta.2 app was left undisturbed during its active task |
 | Live model | Exact settings, response, task result, timing, and resource capture | User-reported long task completed; fresh controlled measurement pending |
-| Installed update | Previous version discovers and applies a release safely | Pending |
+| Installed update | Previous version discovers and applies a release safely | Feed returned beta.3 Setup URL; installed canary pending |
 | Broad release readiness | Security/containment, parity, platform, and support scope | Not claimed; multiple core gaps remain |

@@ -9,6 +9,15 @@
 - GitHub Actions historically failed before runner startup due to the account-level billing lock. This release is based on local verification; hosted CI must be rechecked after source promotion and is not represented as passed.
 - Installer is unsigned. Current packaged Home/chat screenshots and the installed beta.2-to-beta.3 updater cycle are not verified yet. The user requested a quick public release while development continues; keep these limitations visible and schedule the update canary when the current app task is idle.
 
+## 2026-11-01 beta.3 public release
+
+- Promoted engine commit `742ddb55a0fcdd7d0d205b29c04228cef5b9c0ff` to engine `main`, then promoted app commit `7a698c3d8b704ad38003c9b9d4959209afa79fd4` to app `main`; the app's pinned engine revision is `e5158359cca2e780ca506cfd98e8b8015c63852a`.
+- Published public app tag/release [`v0.1.0-beta.3`](https://github.com/MrNova420/local-agent-workbench/releases/tag/v0.1.0-beta.3) as Latest. It is non-draft and GitHub's prerelease flag is off to keep it discoverable by the configured Electron update service. The engine repository does not have a separate app release/tag.
+- Uploaded Setup.exe, portable ZIP, full `.nupkg`, `RELEASES`, and `SHA256SUMS.txt`. GitHub's asset digests match the built binaries, and the downloaded checksum manifest matches the local manifest.
+- Read-only request to the beta.2 Electron update feed returned HTTP 200 and the beta.3 Setup URL. This confirms feed discovery only; it does not confirm a running installed app has downloaded, restarted, or recovered data.
+- Both GitHub Actions workflows failed before any steps started (runner allocation failure). Local verification in the candidate entry above is the available evidence; hosted CI is not passing.
+- The previous packaged app window had a live generation. It was left untouched; no beta.3 UI launch, new inference, cancellation, model load/unload, or duplicate app instance was performed. Visible beta.3 acceptance and installed update/recovery remain pending.
+
 ## 2026-10-31 roadmap and release-policy reconciliation
 
 - Added `docs/MASTER_ROADMAP.md` as the cross-repository source for current branch state, ordered source/package/visible/live-model/release gates, remaining core work, deferred backlog, evidence tiers, and documentation ownership.

@@ -8,7 +8,7 @@ The current distributable is a **Windows 10/11 x64** Squirrel.Windows installer 
 
 1. Update the app version in `package.json` and `package-lock.json`; ensure the SemVer value matches the `v`-prefixed Git tag.
 2. Update `core-revision.txt` and both workflow engine checkouts together when the shared Python engine changes.
-3. Run the app typecheck, app/sidecar tests, engine tests, Windows package build, bundled-worker protocol smoke, and the visible install/update workflow. A successful source test run alone is not a packaged release gate.
+3. Run the app typecheck, app/sidecar tests, engine tests, Windows package build, bundled-worker protocol smoke, and visible disposable-project workflow. The installed update canary is post-publication step 7 because the candidate cannot be discovered on the public feed before release.
 4. Inspect `out/make/squirrel.windows/x64/`: keep `RELEASES`, Setup `.exe`, and `*-full.nupkg` together. Keep the ZIP and `SHA256SUMS.txt` in the release assets too.
 5. Publish a GitHub Release from the matching `v<version>` tag and write user-facing notes from `CHANGELOG.md`. The Windows auto-update service consumes public, non-draft GitHub Releases and requires the Squirrel manifest and package assets. The release workflow therefore leaves GitHub's prerelease checkbox off while the SemVer version/title still says **Public beta**. Do not publish a draft or use GitHub's prerelease flag: the public Electron update service does not discover those releases.
 6. Verify the downloaded artifacts against `SHA256SUMS.txt`; verify the release page, setup instructions, screenshots, changelog, and platform limitations before announcing it.
@@ -32,7 +32,7 @@ Before creating a public tag, complete and record each gate in `MASTER_ROADMAP.m
 1. Reconcile the app and paired engine source commits; verify the engine SHA is public and identical in every app pin.
 2. Run engine pytest; app sidecar and renderer suites; typecheck; workflow validation; and focused fault-injection from the exact clean source tree. Resolve hosted runner availability or record a reproducible local equivalent without calling blocked CI a pass.
 3. Build the Windows package; inspect installer, `RELEASES`, `.nupkg`, ZIP, checksum manifest, and bundled worker startup/ping/shutdown.
-4. Exercise the packaged app visibly in a disposable workspace, including the real updater path from the previous installed version. Preserve any model already loaded before an approved inference check.
+4. Exercise the packaged app visibly in a disposable workspace and review updater readiness, feed URL, and required assets. Preserve any model already loaded before an approved inference check.
 5. Review release notes, setup/recovery instructions, screenshots for current-build accuracy and privacy, known limitations, license, and security reporting path.
 6. After source tests pass and before packaging, choose the next SemVer version and commit matching package manifests and release notes. Build and visibly inspect that exact version. Create its immutable tag only after those pre-publication gates pass; then confirm the public release has all required assets and updater-compatible flags. The installed-update canary is a post-publication gate because the update feed cannot serve a release that does not exist yet.
 
@@ -49,7 +49,7 @@ Never force-move a published tag to repair an artifact. If an artifact is wrong,
 
 ## Current release evidence
 
-The public app remains at the already published beta.2 until a later distributable build passes the gates above. Documentation and planning work does not advance its version. User-reported end-to-end website development is recorded in `ACCEPTANCE_LOG.md`; installed updater discovery and an actual upgrade cycle, current-build screenshots, and cross-platform packages remain separate acceptance items.
+Public app release `v0.1.0-beta.3` is now the latest version. Its local source/package checks passed; visible app acceptance and the installed beta.2-to-beta.3 update/recovery canary remain open, as recorded in `ACCEPTANCE_LOG.md`. Documentation and planning work alone do not advance the app version. User-reported end-to-end website development is also recorded there; current-build screenshots and cross-platform packages remain separate acceptance items.
 
 ## Upstream references
 
