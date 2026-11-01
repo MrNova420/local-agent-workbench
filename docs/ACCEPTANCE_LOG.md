@@ -686,3 +686,9 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - Project session reads are request-sequenced. A late save event for a previous workspace cannot replace the current project's session list. Restoring a session completes independently from its background project-session-list refresh.
 - Restoring a session also reloads that session's own file inventory; stale navigation, file, and session requests are ignored to prevent the previous workspace's file panel from remaining visible after a project switch.
 - No tests, typecheck, package build, UI acceptance, or model request was run. Verification remains queued for the final phase.
+
+# 2026-11-01 — Automatic implementation state from structured evidence (source only)
+
+- Removed prompt keyword/regex classification from engine continuation and starter-plan selection. Automatic intent now recognizes implementation from agent-owned open plan state and host-observed mutation operations; explicit Implement remains authoritative, while Discussion and Plan remain non-implementing.
+- If an Automatic-mode model requests a structured file mutation without first creating its own plan, the host publishes and saves an implementation checklist before executing that write. Updated Run Configuration guidance and added regression coverage for the plan-before-write event order.
+- The app now pins engine `b3057bd322b470cd444e7c3448070d658ee546b4`. Regressions remain unrun; no context, output, reasoning setting, active model, or runtime state changed.
