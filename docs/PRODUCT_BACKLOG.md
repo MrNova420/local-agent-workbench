@@ -5,9 +5,9 @@ The product target is full 1:1 user-facing feature and workflow parity with Code
 ## Current evidence and this release batch
 
 - The user reports a successful simple website project task completed in roughly 2–3 hours on their PC. This validates one real long-running project workflow; it does not establish speed, broad reliability, code quality, or release readiness. See `ACCEPTANCE_LOG.md`.
-- Release-preparation source now contains a Windows x64 GitHub Release updater, Squirrel launch-event handling, first-run/runtime setup guidance, scroll-follow behavior that respects reading history, compact expandable chat operations, and model-dot detail dismissal. These changes remain unverified until the final package, visible UI, install/upgrade, and updater checks pass.
-- Current screenshots are still a release gate. Only one historical Home/inference capture was present in the checked output folder, and the README labels it as historical.
-- The beta release remains gated on the last source checks, fresh package, visible acceptance, updater validation against a public GitHub Release, artifact/checksum inspection, and current Home/chat/worksheet screenshots. Keep user context/output/reasoning values unchanged.
+- Public beta `v0.1.0-beta.2` is published with a Windows x64 installer, portable ZIP, Squirrel update assets, and SHA-256 manifest. Local source checks and packaged UI/sidecar checks passed; GitHub Actions could not acquire a runner. Squirrel install/update-cycle acceptance remains open for a later release.
+- The README now contains three relevant historical Workbench screenshots; each is labeled historical. Current release-build Home/chat/worksheet captures remain a follow-up because the user-specific Home contains private workspace paths.
+- Keep the user's context/output/reasoning values unchanged. The next core-development batch remains isolated from the published beta.
 
 ## Queued for review and implementation
 
@@ -127,10 +127,11 @@ The app and shared engine have independent public MIT-licensed Git repositories 
 
 ### B-015: Chat reading continuity and concise tool activity
 
-**Status:** Source implemented; renderer and packaged acceptance pending.
+**Status:** Scroll-follow is implemented. Chat activity is being refined from compact cards into clickable text rows; package/UI acceptance and session-resume checks are queued.
 
 - Keep the transcript at the end only while the reader is already following live output. Show a jump-to-latest control after they scroll into earlier messages; restore follow mode when they return to the end.
-- Default tool activity to short chat rows with expandable arguments/output. Keep the complete activity trace and full results available in the worksheet and after session resume.
+- In chat, show each operation as a small clickable text line (action, affected path when available, and state), not a bordered panel. Expand that line on demand to see full arguments, output, results, and affected files. Keep the worksheet Activity Trace detailed and unchanged.
+- Keep full operation history and results available in the worksheet and after session resume; retain the selectable compact/sidebar/inline modes.
 - Verify long streamed output, reader scroll-up, jump-to-latest, session restore, and each display mode in the rebuilt app.
 
 ### B-016: Accurate model-orbit home visualization
@@ -143,7 +144,7 @@ The app and shared engine have independent public MIT-licensed Git repositories 
 
 ### B-017: Release screenshots and README visuals
 
-**Status:** README refreshed and two authentic historical captures added; current release screenshots pending. A third earlier-commit image is labeled as a reconstruction and excluded from user-facing galleries.
+**Status:** README refreshed and three authentic historical Workbench captures added; current release-build screenshots are still pending. The earlier-commit reconstruction remains excluded from user-facing galleries.
 
 - Add real screenshots from the exact rebuilt release candidate: Home/model orbit, chat with compact live activity, and the worksheet showing plan, trace, and resource readings.
 - Keep historical screenshots clearly labeled and ensure captures contain no private project paths or credentials.

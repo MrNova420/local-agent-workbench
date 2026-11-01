@@ -9,11 +9,23 @@ function ProgressiveText({ value }: { value: string }) {
   return <div className="activity-output-block"><pre>{shown}</pre>{remaining > 0 && <button className="activity-show-more" onClick={() => setVisible((count) => count + 16_000)}>Show next {Math.min(16_000, remaining).toLocaleString()} characters · {remaining.toLocaleString()} remaining</button>}</div>;
 }
 
-function ActivityCard({ row, expanded }: { row: ActivityRecord; expanded: boolean }) {
+function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expanded: boolean; surface: 'chat' | 'sidebar' }) {
   const title = row.name?.replaceAll('_', ' ') || (row.kind === 'plan' ? 'Plan updated' : row.kind === 'approval' ? 'Action approval' : row.kind === 'context' ? 'Request context compacted' : 'Activity');
+  const chatTitle = row.kind === 'operation' ? title.replace(/\bfile\b/gi, '').trim() : title;
+  const firstFile = row.affectedFiles?.[0];
+  const extraFiles = Math.max(0, (row.affectedFiles?.length || 0) - 1);
   const output = row.output || {};
   return <details className={`activity-card activity-${row.kind} activity-${row.status}`} open={expanded}>
-    <summary><span className={`activity-state-dot state-${row.status}`}/><strong>{title}</strong><span className="activity-status">{row.status.replaceAll('_', ' ')}</span>{row.approvalStatus && <span className={`activity-approval activity-approval-${row.approvalStatus}`}>approval {row.approvalStatus.replaceAll('_', ' ')}</span>}{row.affectedFiles?.length ? <span className="activity-file-count">{row.affectedFiles.length} file{row.affectedFiles.length === 1 ? '' : 's'}</span> : null}</summary>
+    <summary className={`activity-summary activity-summary-${surface}`}>
+      <span className={`activity-state-dot state-${row.status}`}/>
+      {surface === 'chat' ? <>
+        <span className="activity-chat-title">{chatTitle}</span>
+        {firstFile && <code className="activity-chat-file">{firstFile}{extraFiles > 0 ? ` +${extraFiles}` : ''}</code>}
+      </> : <strong>{title}</strong>}
+      <span className="activity-status">{row.status.replaceAll('_', ' ')}</span>
+      {row.approvalStatus && <span className={`activity-approval activity-approval-${row.approvalStatus}`}>approval {row.approvalStatus.replaceAll('_', ' ')}</span>}
+      {surface === 'sidebar' && row.affectedFiles?.length ? <span className="activity-file-count">{row.affectedFiles.length} file{row.affectedFiles.length === 1 ? '' : 's'}</span> : null}
+    </summary>
     <div className="activity-card-details">
       {row.affectedFiles?.length ? <div className="activity-files">{row.affectedFiles.map((file) => <code key={file}>{file}</code>)}</div> : null}
       {row.arguments !== undefined && <details className="activity-subdetails"><summary>Arguments</summary><ProgressiveText value={JSON.stringify(row.arguments, null, 2)}/></details>}
@@ -31,6 +43,6 @@ export function ActivityFeed({ entries, mode, surface }: { entries: ActivityReco
   if (surface === 'chat' && mode === 'sidebar') return null;
   if (!entries.length) return surface === 'sidebar' ? <p className="sheet-empty">Reads, tool calls, and results will appear here as they happen.</p> : null;
   return <div className={`activity-feed activity-feed-${surface} activity-mode-${mode}`} aria-label={surface === 'chat' ? 'Agent activity in this conversation' : 'Activity trace'}>
-    {entries.map((row) => <ActivityCard key={row.id} row={row} expanded={surface === 'chat' && mode === 'inline'}/>) }
+    {entries.map((row) => <ActivityCard key={row.id} row={row} expanded={surface === 'chat' && mode === 'inline'} surface={surface}/>) }
   </div>;
 }

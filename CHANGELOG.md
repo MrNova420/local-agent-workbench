@@ -2,6 +2,10 @@
 
 All notable user-facing changes are recorded here. This project is in unstable beta; changes may be incompatible before a stable release.
 
+## Unreleased
+
+- Refined chat tool activity into small clickable text rows with expandable full operation details; the worksheet Activity Trace remains a detailed panel.
+
 ## 0.1.0-beta.2 — 2026-10-31
 
 - Added a first-run checklist and a direct path to recover an unavailable Ollama installation.

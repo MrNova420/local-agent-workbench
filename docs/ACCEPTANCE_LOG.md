@@ -326,3 +326,9 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Remaining release evidence: installed Squirrel first-run/update discovery and an actual update cycle. The portable packaged build correctly reports that updates are unavailable. No model settings were changed, no model request was sent, and no model was loaded or unloaded for this verification.
 - Published the locally built artifacts as public GitHub release [`v0.1.0-beta.2`](https://github.com/MrNova420/local-agent-workbench/releases/tag/v0.1.0-beta.2): Setup.exe, ZIP, Squirrel `.nupkg`, `RELEASES`, and `SHA256SUMS.txt`. Verified GitHub's published SHA-256 digests against the local artifacts. After upload, corrected the manifest filenames to match GitHub's dot-normalized asset names and replaced the manifest; the listed artifact hashes remain unchanged.
 - Tag-triggered Windows source-check and package workflows also failed before starting a runner (runner ID 0, zero steps). The release assets came from the locally verified isolated build; remote workflow execution remains unverified.
+
+## 2026-10-31 next core-workbench iteration
+
+- Created isolated worktree `core-workbench-next` from the published app commit `2dc2442` for post-beta core development.
+- Refined default chat tool activity from bordered mini-cards into compact clickable text rows showing action, first affected path when available, and operation state. Opening a row reveals complete arguments, output streams, result, all affected files, and approval state; long output remains progressively readable. The worksheet Activity Trace and its panel layout are unchanged. Sidebar-only and full-inline display modes remain available.
+- Updated B-015 and the changelog to preserve this interaction contract. Automated tests, typecheck, package build, and visible UI acceptance are deliberately queued for the final verification gate; this change is not yet visually accepted.
