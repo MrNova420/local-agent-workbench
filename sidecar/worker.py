@@ -346,10 +346,12 @@ class AgentService:
                 checkpoint = state.get("task_checkpoint")
                 if isinstance(checkpoint, dict):
                     record_plan(checkpoint, plan_items, acceptance_criteria if criteria_included and source == "agent" else None,
-                                event.get("decisions"))
+                                event.get("decisions"), event.get("taskMode"))
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
                             "workspace": str(turn.workspace), "kind": "plan", "status": "updated", "source": source,
                             "items": copy.deepcopy(plan_items), "timestamp": time.time()}
+                if event.get("taskMode") in {"discussion", "plan", "implement"}:
+                    activity["taskMode"] = event["taskMode"]
                 if criteria_included:
                     activity["acceptanceCriteria"] = copy.deepcopy(acceptance_criteria)
                 if isinstance(event.get("decisions"), list):
@@ -1484,8 +1486,12 @@ class AgentService:
         self.emit({"type": "session_queue_update", "sessionId": state["session_id"], "workspace": str(source),
                    "queuedPrompts": copy.deepcopy(controller["session"].get("queued_prompts", []))})
         if new_task:
-            self._publish_run_event(controller, turn, {"type": "plan", "items": copy.deepcopy(state["plan"]),
-                                                       "acceptanceCriteria": [], "source": "workbench"})
+            starter_event = {"type": "plan", "items": copy.deepcopy(state["plan"]),
+                             "acceptanceCriteria": [], "source": "workbench"}
+            starter_mode = {"discuss": "discussion", "plan": "plan", "implement": "implement"}.get(task_intent)
+            if starter_mode:
+                starter_event["taskMode"] = starter_mode
+            self._publish_run_event(controller, turn, starter_event)
         thread = threading.Thread(target=self._run_turn, args=(controller, turn), name="agent-run", daemon=True)
         controller["thread"] = thread
         thread.start()

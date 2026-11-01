@@ -285,13 +285,15 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
                 if criteria_included:
                     task["acceptance_criteria"] = copy.deepcopy(acceptance_criteria)
                     task["acceptance_criteria_source"] = "agent" if event.get("source") != "workbench" else "awaiting_agent_refinement"
-                record_plan(checkpoint, event.get("items", []), None, event.get("decisions"))
+                record_plan(checkpoint, event.get("items", []), None, event.get("decisions"), event.get("taskMode"))
         plan_activity = {
             "id": event.get("actionId") or uuid.uuid4().hex, "turnId": event.get("turnId", run.get("turn_id")),
             "sessionId": state["session_id"], "workspace": event.get("workspace", state.get("workspace")),
             "kind": "plan", "status": "updated", "items": copy.deepcopy(event.get("items", [])),
             "timestamp": event.get("timestamp", time.time()),
         }
+        if event.get("taskMode") in {"discussion", "plan", "implement"}:
+            plan_activity["taskMode"] = event["taskMode"]
         if criteria_included:
             plan_activity["acceptanceCriteria"] = copy.deepcopy(acceptance_criteria)
         if isinstance(event.get("decisions"), list):

@@ -692,3 +692,8 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - Removed prompt keyword/regex classification from engine continuation and starter-plan selection. Automatic intent now recognizes implementation from agent-owned open plan state and host-observed mutation operations; explicit Implement remains authoritative, while Discussion and Plan remain non-implementing.
 - If an Automatic-mode model requests a structured file mutation without first creating its own plan, the host publishes and saves an implementation checklist before executing that write. Updated Run Configuration guidance and added regression coverage for the plan-before-write event order.
 - The app now pins engine `b3057bd322b470cd444e7c3448070d658ee546b4`. Regressions remain unrun; no context, output, reasoning setting, active model, or runtime state changed.
+
+# 2026-11-01 — Structured Automatic plan mode (source only)
+
+- Automatic plans now carry an explicit discussion/plan/implement mode in the durable task checkpoint and Activity Trace. An open plan-only checklist does not trigger implementation continuation; a real structured write still activates implementation evidence and inspection. Explicit UI task intent is authoritative over model-supplied metadata.
+- A new user follow-up retains plan and progress while resetting the prior Automatic mode choice to `auto`, so an earlier plan-only turn cannot suppress later implementation work. Added engine and renderer regression cases for mode visibility, persistence, reset, and continuation. The unpublished app now pins engine `e34d5959080585354a9a6f6bd8cfa6aabaa14182`; all checks remain queued and unrun.

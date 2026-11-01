@@ -305,6 +305,7 @@ def test_plan_intent_seeds_live_checklist_and_enforces_read_only_builtin_tools(s
     assert saved["task_checkpoint"]["current"]["acceptance_criteria_source"] == "awaiting_agent_refinement"
     plan_activity = next(event["activity"] for event in events if event.get("type") == "activity_event" and event.get("activity", {}).get("kind") == "plan")
     assert plan_activity["acceptanceCriteria"] == []
+    assert plan_activity["taskMode"] == "plan"
     assert saved["turns"][-1]["settings"]["task_intent"] == "plan"
     assert saved["turns"][-1]["settings"]["effective_access"] == "plan"
     assert any(event.get("type") == "activity_event" and event.get("activity", {}).get("kind") == "plan" for event in events)
@@ -324,12 +325,15 @@ def test_agent_plan_decisions_are_saved_to_checkpoint_and_activity(service, tmp_
     service._publish_run_event(controller, SimpleNamespace(workspace=project), {
         "type": "plan", "source": "agent", "items": [{"title": "Implement", "status": "in_progress"}],
         "acceptanceCriteria": ["Deep links still work."], "decisions": [decision],
+        "taskMode": "implement",
     })
 
     saved = service.sessions.load(state["session_id"], str(project))["state"]
     assert saved["task_checkpoint"]["current"]["decisions"][0]["text"] == decision
+    assert saved["task_checkpoint"]["current"]["task_mode"] == "implement"
     plan_activity = next(row for row in saved["activity_events"] if row.get("kind") == "plan")
     assert plan_activity["decisions"] == [decision]
+    assert plan_activity["taskMode"] == "implement"
 
 
 def test_session_run_settings_cannot_change_during_active_run(service, tmp_path):

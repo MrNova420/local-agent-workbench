@@ -1390,6 +1390,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
     }
     return grouped;
   }, [activities]);
+  const planTaskMode = [...activities].reverse().find((activity) => activity.kind === 'plan' && activity.taskMode)?.taskMode;
   const promptCacheComplete = runMetrics.usageResponses > 0
     && runMetrics.promptTokenReports === runMetrics.usageResponses
     && runMetrics.cachedPromptReports === runMetrics.usageResponses;
@@ -1458,7 +1459,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
           {telemetry.contextMismatch && <p className="context-warning" role="status">Ollama reports a smaller runtime context than requested. Available memory may limit allocation.</p>}
         </section>
         <div className="sheet-section sheet-panel" style={panelStyle('plan')}>
-          <div className="sheet-heading"><h3>Plan</h3><span>{plan.length ? `${plan.length} steps · ${plan.every((item) => item.source === 'workbench') ? 'starter' : 'live'}` : 'Awaiting agent'}</span><SheetPanelControls panel="plan" layout={sheetLayout} onMove={movePanel} onResize={resizePanel}/></div>
+          <div className="sheet-heading"><h3>Plan</h3><span>{plan.length ? `${plan.length} steps · ${planTaskMode || (options.taskIntent === 'implement' ? 'implement' : options.taskIntent)} · ${plan.every((item) => item.source === 'workbench') ? 'starter' : 'live'}` : 'Awaiting agent'}</span><SheetPanelControls panel="plan" layout={sheetLayout} onMove={movePanel} onResize={resizePanel}/></div>
           {plan.length ? <ol className="plan-list">{plan.map((item, index) => <li key={`${index}-${item.title || item.text}`}><span>{String(index + 1).padStart(2, '0')}</span><b>{item.group && <small className="plan-group">{item.group}</small>}{item.title || item.text || 'Work item'}{item.title && item.text && item.title !== 'Requested outcome' && <small className="plan-detail">{item.text}</small>}</b><small>{item.status || 'pending'}</small></li>)}</ol> : <p className="sheet-empty">A checklist appears immediately for plan/build tasks and can be refined by the agent.</p>}
           <div className="plan-acceptance"><h4>Acceptance criteria <span>{acceptanceCriteria.length ? `${acceptanceCriteria.length} agent-defined` : 'awaiting task refinement'}</span></h4>{acceptanceCriteria.length ? <ul>{acceptanceCriteria.map((criterion, index) => <li key={`${index}-${criterion}`}>{criterion}</li>)}</ul> : <p>The agent can add concrete completion checks after inspecting the task and project.</p>}</div>
         </div>

@@ -95,6 +95,7 @@ export type ActivityRecord = {
   sessionId: string;
   workspace?: string;
   kind: 'operation' | 'tool_preparation' | 'approval' | 'question' | 'plan' | 'context' | 'prompt' | 'error';
+  taskMode?: 'discussion' | 'plan' | 'implement';
   questionId?: string;
   question?: string;
   title?: string;
