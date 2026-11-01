@@ -385,7 +385,7 @@ class AgentService:
                 if activity is not None:
                     activity["providerRequest"] = {
                         key: copy.deepcopy(event[key])
-                        for key in ("provider", "request_api", "request_index", "model", "api_model", "stream", "tool_count", "requested_context",
+                        for key in ("provider", "request_api", "request_index", "model", "api_model", "stream", "tool_count", "tool_names", "deferred_tool_names", "requested_context",
                                     "runtime_context", "max_output_tokens", "reasoning_override", "runtime_reasoning",
                                     "reasoning_field_sent", "keep_alive", "request_options", "additional_fields",
                                     "estimated_input_tokens", "input_estimate_method")

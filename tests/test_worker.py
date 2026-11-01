@@ -204,7 +204,8 @@ def test_provider_request_settings_update_the_matching_prompt_activity_and_strea
                         "messages": [], "configured_context": 65536})
             self.event({"type": "inference_settings", "request_index": 1, "provider": "ollama",
                         "request_api": "/api/chat", "model": "model-a:latest", "api_model": "model-a:latest",
-                        "stream": True, "tool_count": 12, "requested_context": 65536,
+                        "stream": True, "tool_count": 2, "tool_names": ["read_file", "load_tools"],
+                        "deferred_tool_names": ["mcp__build__check"], "requested_context": 65536,
                         "max_output_tokens": 8192, "reasoning_override": None,
                         "reasoning_field_sent": True, "reasoning_override": "high", "keep_alive": "30m",
                         "request_options": {"num_ctx": 65536, "num_predict": 8192},
@@ -248,6 +249,9 @@ def test_provider_request_settings_update_the_matching_prompt_activity_and_strea
     assert prompt["providerRequest"]["http_status"] == 200
     assert prompt["providerRequest"]["header_wait_seconds"] == 0.75
     assert any(event.get("type") == "inference_settings" for event in events)
+    prompt_activity = next(item for item in service.state["activity_events"] if item.get("kind") == "prompt")
+    assert prompt_activity["providerRequest"]["tool_names"] == ["read_file", "load_tools"]
+    assert prompt_activity["providerRequest"]["deferred_tool_names"] == ["mcp__build__check"]
     assert any(event.get("type") == "request_headers" and event.get("http_status") == 200 for event in events)
     assert any(event.get("type") == "activity_event" and event.get("activity", {}).get("providerRequest")
                for event in events)
