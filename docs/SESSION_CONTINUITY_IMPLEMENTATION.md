@@ -37,6 +37,7 @@
 - The retained CLI approval dialog now presents exact argv/PowerShell text and truthful timeout semantics. CLI approval and cancellation acceptance remain queued.
 - Mocked resource-attribution coverage is owned by the engine repository alongside `telemetry.py`; it remains queued and unrun.
 - The required cancel chooser now waits for explicit sidecar acknowledgment; a failed IPC call leaves it open, and a no-longer-active run is reported instead of silently looking canceled. Finish-after-current-operation receives the same acceptance check. Mocked and visible chooser tests remain queued.
+- App-close choices also wait for host acknowledgment. Cancel-and-close validates cancellation acceptance and waits for run-idle before shutdown; failures keep the modal available instead of silently closing.
 
 ## Verification queue (not run in this implementation phase)
 

@@ -178,6 +178,7 @@ export default function App() {
   const [cancelChoiceOpen, setCancelChoiceOpen] = useState(false);
   const [cancelChoicePending, setCancelChoicePending] = useState<'cancel' | 'finish' | null>(null);
   const [closeChoiceOpen, setCloseChoiceOpen] = useState(false);
+  const [closeChoicePending, setCloseChoicePending] = useState<'keep' | 'hide' | 'cancel-close' | null>(null);
   const [trace, setTrace] = useState<TraceRow[]>([]);
   const [plan, setPlan] = useState<PlanItem[]>([]);
   const [acceptanceCriteria, setAcceptanceCriteria] = useState<string[]>([]);
@@ -817,6 +818,16 @@ export default function App() {
     catch (error) { notify((error as Error).message, 'bad'); }
   }
 
+  async function chooseCloseAction(choice: 'keep' | 'hide' | 'cancel-close') {
+    setCloseChoicePending(choice);
+    try {
+      await window.agent.resolveCloseChoice(choice);
+      setCloseChoiceOpen(false);
+    } catch (error) {
+      notify(`The close choice was not completed: ${(error as Error).message}`, 'bad');
+    } finally { setCloseChoicePending(null); }
+  }
+
   async function showDiff() {
     if (!workspace) {
       setDiffError('Choose a project before reviewing its changes.');
@@ -1008,7 +1019,7 @@ export default function App() {
     </Modal>}
     {closeChoiceOpen && <Modal title="A task is still running" eyebrow="CLOSE WORKBENCH" dismissible={false} onClose={() => undefined}>
       <p className="modal-copy">The task is still active. Choose whether to keep the window open, hide it while work continues, or cancel and close.</p>
-      <div className="activity-mode-choices"><button className="activity-mode-choice" onClick={() => { setCloseChoiceOpen(false); void window.agent.resolveCloseChoice('keep'); }}><b>Keep the app open</b><small>Return to the live task.</small></button><button className="activity-mode-choice recommended" onClick={() => { setCloseChoiceOpen(false); void window.agent.resolveCloseChoice('hide'); }}><b>Hide to background and continue</b><small>The workbench keeps running in the system tray.</small></button><button className="activity-mode-choice danger-choice" onClick={() => { setCloseChoiceOpen(false); void window.agent.resolveCloseChoice('cancel-close'); }}><b>Cancel the run and close</b><small>Wait for the current request to stop and save its received output.</small></button></div>
+      <div className="activity-mode-choices"><button className="activity-mode-choice" disabled={closeChoicePending !== null} onClick={() => void chooseCloseAction('keep')}><b>{closeChoicePending === 'keep' ? 'Returning to the task…' : 'Keep the app open'}</b><small>Return to the live task.</small></button><button className="activity-mode-choice recommended" disabled={closeChoicePending !== null} onClick={() => void chooseCloseAction('hide')}><b>{closeChoicePending === 'hide' ? 'Hiding to background…' : 'Hide to background and continue'}</b><small>The workbench keeps running in the system tray.</small></button><button className="activity-mode-choice danger-choice" disabled={closeChoicePending !== null} onClick={() => void chooseCloseAction('cancel-close')}><b>{closeChoicePending === 'cancel-close' ? 'Saving and closing…' : 'Cancel the run and close'}</b><small>Wait for the current request to stop and save its received output.</small></button></div>
     </Modal>}
     {diffOpen && <Modal title={session?.access === 'copy' ? 'Review proposed changes' : 'Project changes'} eyebrow="CHANGE REVIEW" wide onClose={() => setDiffOpen(false)}>
       {diffLoading ? <div className="empty-state" role="status">Loading changes from the selected project…</div> : diffError ? <div className="empty-state" role="alert">Could not load project changes: {diffError}</div> : session?.access === 'copy' ? <>

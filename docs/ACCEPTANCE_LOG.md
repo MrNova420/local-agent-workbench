@@ -478,3 +478,4 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 ## 2026-11-01 cancel chooser acknowledgment (verification queued)
 
 - Cancel now remains visible until the sidecar acknowledges the action; IPC failure leaves the required decision available for retry. The sidecar reports when there is no active run, and the UI reports that state instead of implying a cancel succeeded. Finish-current-operation also waits for the host's accepted/not-active result. Added mocked worker coverage; no tests or UI checks were run.
+- App-close choices now remain pending until Electron acknowledges keep/hide/cancel; cancellation must be accepted and the run must become idle before shutdown. IPC or tray failures leave the choice available and report the error. Packaged close-flow acceptance remains queued.

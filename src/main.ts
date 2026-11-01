@@ -314,13 +314,19 @@ app.whenReady().then(async () => {
   ipcMain.handle('app:resolve-close-choice', async (event, choice: unknown) => {
     assertTrusted(event);
     if (choice !== 'keep' && choice !== 'hide' && choice !== 'cancel-close') throw new Error('Invalid close choice.');
-    closeDecisionPending = false;
-    if (choice === 'keep') return;
-    if (choice === 'hide') { await ensureTray(); mainWindow?.hide(); return; }
-    if (service.isRunActive()) {
-      try { await service.request({ command: 'run_cancel' }); } catch { /* the sidecar may have exited already */ }
-      await service.waitForRunIdle();
+    if (choice === 'keep') { closeDecisionPending = false; return; }
+    if (choice === 'hide') {
+      try { await ensureTray(); mainWindow?.hide(); closeDecisionPending = false; return; }
+      catch (error) { closeDecisionPending = false; throw error; }
     }
+    try {
+      if (service.isRunActive()) {
+        const result = await service.request<{ cancelled: boolean }>({ command: 'run_cancel' });
+        if (!result.cancelled && service.isRunActive()) throw new Error('The agent sidecar did not accept cancellation.');
+        await service.waitForRunIdle();
+      }
+    } catch (error) { closeDecisionPending = false; throw error; }
+    closeDecisionPending = false;
     quitting = true;
     void service.shutdown().finally(() => app.exit(0));
   });
