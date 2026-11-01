@@ -701,7 +701,7 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 # 2026-11-01 — Missing final response recovery (source only)
 
 - After tool work, an empty assistant content result now triggers a final-response request. If repeated without observable progress, the engine records `response_missing` instead of completing silently. The status, verification evidence, and blocker are persisted and restored; the UI labels the outcome explicitly. No overall timeout or inference-setting change was added.
-- Engine, sidecar recovery, and renderer regressions are authored and queued. The continuation signature now counts task-mode changes, host-observed non-plan operations, file changes, and verification; repeated `update_plan` calls alone do not count, while the plan remains expandable with no item/pass cap. The current app pin is engine `63dc15ab629b31c370cd8d1a683138c3d02e84f8`. No tests, typecheck, UI, package, or model checks have run for this change.
+- Engine, sidecar recovery, and renderer regressions are authored and queued. The continuation signature now counts task-mode changes, host-observed non-plan operations, file changes, and verification; repeated `update_plan` calls alone do not count, while the plan remains expandable with no item/pass cap. The app pin at this historical checkpoint was engine `63dc15ab629b31c370cd8d1a683138c3d02e84f8`. No tests, typecheck, UI, package, or model checks have run for this change.
 
 # 2026-11-01 — Active run composer and worksheet visibility (source only)
 
@@ -713,3 +713,8 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - Ollama streams now fail visibly if EOF arrives without `done: true`; partial streamed text and reasoning stay in the run checkpoint. This specifically addresses incomplete responses being mistaken for finished reasoning. Regression coverage exists but remains unrun; current paired engine pin is `9d3b4d7e9bd36e3fd05f84a5b7451a78afc6bad1`.
 
 - Added an app-side integration regression that drives an incomplete streaming response through the worker relay, then checks the persisted partial reasoning, terminal failure state, and prompt-activity request error details. It remains queued with all other verification.
+
+# 2026-11-01 — Automatic plans continue into implementation (source only)
+
+- The engine now treats a pending agent-authored plan in Automatic mode as active work even when its current task mode is `plan`; it continues into implementation and inspection rather than reporting plan-only success. A plan with no pending items can still finish as plan-only, while explicit Workbench Plan-only/Discuss remain read-only.
+- The settings copy now explains that distinction. Added a queued regression covering plan → write → inspect → close plan → final response. Source-only; no tests, typecheck, UI, package, or model acceptance has run. Current app pin is engine `ecbe35d868c3de4092b18b50dfd321d00df421a7`.
