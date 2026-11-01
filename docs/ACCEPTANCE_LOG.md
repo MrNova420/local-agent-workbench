@@ -584,3 +584,7 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 
 - Renderer activity cards now expose persisted concise plan decisions and acceptance criteria in expandable details, so the activity sheet retains why work was chosen and how success is checked after session restoration.
 - Added renderer coverage; tests and visible session-reopen acceptance remain queued.
+
+## 2026-11-01 checkpoint plan-decision migration guard (verification queued)
+
+- Engine commit 8f0d477b467008bae802613cd53e89c3050f9969 discards a malformed legacy decisions field safely before recording new concise plan decisions. A regression is added for this recovery case and remains unrun. The app source pin and current readiness/roadmap references are synchronized; no tests or builds were run.
