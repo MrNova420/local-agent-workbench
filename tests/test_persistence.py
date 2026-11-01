@@ -7,6 +7,20 @@ from sidecar.persistence import MirroredSessionStore, WorkspaceHistory, _replay_
 
 
 class MirroredSessionStoreTests(unittest.TestCase):
+    def test_recovery_retains_checkpoint_and_in_task_compaction_metadata(self):
+        state = {"session_id": "s-context", "workspace": "C:/project",
+                 "run_state": {"turn_id": "turn-context"}, "activity_events": []}
+        _replay_run_event(state, {"type": "context_compacted", "turnId": "turn-context",
+                                  "omittedTurns": 3, "retainedTurns": 2, "omittedOperationGroups": 5,
+                                  "configuredContext": 65536, "inputBudget": 63488,
+                                  "checkpointIncluded": True, "checkpointEstimate": 420,
+                                  "checkpointCompacted": True,
+                                  "checkpointOmissions": {"operations": 18, "user_updates": 7}})
+        activity = state["activity_events"][0]
+        self.assertEqual(activity["omittedOperationGroups"], 5)
+        self.assertTrue(activity["checkpointCompacted"])
+        self.assertEqual(activity["checkpointOmissions"], {"operations": 18, "user_updates": 7})
+
     def test_tool_preparation_progress_replays_as_safe_session_activity(self):
         state = {"session_id": "s-progress", "workspace": "C:/project",
                  "run_state": {"turn_id": "turn-progress"}, "activity_events": []}

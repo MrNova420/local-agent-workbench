@@ -264,6 +264,7 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
             "id": event.get("actionId") or uuid.uuid4().hex, "turnId": event.get("turnId", run.get("turn_id")),
             "sessionId": state["session_id"], "workspace": event.get("workspace", state.get("workspace")),
             "kind": "context", "status": "compacted", "omittedTurns": event.get("omittedTurns", 0),
+            "omittedOperationGroups": event.get("omittedOperationGroups", 0),
             "retainedTurns": event.get("retainedTurns", 0), "configuredContext": event.get("configuredContext", state.get("context")),
             "inputBudget": event.get("inputBudget", 0), "reason": event.get("reason", ""),
             "checkpointIncluded": event.get("checkpointIncluded", False),
