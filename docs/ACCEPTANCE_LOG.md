@@ -701,4 +701,4 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 # 2026-11-01 — Missing final response recovery (source only)
 
 - After tool work, an empty assistant content result now triggers a final-response request. If repeated without observable progress, the engine records `response_missing` instead of completing silently. The status, verification evidence, and blocker are persisted and restored; the UI labels the outcome explicitly. No overall timeout or inference-setting change was added.
-- Engine, sidecar recovery, and renderer regressions are authored and queued. The current app pin is engine `f63b9427310c29330206a80e5d9a9f00645a2172`. No tests, typecheck, UI, package, or model checks have run for this change.
+- Engine, sidecar recovery, and renderer regressions are authored and queued. Structured task-mode changes also count as progress for the continuation detector. The current app pin is engine `4d39f8a804b129482108dad5c371b4d531447968`. No tests, typecheck, UI, package, or model checks have run for this change.
