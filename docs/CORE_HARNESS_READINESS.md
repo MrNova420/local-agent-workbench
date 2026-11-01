@@ -337,3 +337,9 @@ The section above records an earlier checkpoint and its evidence; it is not the 
 - File listing and text search now paginate to the run's context-derived tool-output budget. Oversized matching lines identify the exact file/line for complete read_file retrieval; offsets preserve remaining results. Regression coverage remains queued.
 
 - Large command, MCP, search, and other tool results are retained in full for the UI/session while model input receives a context-budgeted beginning/end excerpt with a precise read_operation_result cursor. This prevents one oversized operation result from terminating compaction; verification remains queued.
+
+# 2026-11-01 — Session-scoped follow-up queue (unverified)
+
+- The active chat composer can save follow-up prompts while inference continues. Queue changes are mirrored and bound to the saved session's workspace; a project mismatch or run-finalization race reports an error rather than redirecting the prompt.
+- Entries remain reviewable after resume and require explicit user selection to start. Consumption validates the saved ID and text and persists queue removal with the new run snapshot, preventing automatic duplicate replay after a crash. Queueing does not interrupt inference or change model/context/output/reasoning settings.
+- Sidecar and renderer regression cases are queued; this source change has not been tested, typechecked, packaged, or visibly accepted.

@@ -50,6 +50,72 @@ def test_dynamic_models_and_full_advertised_context(service):
     }
 
 
+def test_session_followup_prompt_queue_is_persisted_and_project_bound(service, tmp_path, monkeypatch):
+    project = tmp_path / "queued-prompt-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    events = []
+    monkeypatch.setattr(service, "emit", events.append)
+
+    queued = service.handle("session_queue_prompt", {
+        "sessionId": state["session_id"], "workspace": str(project), "prompt": "Add a settings page",
+    })
+
+    assert len(queued["queuedPrompts"]) == 1
+    queued_item = queued["queuedPrompts"][0]
+    assert queued_item["prompt"] == "Add a settings page"
+    assert service.sessions.load(state["session_id"])["queued_prompts"] == [queued_item]
+    assert events[-1]["type"] == "session_queue_update"
+    with pytest.raises(ValueError, match="different project"):
+        service.handle("session_queue_prompt", {
+            "sessionId": state["session_id"], "workspace": str(tmp_path), "prompt": "Wrong project",
+        })
+
+    removed = service.handle("session_queue_remove", {
+        "sessionId": state["session_id"], "workspace": str(project), "queuedPromptId": queued_item["id"],
+    })
+    assert removed["queuedPrompts"] == []
+    assert service.sessions.load(state["session_id"])["queued_prompts"] == []
+
+
+def test_consume_queued_prompt_requires_exact_id_and_text_and_removes_once():
+    item = {"id": "queue-1", "prompt": "Run the saved follow-up", "queued_at": 1.0}
+    state = {"queued_prompts": [item]}
+
+    with pytest.raises(ValueError, match="does not match"):
+        worker.consume_queued_prompt(state, "queue-1", "Different prompt")
+    assert state["queued_prompts"] == [item]
+
+    assert worker.consume_queued_prompt(state, "queue-1", item["prompt"]) == item
+    assert state["queued_prompts"] == []
+    with pytest.raises(ValueError, match="no longer exists"):
+        worker.consume_queued_prompt(state, "queue-1", item["prompt"])
+
+
+def test_followup_prompt_queue_updates_only_its_active_session(service, tmp_path, monkeypatch):
+    project = tmp_path / "active-queue-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    controller = {"session": state, "checkpoint_lock": threading.RLock(), "accepting_queue": True,
+                  "cancel": threading.Event()}
+    service.active = controller
+    emitted = []
+    monkeypatch.setattr(service, "emit", emitted.append)
+
+    result = service.handle("session_queue_prompt", {
+        "sessionId": state["session_id"], "workspace": str(project), "prompt": "Continue with tests",
+    })
+
+    assert result["queuedPrompts"] == controller["session"]["queued_prompts"]
+    assert not controller["cancel"].is_set()
+    assert emitted[-1]["sessionId"] == state["session_id"]
+    controller["accepting_queue"] = False
+    with pytest.raises(RuntimeError, match="finishing"):
+        service.handle("session_queue_prompt", {
+            "sessionId": state["session_id"], "workspace": str(project), "prompt": "Must be retried",
+        })
+
+
 def test_session_run_settings_persist_skill_controls_and_inference_values(service, tmp_path):
     workspace = tmp_path / "skill-settings-project"
     workspace.mkdir()

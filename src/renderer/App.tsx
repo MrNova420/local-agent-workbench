@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
-import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, SkillSource, TaskIntent, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
+import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, QueuedPrompt, RunOptions, SessionSummary, SkillSource, TaskIntent, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
 import { applyToolCallProgress, nextRunPhase, restoredRunPhase, runStepProgress, type ToolCallProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordInputEstimate, recordStreamedText, restoreRunMetrics, type RunMetrics } from '../shared/run-metrics';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice, readRunTokenPreferences } from '../shared/model-controls';
@@ -41,6 +41,7 @@ type Session = {
   last_error?: { message: string; occurred_at: number };
   activity_mode?: ActivityMode;
   activity_events?: ActivityRecord[];
+  queued_prompts?: QueuedPrompt[];
   turns?: Array<{ turn_id?: string; prompt?: string; started_at?: number; finished_at?: number; status?: string; transcript_saved?: boolean }>;
   plan?: PlanItem[];
   usage_events?: Array<{ turn_id?: string; request_index?: number; first_token_seconds?: number; estimated_input_tokens?: number; usage?: Record<string, unknown> }>;
@@ -489,6 +490,13 @@ export default function App() {
           return next;
         });
       }
+      if (event.type === 'session_queue_update' && Array.isArray(event.queuedPrompts)) {
+        const sessionId = String(event.sessionId || '');
+        const queuedPrompts = event.queuedPrompts.filter((row): row is QueuedPrompt =>
+          typeof row === 'object' && row !== null && typeof row.id === 'string'
+          && typeof row.prompt === 'string' && typeof row.queued_at === 'number');
+        setSession((current) => current?.session_id === sessionId ? { ...current, queued_prompts: queuedPrompts } : current);
+      }
       if (event.type === 'tool_call_progress') {
         setToolCallProgress((current) => applyToolCallProgress(current, event));
       }
@@ -776,9 +784,10 @@ export default function App() {
     } catch (error) { notify(`Could not start a session: ${(error as Error).message}`, 'bad'); }
   }
 
-  async function startRun() {
+  async function startRun(queuedPrompt?: QueuedPrompt) {
     if (modelPreloading) { notify('Wait for the selected model to finish preloading before starting this task.', 'warn'); return; }
-    if (running || !session || !workspace || !model || !prompt.trim()) return;
+    const task = queuedPrompt?.prompt.trim() || prompt.trim();
+    if (running || !session || !workspace || !model || !task) return;
     if (model.startsWith('gguf::')) {
       try {
         const status = await request<Record<string, unknown>>({ command: 'llama_status' });
@@ -789,7 +798,6 @@ export default function App() {
         }
       } catch (error) { notify(`Could not verify llama.cpp runtime: ${(error as Error).message}`, 'bad'); return; }
     }
-    const task = prompt.trim();
     assistantSegmentBreakRef.current = false;
     const run: RunOptions = {
       workspace, sessionId: session.session_id, prompt: task, model, providerId: model.startsWith('gguf::') ? 'llama.cpp' : 'ollama',
@@ -799,13 +807,41 @@ export default function App() {
       harnessProfile: options.harnessProfile,
       taskIntent: options.taskIntent,
       skillsEnabled: options.skillsEnabled, skillSources: options.skillSources,
+      ...(queuedPrompt ? { queuedPromptId: queuedPrompt.id } : {}),
     };
     if (options.approvalMode === 'auto') setOptions((current) => ({ ...current, approvalMode: 'per-action' }));
     setMessages((current) => [...current, { role: 'user', content: task }]);
     setTrace([]); setPlan([]); setAcceptanceCriteria([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setRunning(true); setPhase('Connecting to Ollama');
     setStartedAt(Date.now()); setElapsed(0); setRunMetrics(emptyRunMetrics());
     try { await request({ command: 'run_start', options: run }); }
-    catch (error) { setRunning(false); setPhase('Run failed'); setWorkflowOutcome('failed'); notify((error as Error).message, 'bad'); }
+    catch (error) {
+      setRunning(false); setPhase('Run failed'); setWorkflowOutcome('failed'); setPrompt(task);
+      setMessages((current) => current.at(-1)?.role === 'user' && current.at(-1)?.content === task && !current.at(-1)?.turnId
+        ? current.slice(0, -1) : current);
+      notify((error as Error).message, 'bad');
+    }
+  }
+
+  async function queueFollowupPrompt() {
+    if (!running || !session || !workspace || !prompt.trim()) return;
+    try {
+      const result = await request<{ queuedPrompts: QueuedPrompt[] }>({
+        command: 'session_queue_prompt', sessionId: session.session_id, workspace, prompt: prompt.trim(),
+      });
+      setSession((current) => current?.session_id === session.session_id ? { ...current, queued_prompts: result.queuedPrompts } : current);
+      setPrompt('');
+      notify('Follow-up saved for this session. It will not interrupt the active run.');
+    } catch (error) { notify(`Could not save follow-up: ${(error as Error).message}`, 'bad'); }
+  }
+
+  async function removeQueuedPrompt(queuedPromptId: string) {
+    if (!session || !workspace) return;
+    try {
+      const result = await request<{ queuedPrompts: QueuedPrompt[] }>({
+        command: 'session_queue_remove', sessionId: session.session_id, workspace, queuedPromptId,
+      });
+      setSession((current) => current?.session_id === session.session_id ? { ...current, queued_prompts: result.queuedPrompts } : current);
+    } catch (error) { notify(`Could not remove queued follow-up: ${(error as Error).message}`, 'bad'); }
   }
 
   async function toggleHarnessProfile() {
@@ -1046,8 +1082,9 @@ export default function App() {
       {view === 'session' && <SessionRoom
         root={workspace} session={session} messages={messages} activities={activities} activityMode={activityMode} plan={plan} acceptanceCriteria={acceptanceCriteria} phase={phase} workflowOutcome={workflowOutcome} verificationEvidence={verificationEvidence} toolCallProgress={toolCallProgress}
         elapsed={elapsed} running={running} prompt={prompt} setPrompt={setPrompt} promptRef={promptRef}
+        queuedPrompts={session?.queued_prompts || []} onQueue={queueFollowupPrompt} onRemoveQueued={removeQueuedPrompt}
         options={options} setOptions={setOptions} files={availableFiles} telemetry={telemetry}
-        runMetrics={runMetrics} onRun={startRun} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
+        runMetrics={runMetrics} onRun={() => void startRun()} onRunQueued={(item) => void startRun(item)} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
         onDiff={showDiff} onMcp={openMcp} onTools={openTools} onEnter={enter} endRef={endRef} model={model} modelInfo={modelInfo} appliedSettings={appliedSettings} onToggleHarnessProfile={() => void toggleHarnessProfile()}
       />}
     </main>
@@ -1206,15 +1243,16 @@ function ProjectHome({ root, tab, setTab, files, sessions, onNew, onOpenSession,
   </section>;
 }
 
-function SessionRoom({ root, session, messages, activities, activityMode, plan, acceptanceCriteria, phase, workflowOutcome, verificationEvidence, toolCallProgress, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
+function SessionRoom({ root, session, messages, activities, activityMode, plan, acceptanceCriteria, phase, workflowOutcome, verificationEvidence, toolCallProgress, elapsed, running, prompt, setPrompt, promptRef, queuedPrompts, onQueue, onRemoveQueued, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onRunQueued, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
   root: string; session: Session | null; messages: ChatMessage[]; activities: ActivityRecord[]; activityMode: ActivityMode; plan: PlanItem[]; acceptanceCriteria: string[];
   phase: string; elapsed: number; running: boolean; prompt: string; setPrompt: (value: string) => void;
+  queuedPrompts: QueuedPrompt[]; onQueue: () => void; onRemoveQueued: (id: string) => void;
   toolCallProgress: ToolCallProgress[];
   workflowOutcome: string | null; verificationEvidence: VerificationEvidence | null; promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
   setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>; files: ProjectFile[];
   telemetry: TelemetryView;
   runMetrics: RunMetrics; appliedSettings: AppliedSettings | null;
-  onRun: () => void; onCancel: () => void; onSettings: () => void; onBack: () => void; onDiff: () => void; onMcp: () => void; onTools: () => void;
+  onRun: () => void; onRunQueued: (prompt: QueuedPrompt) => void; onCancel: () => void; onSettings: () => void; onBack: () => void; onDiff: () => void; onMcp: () => void; onTools: () => void;
   onEnter: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void; endRef: React.RefObject<HTMLDivElement | null>; model: string; modelInfo: ModelInfo | null; onToggleHarnessProfile: () => void;
 }) {
   const transcriptRef = useRef<HTMLDivElement>(null);
@@ -1265,8 +1303,9 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
         </article>{message.role === 'user' && message.turnId && <ActivityFeed entries={activitiesByTurn.get(message.turnId) || []} mode={activityMode} surface="chat"/>}</Fragment>)}{toolCallProgress.length > 0 && <div className="tool-call-progress" role="status" aria-live="polite"><span className="stream-pulse"/><strong>Preparing structured tool request · not dispatched</strong>{toolCallProgress.map((item) => <span key={`${item.requestIndex}-${item.callIndex}`}>{item.provider.toUpperCase()} · {item.toolName || `Tool ${item.callIndex + 1}`} · {item.argumentCharacters.toLocaleString()} argument characters</span>)}</div>}<div ref={endRef}/>{!followTranscript && <button className="jump-latest" onClick={() => { followTranscriptRef.current = true; setFollowTranscript(true); if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight; }} aria-label="Jump to latest message">↓ Latest</button>}</div>}
         <div className="composer-shell">
           <div className="composer-profile"><span className={`profile-chip access-${options.access}`}>{options.access.toUpperCase()}</span><span className="profile-chip approval-chip">{options.approvalMode === 'auto' ? 'AUTO APPROVE · THIS RUN' : options.approvalMode === 'per-task' ? 'PER TASK' : 'PER ACTION'}</span><span className="profile-chip capability-chip" title="Capability reported by the selected local runtime; support metadata may be unknown">TOOLS {modelInfo?.tool_support === 'supported' ? 'SUPPORTED' : modelInfo?.tool_support === 'unsupported' ? 'UNSUPPORTED' : 'UNKNOWN'}</span><span className="profile-chip intent-chip" title="Task intent guides the agent; file access and approval remain separate">INTENT {options.taskIntent.toUpperCase()}</span><button className={`profile-toggle ${options.harnessProfile === 'small-model' ? 'is-active' : ''}`} type="button" aria-pressed={options.harnessProfile === 'small-model'} title="Changes agent workflow guidance only; model settings and token limits stay unchanged" onClick={onToggleHarnessProfile} disabled={running}>Small-model {options.harnessProfile === 'small-model' ? 'on' : 'off'}</button><span className="profile-hint">{fmt(options.context)} context · {fmt(options.maxTokens)} output</span><button onClick={onSettings}>Adjust run</button></div>
-          <textarea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={onEnter} placeholder="Describe the work. Use Shift + Enter to add detail…" rows={3} disabled={running} aria-label="Task prompt"/>
-          <div className="composer-bottom"><span><kbd>ENTER</kbd> to run <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> reasoning {options.reasoning == null ? 'model default' : String(options.reasoning)}</span>{running ? <Button kind="danger" onClick={onCancel}><Icon name="stop"/> Cancel request</Button> : <Button kind="bright" onClick={onRun} disabled={!prompt.trim()}><Icon name="play"/> Run task</Button>}</div>
+          <textarea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={running ? (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); onQueue(); } } : onEnter} placeholder={running ? 'Draft a follow-up without interrupting this run…' : 'Describe the work. Use Shift + Enter to add detail…'} rows={3} aria-label={running ? 'Follow-up prompt' : 'Task prompt'}/>
+          <div className="composer-bottom"><span>{running ? <><kbd>ENTER</kbd> to queue after this run <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line</> : <><kbd>ENTER</kbd> to run <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> reasoning {options.reasoning == null ? 'model default' : String(options.reasoning)}</>}</span>{running ? <><Button kind="outline" onClick={onQueue} disabled={!prompt.trim()}><Icon name="plus"/> Queue next</Button><Button kind="danger" onClick={onCancel}><Icon name="stop"/> Cancel request</Button></> : <Button kind="bright" onClick={onRun} disabled={!prompt.trim()}><Icon name="play"/> Run task</Button>}</div>
+          {queuedPrompts.length > 0 && <section className="queued-prompt-list" aria-label="Saved follow-up prompts"><div className="queued-prompt-heading"><b>FOLLOW-UPS</b><span>{queuedPrompts.length} saved · starts only when selected</span></div>{queuedPrompts.map((item, index) => <article className="queued-prompt-row" key={item.id}><div><small>#{index + 1} · {new Date(item.queued_at * 1000).toLocaleString()}</small><p>{item.prompt}</p></div><div className="queued-prompt-actions"><Button kind="bright" disabled={running} onClick={() => onRunQueued(item)}><Icon name="play"/> Start next</Button><Button kind="quiet" onClick={() => onRemoveQueued(item.id)}>Remove</Button></div></article>)}</section>}
         </div>
       </section>
       <aside className="run-sheet">

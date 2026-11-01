@@ -219,3 +219,4 @@ Restored Plan decisions/criteria and latest-turn Plan activity; malformed checkp
 File list/search results now use the selected-context response budget with resumable offsets; large lines route to full range reads. Regression verification remains queued.
 
 Large tool outputs are now context-budgeted for inference while preserving the full result in the activity/session history with range retrieval. Verification remains queued.
+- The active app source adds durable session-scoped follow-up prompts that can be drafted during long runs without interrupting them. They are mirrored, project-bound, explicitly started by the user, and consumed once with the new run snapshot. Tests are queued; no typecheck/package/visible acceptance has run.

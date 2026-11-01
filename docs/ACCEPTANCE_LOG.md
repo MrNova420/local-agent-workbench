@@ -653,3 +653,8 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - Engine commit `4ec81e176aa7257b03b71b345f62b896d170439c` compacts the inference-only checkpoint to its assigned budget, preserves the full canonical plan and history, and reports omitted details for paging. The fixed assistant-update character cutoff was removed.
 - Regression cases for large expandable plans and oversized task goals were added. No tests, typecheck, package, app launch, or model request was run.
 - The compact-envelope and omission-parser edge case now has a small-budget regression; it is queued and unrun.
+
+# 2026-11-01 — Session-scoped follow-up queue (source only)
+
+- Added a saved follow-up queue to the active chat: prompts may be drafted during inference, remain attached to that session/project, and start only after explicit user selection. Queue mutations do not cancel or steer the active request.
+- Queue persistence, mirror behavior, project isolation, exact one-time consumption, and renderer interaction regressions are added but intentionally unrun. No typecheck, package, app launch, or model request was performed.

@@ -55,6 +55,34 @@ from providers.registry import ProviderRegistry  # noqa: E402
 APP_DATA = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "LocalAgentWorkbench"
 
 
+def _validated_queued_prompts(state: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = state.get("queued_prompts", [])
+    if not isinstance(rows, list):
+        raise ValueError("Saved follow-up prompt queue is invalid.")
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in rows:
+        if (not isinstance(row, dict) or not isinstance(row.get("id"), str) or not row["id"]
+                or row["id"] in seen or not isinstance(row.get("prompt"), str) or not row["prompt"].strip()
+                or isinstance(row.get("queued_at"), bool) or not isinstance(row.get("queued_at"), (int, float))):
+            raise ValueError("Saved follow-up prompt queue contains an invalid entry.")
+        seen.add(row["id"])
+        result.append(copy.deepcopy(row))
+    return result
+
+
+def consume_queued_prompt(state: dict[str, Any], queued_prompt_id: str, prompt: str) -> dict[str, Any]:
+    rows = _validated_queued_prompts(state)
+    index = next((index for index, row in enumerate(rows) if row["id"] == queued_prompt_id), None)
+    if index is None:
+        raise ValueError("That queued prompt no longer exists.")
+    item = rows[index]
+    if item["prompt"] != prompt:
+        raise ValueError("The queued prompt text does not match the selected queue entry.")
+    state["queued_prompts"] = [row for row in rows if row["id"] != queued_prompt_id]
+    return item
+
+
 def _saved_operation_result(state: dict[str, Any], operation_id: str) -> str | None:
     """Read a completed result only from the session captured by the active turn."""
     for row in state.get("activity_events", []):
@@ -606,6 +634,67 @@ class AgentService:
             if not keep_lock:
                 self.ollama_preload_lock.release()
 
+    def _edit_session_queue(self, message: dict[str, Any], *, add_prompt: str | None = None,
+                            remove_id: str | None = None) -> dict[str, Any]:
+        session_id = str(message.get("sessionId", ""))
+        if not session_id:
+            raise ValueError("Choose the saved session for this follow-up prompt.")
+        selected_workspace = validate_selected_workspace(True, str(message.get("workspace", "")))
+        with self.active_lock:
+            controller = self.active
+        if controller is not None:
+            state = controller["session"]
+            if state.get("session_id") != session_id:
+                raise RuntimeError("Follow-up prompts can only be queued for the active session while a run is in progress.")
+            if Path(state["workspace"]).resolve(strict=True) != selected_workspace:
+                raise ValueError("The selected session belongs to a different project.")
+            lock = controller["checkpoint_lock"]
+            with lock:
+                if not controller.get("accepting_queue", True):
+                    raise RuntimeError("This run is finishing; try queuing the prompt again after it saves.")
+                prompts = _validated_queued_prompts(state)
+                state["queued_prompts"] = prompts
+                result = self._mutate_queue(prompts, add_prompt=add_prompt, remove_id=remove_id)
+                state["queued_prompts"] = result["queuedPrompts"]
+                saved = self.sessions.save(state)
+        else:
+            if not self.run_lock.acquire(blocking=False):
+                raise RuntimeError("A run is starting; retry the follow-up after it is ready.")
+            try:
+                state = self.sessions.load(session_id)
+                if Path(state["workspace"]).resolve(strict=True) != selected_workspace:
+                    raise ValueError("The selected session belongs to a different project.")
+                prompts = _validated_queued_prompts(state)
+                result = self._mutate_queue(prompts, add_prompt=add_prompt, remove_id=remove_id)
+                state["queued_prompts"] = result["queuedPrompts"]
+                saved = self.sessions.save(state)
+            finally:
+                self.run_lock.release()
+        if not (saved.get("app_saved") and saved.get("project_saved")):
+            self.emit({"type": "session_mirror_error", "sessionId": session_id, "workspace": str(selected_workspace),
+                       "appSaved": saved.get("app_saved", False), "projectSaved": saved.get("project_saved", False),
+                       "error": saved.get("error") or "Queued prompt could not be mirrored to both session stores."})
+        result["persistence"] = saved
+        self.emit({"type": "session_queue_update", "sessionId": session_id, "workspace": str(selected_workspace),
+                   "queuedPrompts": copy.deepcopy(result["queuedPrompts"])})
+        return result
+
+    @staticmethod
+    def _mutate_queue(prompts: list[dict[str, Any]], *, add_prompt: str | None,
+                      remove_id: str | None) -> dict[str, Any]:
+        updated = copy.deepcopy(prompts)
+        if add_prompt is not None:
+            clean = add_prompt.strip()
+            if not clean:
+                raise ValueError("Enter a follow-up prompt before queuing it.")
+            item = {"id": uuid.uuid4().hex, "prompt": clean, "queued_at": time.time()}
+            updated.append(item)
+            return {"queued": item, "removed": False, "queuedPrompts": updated}
+        removed = next((item for item in updated if item.get("id") == remove_id), None)
+        if removed is not None:
+            updated = [item for item in updated if item.get("id") != remove_id]
+        return {"queued": None, "removed": removed is not None, "queuedPrompts": updated}
+
     def handle(self, command: str, message: dict[str, Any]) -> Any:
         if command == "ping":
             return {"status": "ready", "version": "0.1.0"}
@@ -788,6 +877,13 @@ class AgentService:
         if command == "sessions_list":
             workspace = message.get("workspace")
             return self.sessions.list(str(workspace) if workspace else None)
+        if command == "session_queue_prompt":
+            prompt = message.get("prompt")
+            if not isinstance(prompt, str):
+                raise ValueError("Follow-up prompt must be text.")
+            return self._edit_session_queue(message, add_prompt=prompt)
+        if command == "session_queue_remove":
+            return self._edit_session_queue(message, remove_id=str(message.get("queuedPromptId", "")))
         if command == "session_new":
             root = validate_selected_workspace(True, message["workspace"])
             model = str(message.get("model", "")).strip()
@@ -1272,6 +1368,11 @@ class AgentService:
         state = self.sessions.load(str(session_id)) if session_id else self.sessions.create(str(source), model, int(options["context"]))
         if Path(state["workspace"]).resolve(strict=True) != source:
             raise ValueError("Selected session belongs to a different project. Open that project's workspace explicitly first.")
+        queued_prompt_id = options.get("queuedPromptId")
+        if queued_prompt_id is not None:
+            if not isinstance(queued_prompt_id, str) or not queued_prompt_id:
+                raise ValueError("Queued prompt identity is invalid.")
+            consume_queued_prompt(state, queued_prompt_id, prompt)
         state.update(
             model=model, model_id=model, provider_id=provider.provider_id, provider=provider.provider_id,
             context=int(options["context"]), access=access,
@@ -1369,13 +1470,15 @@ class AgentService:
         controller = {"cancel": threading.Event(), "engine": None, "pending": {}, "pending_questions": {}, "session": turn.session, "source": source, "working": working,
                      "turn_id": turn_id, "checkpoint_lock": threading.RLock(), "last_checkpoint": time.monotonic(),
                      "last_journal_flush": time.monotonic(), "journal_pending": [], "current_operation_id": None,
-                     "stop_after_operation": False}
+                     "stop_after_operation": False, "accepting_queue": True}
         with self.active_lock:
             self.active = controller
         saved = self.sessions.save(controller["session"])
         if not (saved["app_saved"] and saved["project_saved"]):
             self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"], "error": saved["error"] or "Session storage is unavailable."})
         self.emit({"type": "run_started", "sessionId": state["session_id"], "turnId": turn_id})
+        self.emit({"type": "session_queue_update", "sessionId": state["session_id"], "workspace": str(source),
+                   "queuedPrompts": copy.deepcopy(controller["session"].get("queued_prompts", []))})
         if new_task:
             self._publish_run_event(controller, turn, {"type": "plan", "items": copy.deepcopy(state["plan"]),
                                                        "acceptanceCriteria": [], "source": "workbench"})
@@ -1514,6 +1617,8 @@ class AgentService:
             update_turn_record("running", saved_user_count > int(prior_user_count))
             terminal = relay.terminal_event
             successful_completion = completion_event
+            with controller["checkpoint_lock"]:
+                controller["accepting_queue"] = False
             run_state = state.get("run_state")
             if isinstance(run_state, dict):
                 if terminal and terminal.get("type") in {"error", "cancelled", "stopped_after_operation"}:
@@ -1565,6 +1670,8 @@ class AgentService:
                 self.emit({"type": "error", "error": "The engine returned without a terminal completion event.",
                            "sessionId": state["session_id"], "turnId": controller["turn_id"], "workspace": str(turn.workspace)})
         except Exception as exc:
+            with controller["checkpoint_lock"]:
+                controller["accepting_queue"] = False
             finish_task(state.get("task_checkpoint", {}), "failed", blocker=f"{type(exc).__name__}: {exc}")
             state["messages"] = state.get("messages", [])
             update_turn_record("failed")
