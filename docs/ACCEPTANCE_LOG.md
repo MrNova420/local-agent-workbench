@@ -557,3 +557,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - MCP setup and persistent-policy dialogs now explain the actual defaults and precedence: approval by default, allow skips the prompt, ask forces it, and deny wins. They also retain the explicit Windows-account/no-OS-containment warning.
 - UI rendering and accessibility acceptance remain queued; no permission rules were changed.
 
+## 2026-11-01 small-model workflow description (verification queued)
+
+- Run settings now describe the small-model profile as adaptive tool sizing with useful read batching and full-task continuation, explicitly without a fixed action or runtime limit or inference-setting changes.
+- Visual acceptance remains queued.
+
