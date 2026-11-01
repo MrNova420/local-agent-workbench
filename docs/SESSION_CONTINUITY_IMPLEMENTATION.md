@@ -30,6 +30,7 @@
 - ToolRegistry now initializes its plan state before the first inference request; review found the engine accessed the field before the first model `update_plan` call could create it. A queued regression covers the initial empty state.
 - Approved commands stopped after launch or terminated by timeout are now marked `uncertain` because partial file effects may already exist. Their possible effects trigger workspace inspection; the renderer warns before the user treats the result as a clean cancel or definite failure. A queued regression distinguishes these from cancellation before launch.
 - The active-task checkpoint explicitly instructs the model to inspect the saved operation result and workspace before requesting or repeating an uncertain operation; uncertain operations are never automatically replayed. The continuity regression is queued.
+- `read_operation_result` now falls back to the engine's in-memory completed-operation map when running without the desktop's durable session callback, so standalone CLI use does not advertise an unavailable lookup. In the desktop, the captured session store remains authoritative, with engine memory as same-run fallback. Regression queued, not run.
 
 ## Verification queue (not run in this implementation phase)
 
@@ -49,7 +50,7 @@
 
 ## Remaining reliability work
 
-- The shared engine is pinned at `156e05c881c452138d3bd6258014b269b913631d` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. It records provider-specific body fields alongside normalized options, persists uncertain dispatched MCP effects, streams safe tool-preparation metadata without persisting partial arguments, reports unsupported MCP schema-validation features before a tool call, validates common conditional/dependent/modern array-schema keywords, and supports within-task compaction with saved tool-result retrieval. JSON Schema `format` remains an annotation without value validation. Reconcile and build the packaged app only after implementation is complete.
+- The shared engine is pinned at `0f5c7f193f3bab4a162e167cccd6a0f6536e45ff` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. It records provider-specific body fields alongside normalized options, persists uncertain dispatched MCP effects, streams safe tool-preparation metadata without persisting partial arguments, reports unsupported MCP schema-validation features before a tool call, validates common conditional/dependent/modern array-schema keywords, and supports within-task compaction with saved tool-result retrieval from durable desktop history or standalone engine memory. JSON Schema `format` remains an annotation without value validation. Reconcile and build the packaged app only after implementation is complete.
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.
 - Add persisted context/input usage presentation and distinguish actual runtime allocation from selected context where the provider exposes it.
