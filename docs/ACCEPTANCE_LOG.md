@@ -635,3 +635,8 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - Engine commit `23f0f000db4d8d32ca063bd8242b879058ecfc0b` adds a read-only paged checkpoint tool for retrieving saved task plan/progress details omitted from a compacted inference copy. Complete transcript, emitted reasoning, and operation results remain in session history.
 - Project retrieval, listing, search, and file reads now observe request cancellation. Text search processes files incrementally by line to avoid loading whole files into memory; completed/partial results are preserved and explicitly marked cancelled.
 - Regression cases were added but no tests, typecheck, package, app launch, or live model run was performed.
+
+## 2026-11-01 paged full-transcript recovery (verification queued)
+
+- Engine commit `6bcf9c7f0099b54c49c96ae391d035478ddf6e12` adds an on-demand transcript reader for user, assistant, and tool messages, including emitted reasoning stored in assistant messages. It excludes the system prompt and returns character-offset pages.
+- This provides access to omitted earlier context without injecting the whole transcript into each model request. No tests, typecheck, package, visible app flow, or live inference check was run.

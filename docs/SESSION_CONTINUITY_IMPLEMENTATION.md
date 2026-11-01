@@ -4,7 +4,7 @@
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
-**Current paired engine source:** `23f0f000db4d8d32ca063bd8242b879058ecfc0b` (unpublished; regressions intentionally queued).
+**Current paired engine source:** `6bcf9c7f0099b54c49c96ae391d035478ddf6e12` (unpublished; regressions intentionally queued).
 
 ## Implemented in this source batch
 
@@ -94,3 +94,9 @@ No live model, app process, OpenCode setting, selected token value, model reason
 - Engine commit `23f0f000db4d8d32ca063bd8242b879058ecfc0b` adds `read_task_checkpoint` so the model can retrieve paged sections of the complete canonical checkpoint when compaction reports omitted history. It exposes current/prior tasks, plans, decisions, user updates, operation references, changed files, and verification.
 - Project listing/search/read/relevance retrieval now observes the run's cancellation signal. Search streams lines rather than materializing every matched file in memory. Cancellation yields explicit status and preserves any results already received; no Ollama process/model is stopped.
 - Added queued tests for paged checkpoint recovery and responsive read cancellation. They remain unrun; the engine revision is pinned above but not packaged or user-accepted.
+
+## 2026-11-01 full transcript recovery after compaction (verification queued)
+
+- Engine commit `6bcf9c7f0099b54c49c96ae391d035478ddf6e12` adds `read_conversation_history`, a read-only paged reader over canonical user/assistant/tool history. It excludes the system prompt and can filter by message role; emitted assistant reasoning remains available if it was saved as visible transcript content.
+- The agent instructions direct the model to consult transcript/checkpoint/result readers when compaction reports omitted context. Nothing is inserted into every prompt by default, so token budget remains available for the active task while omitted history remains recoverable on demand.
+- Tests for role filtering, system-prompt exclusion, reasoning recovery, and schema availability are queued and unrun. The new reader has not been exercised through the packaged UI or live model.
