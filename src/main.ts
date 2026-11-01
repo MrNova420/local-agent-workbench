@@ -287,7 +287,7 @@ app.whenReady().then(async () => {
     if (updateState.status !== 'downloaded') return { installed: false, reason: 'No downloaded update is ready to install.' };
     quitting = true;
     await service.shutdown();
-    autoUpdater.quitAndInstall(false, true);
+    autoUpdater.quitAndInstall();
     return { installed: true };
   });
   ipcMain.handle('app:reveal-path', async (event, value: unknown) => {
