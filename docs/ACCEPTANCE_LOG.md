@@ -442,7 +442,7 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 
 ## 2026-11-01 streamed tool-call preparation cue (verification queued)
 
-- Both local streaming adapters now report tool-call name and argument-character progress without exposing partial argument content. The chat shows the cue as “not dispatched”; complete operations continue through the existing activity, approval, and persistence flow. The partial preview itself is transient and not journaled.
+- Both local streaming adapters now report tool-call name and argument-character progress without exposing partial argument content. Chat and the Live Work Sheet Activity Trace show the same transient “not dispatched” cue; complete operations continue through the existing activity, approval, and persistence flow. The partial preview itself is transient and not journaled.
 - Added queued Ollama, llama.cpp, and renderer-state regressions. No tests, typecheck, package build, or visible UI acceptance were run.
 
 ## 2026-11-01 MCP schema capability visibility (verification queued)
