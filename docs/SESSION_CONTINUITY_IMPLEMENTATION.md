@@ -4,7 +4,7 @@
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
-**Current paired engine source:** `8f0d477b467008bae802613cd53e89c3050f9969` (unpublished; regressions intentionally queued).
+**Current paired engine source:** `53f067c6c6190db0f23afa5065abd191599243f2` (unpublished; regressions intentionally queued).
 
 ## Implemented in this source batch
 
@@ -72,3 +72,5 @@ No live model, app process, OpenCode setting, selected token value, model reason
 - Plan activity cards now restore concise decisions and acceptance criteria in compact disclosures alongside task items. The shared activity event already persisted these fields; this closes the renderer gap after app or session reopen. Renderer regression coverage is added and queued; it has not been run.
 
 - Session reopen now recovers a missing Plan snapshot from the latest turn's durable plan event. It preserves an explicit empty snapshot and filters journal fallback by the latest turn to avoid reviving an older task checklist. Renderer recovery coverage is added and queued.
+
+- Engine-managed read_file calls now use an excerpt budget derived from the run's selected context and output values. Oversized files and long single lines stream in bounded UTF-8 chunks; the tool reports the exact next line/column, and the dynamic budget is disclosed in the tool schema. No context/output setting is changed, and the remainder is never silently discarded. Regression coverage is queued.
