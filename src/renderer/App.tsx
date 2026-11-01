@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
 import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, QueuedPrompt, RunOptions, SessionSummary, SkillSource, TaskIntent, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
-import { applyToolCallProgress, nextRunPhase, restoredRunPhase, runStepProgress, type ToolCallProgress } from '../shared/run-state';
+import { applyToolCallProgress, nextRunPhase, restoredRunPhase, runStepProgress, shouldQueuePromptOnEnter, type ToolCallProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordInputEstimate, recordStreamedText, restoreRunMetrics, type RunMetrics } from '../shared/run-metrics';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice, readRunTokenPreferences } from '../shared/model-controls';
 import { featuredInstalledModels } from '../shared/model-recommendations';
@@ -10,7 +10,7 @@ import { appendTranscriptSegment, restoreTranscriptMessages } from '../shared/tr
 import { LocalModelOrbit } from './ModelOrbit';
 import { ActivityFeed } from './ActivityFeed';
 import { applyActivityEvent, shouldRefreshWorkspaceForActivity } from '../shared/activity';
-import { DEFAULT_RUN_SHEET_LAYOUT, moveRunSheetPanel, normalizeRunSheetLayout, resizeRunSheetPanel, type RunSheetLayout, type RunSheetPanel } from '../shared/run-sheet-layout';
+import { DEFAULT_RUN_SHEET_LAYOUT, moveRunSheetPanel, restoreRunSheetLayout, resizeRunSheetPanel, type RunSheetLayout, type RunSheetPanel } from '../shared/run-sheet-layout';
 import { nextHarnessProfile } from '../shared/harness-profile';
 import { isNearTranscriptEnd } from '../shared/transcript-follow';
 import { readVerificationEvidence, verificationEvidenceLabel, type VerificationEvidence } from '../shared/verification-evidence';
@@ -202,6 +202,7 @@ export default function App() {
   const [copyChanges, setCopyChanges] = useState<Array<{ path: string; action: string; conflict: boolean; reason: string }>>([]);
   const [selectedChanges, setSelectedChanges] = useState<string[]>([]);
   const [prompt, setPrompt] = useState('');
+  const [queueSubmitting, setQueueSubmitting] = useState(false);
   const [installed, setInstalled] = useState(false);
   const [modelPreloading, setModelPreloading] = useState(false);
   const [connected, setConnected] = useState<'checking' | 'yes' | 'no'>('checking');
@@ -910,7 +911,9 @@ export default function App() {
     };
     if (options.approvalMode === 'auto') setOptions((current) => ({ ...current, approvalMode: 'per-action' }));
     setMessages((current) => [...current, { role: 'user', content: task }]);
-    setTrace([]); setPlan([]); setAcceptanceCriteria([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setRunning(true); setPhase('Connecting to Ollama');
+    // Keep the current checklist visible until the sidecar publishes the captured
+    // task's authoritative plan. Same-task continuations do not emit a new seed plan.
+    setTrace([]); setAcceptanceCriteria([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setRunning(true); setPhase('Connecting to Ollama');
     setStartedAt(Date.now()); setElapsed(0); setRunMetrics(emptyRunMetrics());
     try { await request({ command: 'run_start', options: run }); }
     catch (error) {
@@ -922,7 +925,8 @@ export default function App() {
   }
 
   async function queueFollowupPrompt() {
-    if (!running || !session || !workspace || !prompt.trim()) return;
+    if (!running || queueSubmitting || !session || !workspace || !prompt.trim()) return;
+    setQueueSubmitting(true);
     try {
       const result = await request<{ queuedPrompts: QueuedPrompt[] }>({
         command: 'session_queue_prompt', sessionId: session.session_id, workspace, prompt: prompt.trim(),
@@ -931,6 +935,7 @@ export default function App() {
       setPrompt('');
       notify('Follow-up saved for this session. It will not interrupt the active run.');
     } catch (error) { notify(`Could not save follow-up: ${(error as Error).message}`, 'bad'); }
+    finally { setQueueSubmitting(false); }
   }
 
   async function removeQueuedPrompt(queuedPromptId: string) {
@@ -1392,11 +1397,14 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
     return grouped;
   }, [activities]);
   const planTaskMode = [...activities].reverse().find((activity) => activity.kind === 'plan' && activity.taskMode)?.taskMode;
+  const activeTurnId = [...messages].reverse().find((message) => message.role === 'user')?.turnId;
+  const latestActiveActivity = [...activities].reverse().find((activity) => activity.turnId === activeTurnId
+    && ['operation', 'tool_preparation', 'approval', 'question', 'context', 'error'].includes(activity.kind));
   const promptCacheComplete = runMetrics.usageResponses > 0
     && runMetrics.promptTokenReports === runMetrics.usageResponses
     && runMetrics.cachedPromptReports === runMetrics.usageResponses;
   const [sheetLayout, setSheetLayout] = useState<RunSheetLayout>(() => {
-    try { return normalizeRunSheetLayout(JSON.parse(localStorage.getItem('agent-run-sheet-layout') || 'null')); }
+    try { return restoreRunSheetLayout(JSON.parse(localStorage.getItem('agent-run-sheet-layout') || 'null')); }
     catch { return DEFAULT_RUN_SHEET_LAYOUT; }
   });
   useEffect(() => { localStorage.setItem('agent-run-sheet-layout', JSON.stringify(sheetLayout)); }, [sheetLayout]);
@@ -1420,6 +1428,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
   return <section className="session-view">
     <div className="session-commandline"><button className="crumb-back" onClick={onBack}>PROJECT / {shortPath(root).toUpperCase()}</button><span className="crumb-slash">/</span><span className="session-crumb">SESSION {session?.session_id.slice(-8).toUpperCase()}</span><span className="commandline-spacer"/><button className="inline-command" onClick={onTools}>TOOLS</button><button className="inline-command" onClick={onMcp}>MCP</button><button className="inline-command" onClick={onDiff}>CHANGES</button><span className={`phase-chip ${running ? 'is-running' : ''}`}><i/>{running ? phase.toUpperCase() : phase.toUpperCase()}</span><span className="run-elapsed"><Icon name="clock"/> {running ? secs(elapsed) : '—'}</span></div>
     <div className="task-route" aria-label="Task execution phases">{steps.map((step, index) => <div className={`route-step ${index < currentStep ? 'done' : ''} ${index === currentStep ? 'current' : ''}`} key={step}><span className="route-node">{index < currentStep ? <Icon name="check"/> : `0${index + 1}`}</span><span>{step === 'Waiting for first token' ? 'Prefill / waiting' : step}</span></div>)}</div>
+    {running && <div className="active-run-status" role="status" aria-live="polite"><span className="stream-pulse"/><strong>{phase}</strong><span>{latestActiveActivity ? `${latestActiveActivity.name?.replaceAll('_', ' ') || latestActiveActivity.kind} · ${latestActiveActivity.status.replaceAll('_', ' ')}` : toolCallProgress.length ? 'Structured tool request is being prepared; it has not been dispatched yet.' : phase === 'Reasoning' ? 'The model is still reasoning. No file or command operation is dispatched until a complete structured tool call arrives.' : 'The request is active; live file, command, and plan events will appear here and in the worksheet.'}</span><small>{secs(elapsed)} elapsed{runMetrics.estimatedInputTokens !== null ? ` · ~${fmt(runMetrics.estimatedInputTokens)} estimated input tokens` : ''}</small></div>}
     {workflowOutcome && <div className={`workflow-outcome outcome-${workflowOutcome}`} role="status"><span>OBSERVED OUTCOME</span><strong>{workflowOutcomeLabel(workflowOutcome)}</strong><small>{workflowOutcome === 'command_completed' ? 'Command exit was successful; this does not alone prove tests passed.' : workflowOutcome === 'changed' ? 'Project changes exist without a recorded post-change inspection.' : workflowOutcome === 'inspected' ? 'A post-change inspection completed; semantic correctness is not implied.' : workflowOutcome === 'implementation_incomplete' ? 'The agent stopped after repeating a state with no new observable progress. Review the saved plan, checkpoint, and workspace before resuming.' : workflowOutcome === 'response_missing' ? 'The model returned no user-visible completion after a follow-up. Saved tool effects are preserved; review them before resuming.' : workflowOutcome === 'implementation_unverified' ? 'A command may have changed files, but the host did not observe a structured project change. Review the inspection evidence.' : 'Based on the host-observed tools and terminal status.'}</small>{verificationEvidenceLabel(verificationEvidence) && <small className="verification-evidence">{verificationEvidenceLabel(verificationEvidence)}</small>}</div>}
     <div className="session-main-grid">
       <section className="transcript-plane" aria-label="Conversation transcript">
@@ -1427,11 +1436,11 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
           <div className="message-meta"><span className={`speaker-mark ${message.role}`}>{message.role === 'user' ? 'YOU' : <Icon name="spark"/>}</span><strong>{message.role === 'user' ? 'Task brief' : 'Local agent'}</strong><span>{message.recoveredPartial ? 'PARTIAL · INTERRUPTED' : message.role === 'user' ? 'INPUT' : message.streaming ? 'LIVE OUTPUT' : 'RESPONSE'}</span>{message.streaming && <i className="stream-pulse"/>}</div>
           <div className="message-content"><Markdown content={message.content}/></div>
           {message.thinking && <details className="reasoning-trace"><summary>Model reasoning · {message.thinking.length.toLocaleString()} characters</summary><div>{message.thinking}</div></details>}
-        </article>{message.role === 'user' && message.turnId && <ActivityFeed entries={activitiesByTurn.get(message.turnId) || []} mode={activityMode} surface="chat"/>}</Fragment>)}{toolCallProgress.length > 0 && <div className="tool-call-progress" role="status" aria-live="polite"><span className="stream-pulse"/><strong>Preparing structured tool request · not dispatched</strong>{toolCallProgress.map((item) => <span key={`${item.requestIndex}-${item.callIndex}`}>{item.provider.toUpperCase()} · {item.toolName || `Tool ${item.callIndex + 1}`} · {item.argumentCharacters.toLocaleString()} argument characters</span>)}</div>}<div ref={endRef}/>{!followTranscript && <button className="jump-latest" onClick={() => { followTranscriptRef.current = true; setFollowTranscript(true); if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight; }} aria-label="Jump to latest message">↓ Latest</button>}</div>}
+        </article>{message.role === 'user' && message.turnId && <ActivityFeed entries={activitiesByTurn.get(message.turnId) || []} mode={activityMode} surface="chat"/>}</Fragment>)}<div ref={endRef}/>{!followTranscript && <button className="jump-latest" onClick={() => { followTranscriptRef.current = true; setFollowTranscript(true); if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight; }} aria-label="Jump to latest message">↓ Latest</button>}</div>}
         <div className="composer-shell">
           <div className="composer-profile"><span className={`profile-chip access-${options.access}`}>{options.access.toUpperCase()}</span><span className="profile-chip approval-chip">{options.approvalMode === 'auto' ? 'AUTO APPROVE · THIS RUN' : options.approvalMode === 'per-session' ? session?.session_approval_granted ? 'SESSION APPROVED' : 'APPROVAL · THIS CHAT' : options.approvalMode === 'per-task' ? 'PER TASK' : 'PER ACTION'}</span><span className="profile-chip capability-chip" title="Capability reported by the selected local runtime; support metadata may be unknown">TOOLS {modelInfo?.tool_support === 'supported' ? 'SUPPORTED' : modelInfo?.tool_support === 'unsupported' ? 'UNSUPPORTED' : 'UNKNOWN'}</span><span className="profile-chip intent-chip" title="Task intent guides the agent; file access and approval remain separate">INTENT {options.taskIntent.toUpperCase()}</span><button className={`profile-toggle ${options.harnessProfile === 'small-model' ? 'is-active' : ''}`} type="button" aria-pressed={options.harnessProfile === 'small-model'} title="Changes agent workflow guidance only; model settings and token limits stay unchanged" onClick={onToggleHarnessProfile} disabled={running}>Small-model {options.harnessProfile === 'small-model' ? 'on' : 'off'}</button><span className="profile-hint">{fmt(options.context)} context · {fmt(options.maxTokens)} output</span><button onClick={onSettings}>Adjust run</button></div>
-          <textarea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={running ? (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); onQueue(); } } : onEnter} placeholder={running ? 'Draft a follow-up without interrupting this run…' : 'Describe the work. Use Shift + Enter to add detail…'} rows={3} aria-label={running ? 'Follow-up prompt' : 'Task prompt'}/>
-          <div className="composer-bottom"><span>{running ? <><kbd>ENTER</kbd> to queue after this run <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line</> : <><kbd>ENTER</kbd> to run <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> reasoning {options.reasoning == null ? 'model default' : String(options.reasoning)}</>}</span>{running ? <><Button kind="outline" onClick={onQueue} disabled={!prompt.trim()}><Icon name="plus"/> Queue next</Button><Button kind="danger" onClick={onCancel}><Icon name="stop"/> Cancel request</Button></> : <Button kind="bright" onClick={onRun} disabled={!prompt.trim()}><Icon name="play"/> Run task</Button>}</div>
+          <textarea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={running ? (event) => { if (shouldQueuePromptOnEnter(event.key, event.shiftKey, event.nativeEvent.isComposing)) { event.preventDefault(); onQueue(); } } : onEnter} placeholder={running ? 'Draft a follow-up while the current task continues…' : 'Describe the work. Use Shift + Enter to add detail…'} rows={3} aria-label={running ? 'Follow-up prompt; the current run continues while you draft' : 'Task prompt'} aria-describedby={running ? 'follow-up-help' : undefined}/>
+          <div className="composer-bottom"><span id={running ? 'follow-up-help' : undefined}>{running ? <><kbd>ENTER</kbd> to save for later <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> queued prompts never interrupt this run</> : <><kbd>ENTER</kbd> to run <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> reasoning {options.reasoning == null ? 'model default' : String(options.reasoning)}</>}</span>{running ? <><Button kind="outline" onClick={onQueue} disabled={!prompt.trim() || queueSubmitting}><Icon name={queueSubmitting ? 'clock' : 'plus'}/>{queueSubmitting ? 'Saving…' : 'Queue follow-up'}</Button><Button kind="danger" onClick={onCancel}><Icon name="stop"/> Cancel request</Button></> : <Button kind="bright" onClick={onRun} disabled={!prompt.trim()}><Icon name="play"/> Run task</Button>}</div>
           {queuedPrompts.length > 0 && <section className="queued-prompt-list" aria-label="Saved follow-up prompts"><div className="queued-prompt-heading"><b>FOLLOW-UPS</b><span>{queuedPrompts.length} saved · starts only when selected</span></div>{queuedPrompts.map((item, index) => <article className="queued-prompt-row" key={item.id}><div><small>#{index + 1} · {new Date(item.queued_at * 1000).toLocaleString()}</small><p>{item.prompt}</p></div><div className="queued-prompt-actions"><Button kind="bright" disabled={running} onClick={() => onRunQueued(item)}><Icon name="play"/> Start next</Button><Button kind="quiet" onClick={() => onRemoveQueued(item.id)}>Remove</Button></div></article>)}</section>}
         </div>
       </section>

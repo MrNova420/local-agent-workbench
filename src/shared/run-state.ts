@@ -2,6 +2,10 @@ import type { WorkerEvent } from './protocol';
 
 export type ToolCallProgress = { requestIndex: number; callIndex: number; provider: string; toolName: string; argumentCharacters: number };
 
+export function shouldQueuePromptOnEnter(key: string, shiftKey: boolean, isComposing: boolean): boolean {
+  return key === 'Enter' && !shiftKey && !isComposing;
+}
+
 export function applyToolCallProgress(current: ToolCallProgress[], event: WorkerEvent): ToolCallProgress[] {
   if (event.type !== 'tool_call_progress') return current;
   const requestIndex = Number(event.request_index ?? 0);

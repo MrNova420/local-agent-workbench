@@ -2,6 +2,14 @@
 
 All notable user-facing changes are recorded here. This project is in unstable beta; changes may be incompatible before a stable release.
 
+## Unreleased
+
+- Kept the current task plan visible during same-task continuation until the sidecar publishes its authoritative update.
+- Made active-run follow-up drafting and durable queueing clearer, prevented duplicate submissions, and preserved Shift+Enter and IME composition behavior.
+- Added a live run-status line that distinguishes model reasoning from a structured tool call and reports elapsed time and the labeled prompt-size estimate.
+- Prioritized Plan and Activity Trace in the Live Work Sheet; migrated the previous built-in layout while retaining customized layouts.
+- Added regression coverage. Tests, typecheck, package build, UI acceptance, and live inference are queued and unrun.
+
 ## 0.1.0-beta.3 — 2026-11-01
 
 - Correlated chat activity to its originating turn so tool steps appear alongside the task that caused them and remain attached after session restoration.

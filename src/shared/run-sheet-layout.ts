@@ -3,9 +3,17 @@ export type RunSheetPanel = typeof RUN_SHEET_PANELS[number];
 export type RunSheetLayout = { order: RunSheetPanel[]; heights: Record<RunSheetPanel, number> };
 
 export const DEFAULT_RUN_SHEET_LAYOUT: RunSheetLayout = {
-  order: [...RUN_SHEET_PANELS],
-  heights: { signals: 420, plan: 138, activity: 280, resources: 190 },
+  order: ['plan', 'activity', 'signals', 'resources'],
+  heights: { signals: 260, plan: 220, activity: 360, resources: 190 },
 };
+
+export function restoreRunSheetLayout(value: unknown): RunSheetLayout {
+  const restored = normalizeRunSheetLayout(value);
+  const previousDefault = ['signals', 'plan', 'activity', 'resources'].every((panel, index) => restored.order[index] === panel)
+    && restored.heights.signals === 420 && restored.heights.plan === 138
+    && restored.heights.activity === 280 && restored.heights.resources === 190;
+  return previousDefault ? DEFAULT_RUN_SHEET_LAYOUT : restored;
+}
 
 export function normalizeRunSheetLayout(value: unknown): RunSheetLayout {
   const source = value && typeof value === 'object' ? value as Partial<RunSheetLayout> : {};

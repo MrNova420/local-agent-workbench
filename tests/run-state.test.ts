@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyToolCallProgress, nextRunPhase, restoredRunPhase, runStepProgress } from '../src/shared/run-state';
+import { applyToolCallProgress, nextRunPhase, restoredRunPhase, runStepProgress, shouldQueuePromptOnEnter } from '../src/shared/run-state';
 
 describe('streamed tool-call preview', () => {
   it('updates one request preview by index without exposing partial arguments', () => {
@@ -18,6 +18,12 @@ describe('streamed tool-call preview', () => {
 });
 
 describe('run status transitions', () => {
+  it('queues follow-ups on Enter without swallowing newlines or IME composition', () => {
+    expect(shouldQueuePromptOnEnter('Enter', false, false)).toBe(true);
+    expect(shouldQueuePromptOnEnter('Enter', true, false)).toBe(false);
+    expect(shouldQueuePromptOnEnter('Enter', false, true)).toBe(false);
+    expect(shouldQueuePromptOnEnter('Escape', false, false)).toBe(false);
+  });
   it.each([
     ['Ready', false, 0],
     ['Waiting for first token', true, 1],

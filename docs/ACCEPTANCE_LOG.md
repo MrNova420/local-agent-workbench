@@ -702,3 +702,10 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 
 - After tool work, an empty assistant content result now triggers a final-response request. If repeated without observable progress, the engine records `response_missing` instead of completing silently. The status, verification evidence, and blocker are persisted and restored; the UI labels the outcome explicitly. No overall timeout or inference-setting change was added.
 - Engine, sidecar recovery, and renderer regressions are authored and queued. The continuation signature now counts task-mode changes, host-observed non-plan operations, file changes, and verification; repeated `update_plan` calls alone do not count, while the plan remains expandable with no item/pass cap. The current app pin is engine `63dc15ab629b31c370cd8d1a683138c3d02e84f8`. No tests, typecheck, UI, package, or model checks have run for this change.
+
+# 2026-11-01 — Active run composer and worksheet visibility (source only)
+
+- Follow-up prompts can be drafted and saved while a model request runs. The queue remains explicit and session/project-bound; it does not interrupt or automatically chain the current task. The UI guards duplicate submission and preserves multiline/IME keyboard behavior.
+- The renderer keeps the existing plan visible until the sidecar publishes the task's authoritative plan. The default worksheet now prioritizes Plan and Activity Trace and migrates the exact legacy default without overwriting user-customized layouts.
+- An active-run status line distinguishes model reasoning from a complete structured tool call and reports elapsed time plus the labeled input estimate. Plan, tool, approval, and command events still flow through the durable event stream.
+- Regression cases added, not run. No test/typecheck/build/UI/live-model verification performed; all remain queued.

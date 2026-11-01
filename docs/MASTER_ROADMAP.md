@@ -166,3 +166,11 @@ Approved commands may change project files without producing structured `write_f
 - Latest engine continuation work also applies the context-derived per-call budget to file listing/search and discloses every page or matching-line continuation, preserving the selected context/output values.
 
 - Oversized operation results now remain fully journaled and visible while model-facing copies are excerpted with exact read_operation_result cursors; this avoids a single long command/MCP/search result exhausting the active task context.
+
+## Active run usability follow-up — 2026-11-01
+
+1. Queue-draft edit, queue persistence, duplicate prevention, and current-task non-interruption (source coverage authored; execution queued).
+2. Plan retention during same-task continuation and authoritative plan refresh (source behavior corrected; renderer recovery acceptance queued).
+3. Plan/Activity-first default, exact legacy-default migration, and customized-layout preservation (unit coverage authored; execution queued).
+4. Visible app acceptance during long reasoning, structured tool preparation, plan updates, approvals, file edits, commands, resume, and project switching remains required.
+5. For long reasoning-only requests, capture the active session's `request_dispatched`, `request_headers`, `phase`, `request_error`, and terminal events before attributing an early stop to compaction. The current source has no fixed Ollama stream deadline; compaction is between requests, not during streaming.
