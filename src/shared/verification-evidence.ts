@@ -4,6 +4,8 @@ export type VerificationEvidence = {
     implementation_requested?: boolean;
     project_change?: string;
     post_change_inspection?: string;
+    command_side_effects_possible?: boolean;
+    post_command_inspection?: string;
     approved_command_results?: unknown[];
     command_success_is_test_pass?: boolean;
   };
@@ -19,6 +21,8 @@ export function readVerificationEvidence(value: unknown): VerificationEvidence |
       implementation_requested: typeof raw.implementation_requested === 'boolean' ? raw.implementation_requested : undefined,
       project_change: typeof raw.project_change === 'string' ? raw.project_change : undefined,
       post_change_inspection: typeof raw.post_change_inspection === 'string' ? raw.post_change_inspection : undefined,
+      command_side_effects_possible: typeof raw.command_side_effects_possible === 'boolean' ? raw.command_side_effects_possible : undefined,
+      post_command_inspection: typeof raw.post_command_inspection === 'string' ? raw.post_command_inspection : undefined,
       approved_command_results: Array.isArray(raw.approved_command_results) ? raw.approved_command_results : undefined,
       command_success_is_test_pass: typeof raw.command_success_is_test_pass === 'boolean' ? raw.command_success_is_test_pass : undefined,
     },
@@ -31,6 +35,8 @@ export function verificationEvidenceLabel(value: VerificationEvidence | null): s
   const parts: string[] = [];
   if (contract.project_change && contract.project_change !== 'not_required') parts.push(`project change ${contract.project_change.replaceAll('_', ' ')}`);
   if (contract.post_change_inspection && contract.post_change_inspection !== 'not_applicable') parts.push(`post-change inspection ${contract.post_change_inspection}`);
+  if (contract.command_side_effects_possible) parts.push('approved command may have changed project files');
+  if (contract.post_command_inspection && contract.post_command_inspection !== 'not_applicable') parts.push(`post-command inspection ${contract.post_command_inspection}`);
   const commands = contract.approved_command_results ?? [];
   if (commands.length) parts.push(`approved command result${commands.length === 1 ? '' : 's'}: ${commands.map((item) => String(item).replaceAll('_', ' ')).join(', ')}`);
   if (commands.includes('completed') && contract.command_success_is_test_pass === false) parts.push('command completion does not prove tests passed');

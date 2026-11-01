@@ -9,13 +9,15 @@ describe('verification evidence restoration', () => {
         implementation_requested: true,
         project_change: 'observed',
         post_change_inspection: 'missing',
+        command_side_effects_possible: true,
+        post_command_inspection: 'completed',
         approved_command_results: ['completed'],
         command_success_is_test_pass: false,
       },
     });
 
     expect(verificationEvidenceLabel(evidence)).toBe(
-      'project change observed · post-change inspection missing · approved command result: completed · command completion does not prove tests passed.',
+      'project change observed · post-change inspection missing · approved command may have changed project files · post-command inspection completed · approved command result: completed · command completion does not prove tests passed.',
     );
   });
 

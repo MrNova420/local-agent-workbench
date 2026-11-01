@@ -357,6 +357,12 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - The isolated app worktree now pins shared engine `b051d9663f0d4a00a4e89de8350f254ec88fd240`; CI and Windows release workflows use the same pin. Engine commit is local source only and has not been packaged or released.
 - Added run journals with per-mirror retry state, replayed session-list status, corrupt-journal recovery notices, terminal checkpoint status, and recovery of streamed text/reasoning across provider errors and follow-up model calls. The renderer surfaces journal recovery issues in the Activity Trace.
 - Added regression cases for one-mirror journal retry, malformed journal preservation/reporting, partial response retention, and follow-up request checkpointing. These tests, all broader suites, typecheck, packaging, and visible acceptance remain queued; none were run for this batch.
+
+## 2026-11-01 command-side-effect evidence source follow-up (verification queued)
+
+- The app now pins shared engine `ef711bda954a2eba289760221813de5d20239d48`; CI and the Windows release workflow consume that same `core-revision.txt` value.
+- Renderer evidence now exposes possible command side effects and whether a later inspection occurred. Command-only implementation is labeled unverified when structured file tools did not observe a write; failed commands warn that partial effects may remain.
+- Renderer regressions were added but not run. Engine regressions, all source suites, typecheck, packaging, visible acceptance, updater canary, and exact-model live measurement remain queued.
 - Added Workbench-owned skill enablement/source selection, captured it per run, excluded the skill tool when disabled, and added a sidecar command that persists session run settings. Added queued regressions for source filtering, disabled-skill exclusion, captured turn settings, and session persistence; they have not been run.
 - Run Configuration now writes selected model and settings to both session mirrors rather than relying on the next run to persist them; changes are refused while a task is active. Switching model selection resets reasoning to that model's default before the user chooses an override.
 - Terminal turns now persist an observed workflow outcome distinct from “the run ended”; the worksheet labels discussion, plan-only, blocked, changed, inspected, command-completed, and command-failed evidence. A new task clears stale plan rows. Added queued engine, sidecar, and renderer coverage; no tests or UI verification were run.

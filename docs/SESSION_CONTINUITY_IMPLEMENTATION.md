@@ -39,7 +39,7 @@
 
 ## Remaining reliability work
 
-- The shared engine is pinned at `b051d9663f0d4a00a4e89de8350f254ec88fd240` in `core-revision.txt`, CI, and the Windows release workflow. Reconcile and build the packaged app only after implementation is complete.
+- The shared engine is pinned at `ef711bda954a2eba289760221813de5d20239d48` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. Reconcile and build the packaged app only after implementation is complete.
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.
 - Add persisted context/input usage presentation and distinguish actual runtime allocation from selected context where the provider exposes it.
