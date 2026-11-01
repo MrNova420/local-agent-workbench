@@ -623,6 +623,11 @@ class MirroredSessionStore:
         versions = self._versions(session_id, workspace)
         if not versions:
             raise FileNotFoundError(f"Session not found in the app library or selected project: {session_id}")
+        approval_grant_mirrored = (
+            len(versions) == 2
+            and all(row["state"].get("session_approval_granted") is True for row in versions)
+            and self._fingerprint(versions[0]["state"]) == self._fingerprint(versions[1]["state"])
+        )
         divergent = False
         if len(versions) == 2:
             same = self._fingerprint(versions[0]["state"]) == self._fingerprint(versions[1]["state"])
@@ -642,6 +647,8 @@ class MirroredSessionStore:
         state = selected["state"]
         if workspace is None:
             selected_sources = {selected["source"]} if divergent else {row["source"] for row in versions}
+            if not approval_grant_mirrored:
+                state["session_approval_granted"] = False
             return self._replay_events(state, state.get("workspace"), selected_sources)
         if workspace:
             root = Path(workspace).resolve(strict=True)
@@ -651,6 +658,8 @@ class MirroredSessionStore:
             state["workspace"] = str(root)
             state["workspace_id"] = metadata["workspace_id"]
         selected_sources = {selected["source"]} if divergent else {row["source"] for row in versions}
+        if not approval_grant_mirrored:
+            state["session_approval_granted"] = False
         state = self._replay_events(state, str(root), selected_sources)
         return {"conflict": False, "source": selected["source"], "state": state}
 

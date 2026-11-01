@@ -211,6 +211,33 @@ class MirroredSessionStoreTests(unittest.TestCase):
             self.assertFalse(result["project_saved"])
             self.assertEqual(store.app.load("portable-1")["session_id"], "portable-1")
 
+    def test_session_approval_grant_is_not_trusted_when_mirrors_diverge_or_project_copy_is_missing(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "project"
+            root.mkdir()
+            store = MirroredSessionStore(Path(temp) / "app")
+            state = store.create(str(root), "model", 8192)
+            store.save(state)
+
+            state["session_approval_granted"] = True
+            store.app.save(state)
+            loaded = store.load(state["session_id"])
+            self.assertFalse(loaded["session_approval_granted"])
+
+            project_path = root / ".agent-workbench" / "sessions" / f"{state['session_id']}.json"
+            project_path.unlink()
+            app_only = store.load(state["session_id"])
+            self.assertFalse(app_only["session_approval_granted"])
+
+            store.save(state)
+            project_store = store._project_store(root)
+            project_state = project_store.load(state["session_id"])
+            project_state["session_approval_granted"] = True
+            project_store.save(project_state)
+            store.app.save(project_state)
+            mirrored = store.load(state["session_id"])
+            self.assertTrue(mirrored["session_approval_granted"])
+
     def test_event_journal_replays_partial_text_plan_and_uncertain_tool_state(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "project"
