@@ -75,7 +75,7 @@ class AgentWorker {
           try { message = JSON.parse(line) as Record<string, unknown>; }
           catch { this.emit({ type: 'service_error', error: 'Agent service sent invalid protocol data.' }); continue; }
           if (message.type === 'ready') {
-            ready = true; clearTimeout(launchTimer); resolve(); this.emit({ type: 'service_ready' });
+            ready = true; clearTimeout(launchTimer); resolve(); this.emit({ type: 'service_ready', warnings: Array.isArray(message.warnings) ? message.warnings : [] });
           } else if (message.type === 'response' && typeof message.id === 'string') {
             const entry = this.pending.get(message.id);
             if (entry) {

@@ -111,7 +111,15 @@ class AgentService:
         self.permission_rules_path = APP_DATA / "permission-rules.json"
         self.gguf_models = self._load_json(self.model_sources_path, [])
         self.llama_config = self._load_json(self.llama_config_path, {})
-        self.permission_rules = validate_permission_rules(self._load_json(self.permission_rules_path, []))
+        self.permission_rules_warning: str | None = None
+        try:
+            raw_permission_rules = json.loads(self.permission_rules_path.read_text(encoding="utf-8")) if self.permission_rules_path.exists() else []
+            self.permission_rules = validate_permission_rules(raw_permission_rules)
+        except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+            self.permission_rules = []
+            self.permission_rules_warning = (f"Saved permission rules could not be loaded ({type(exc).__name__}). "
+                                             "The original file was preserved and this run uses its selected approval mode without those overrides. "
+                                             "Review Tool permissions in Settings before relying on saved overrides.")
         self.providers = ProviderRegistry([
             OllamaProvider(self.runtime),
             LlamaCppProvider(self.llama, lambda: self.gguf_models),
@@ -663,6 +671,7 @@ class AgentService:
             rules = validate_permission_rules(message.get("rules"))
             self._save_json(self.permission_rules_path, rules)
             self.permission_rules = rules
+            self.permission_rules_warning = None
             return copy.deepcopy(self.permission_rules)
         if command == "hf_search":
             return self.hf.search(str(message.get("query", "")))
@@ -1534,7 +1543,8 @@ class AgentService:
 
 def main() -> None:
     service = AgentService()
-    sys.stdout.write(json.dumps({"type": "ready", "version": "0.1.0"}) + "\n")
+    warnings = [service.permission_rules_warning] if service.permission_rules_warning else []
+    sys.stdout.write(json.dumps({"type": "ready", "version": "0.1.0", "warnings": warnings}) + "\n")
     sys.stdout.flush()
     for line in sys.stdin:
         line = line.strip()

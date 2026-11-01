@@ -527,3 +527,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Wildcard command permission rules now require a JSON argv prefix, which the policy evaluator applies consistently to both direct `run_command` argv and parsed `run_shell` commands. Shell-only rules retain their readable text prefix form.
 - Added shared parser coverage for wildcard and command-specific formats. Tests and typecheck remain queued; no permission settings were changed in user data.
 
+## 2026-11-01 malformed permission policy recovery (verification queued)
+
+- If saved permission rules are unreadable or invalid, the sidecar now preserves the source file, starts with no persistent overrides, and sends a startup warning to the app. The selected per-run approval mode remains in effect; the UI prompts the user to review Settings before relying on saved overrides.
+- Saving a replacement policy clears the warning. A sidecar regression covers malformed JSON preservation and safe fallback; tests, typecheck, and packaged startup acceptance remain queued.
+

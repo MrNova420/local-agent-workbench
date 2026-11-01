@@ -90,6 +90,20 @@ def test_permission_rules_are_validated_persisted_and_locked_during_runs(service
     assert service.handle("permission_rules_get", {}) == rules
 
 
+def test_malformed_permission_rules_preserve_file_and_explain_safe_fallback(service):
+    service.permission_rules_path.parent.mkdir(parents=True, exist_ok=True)
+    original = '{"tool":"write_file","decision":"allow"}'
+    service.permission_rules_path.write_text(original, encoding="utf-8")
+
+    recovered = worker.AgentService()
+
+    assert recovered.permission_rules == []
+    assert "permission rules" in recovered.permission_rules_warning.casefold()
+    assert recovered.permission_rules_path.read_text(encoding="utf-8") == original
+    recovered.mcp.shutdown()
+    recovered.llama.shutdown()
+
+
 def test_provider_request_settings_update_the_matching_prompt_activity_and_stream_live(service, tmp_path, monkeypatch):
     events = []
     service.emit = events.append

@@ -406,7 +406,11 @@ export default function App() {
     void refreshHome().catch((error) => notify(`Could not load saved workspace history: ${(error as Error).message}`, 'warn'));
     void request({ command: 'ping' }).then(() => setInstalled(true)).catch(() => setInstalled(false));
     const unsubscribe = window.agent.onEvent((event) => {
-      if (event.type === 'service_ready') setInstalled(true);
+      if (event.type === 'service_ready') {
+        setInstalled(true);
+        const warnings = Array.isArray(event.warnings) ? event.warnings.filter((warning): warning is string => typeof warning === 'string') : [];
+        for (const warning of warnings) notify(warning, 'warn');
+      }
       if (event.type === 'service_error' || event.type === 'service_exit') {
         setInstalled(false);
         setModelPreloading(false);
