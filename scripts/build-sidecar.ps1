@@ -6,7 +6,11 @@ if (-not $CorePath) {
     else { $CorePath = Join-Path (Split-Path -Parent $AppRoot) 'local-9b-dev-app' }
 }
 $CorePath = (Resolve-Path -LiteralPath $CorePath).Path
-foreach ($RequiredCoreFile in @('desktop_engine.py', 'permission_policy.py', 'task_checkpoint.py')) {
+foreach ($RequiredCoreFile in @(
+    'desktop_engine.py', 'permission_policy.py', 'task_checkpoint.py',
+    'project_knowledge.py', 'project_walk.py', 'mcp_support.py',
+    'prompt_manifest.py', 'cancellable_http.py', 'tool_schema_capabilities.py'
+)) {
     if (-not (Test-Path -LiteralPath (Join-Path $CorePath $RequiredCoreFile))) {
         throw "Required agent engine source '$RequiredCoreFile' not found under $CorePath"
     }

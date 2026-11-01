@@ -547,3 +547,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Engine commit `7f26a2ba4e10ff389ebf7dd215e2d05d72c73373` updates the durable task checkpoint's `next_action` whenever the Workbench starter checklist advances, so compaction receives the next unfinished step rather than stale generic guidance.
 - Added a focused engine regression; it remains unrun. The app pin is synchronized; no model or inference setting changed.
 
+## 2026-11-01 sidecar source preflight (verification queued)
+
+- The Windows sidecar build now checks the complete set of directly imported shared-engine modules before invoking PyInstaller, so an incomplete or stale engine checkout fails with the exact missing source filename.
+- Package build verification remains queued; no installer was built.
+
