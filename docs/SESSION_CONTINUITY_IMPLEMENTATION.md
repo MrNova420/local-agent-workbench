@@ -43,10 +43,11 @@
 9. Verify cached prompt-token reporting for Ollama and llama.cpp and distinguish provider-exact counts from estimates in the UI.
 10. Run the full engine, sidecar, renderer, typecheck, packaged-app, and visible acceptance gates only after all implementation work is complete.
 11. Configure a mocked MCP tool with nested unsupported keywords and verify discovery reports the exact schema capability gap, Tool Catalog shows the server/tool warning, attempted arguments fail closed, and no unsupported effect is dispatched.
+12. Verify the implemented conditional/dependency/property-name/tuple-prefix/contains schema cases and confirm `format` is treated as annotation metadata rather than an asserted constraint.
 
 ## Remaining reliability work
 
-- The shared engine is pinned at `92585b5793c18bbcbad30a5673a0cdaa7b802e4a` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. It records provider-specific body fields alongside normalized options, persists uncertain dispatched MCP effects, streams safe tool-preparation metadata without persisting partial arguments, and reports unsupported MCP schema-validation features before a tool call. JSON Schema `format` remains an annotation without value validation. Reconcile and build the packaged app only after implementation is complete.
+- The shared engine is pinned at `c3e3a11804df72e1c1ed5bfb5b49ef044b14c1b2` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. It records provider-specific body fields alongside normalized options, persists uncertain dispatched MCP effects, streams safe tool-preparation metadata without persisting partial arguments, and reports unsupported MCP schema-validation features before a tool call. It now validates common conditional, dependent-property, and modern array-schema keywords. JSON Schema `format` remains an annotation without value validation. Reconcile and build the packaged app only after implementation is complete.
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.
 - Add persisted context/input usage presentation and distinguish actual runtime allocation from selected context where the provider exposes it.
