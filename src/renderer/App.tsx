@@ -487,6 +487,10 @@ export default function App() {
           return measured.isGenerating ? measured : beginGeneration(measured);
         });
       }
+      if (event.type === 'request_dispatched' || event.type === 'request_headers'
+          || event.type === 'request_complete' || event.type === 'request_error') {
+        setPhase((current) => nextRunPhase(current, event));
+      }
       if (event.type === 'text') {
         const chunk = String(event.text || '');
         const addSegmentBreak = assistantSegmentBreakRef.current;

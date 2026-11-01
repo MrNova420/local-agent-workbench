@@ -16,6 +16,7 @@ export function runStepProgress(phase: string, running: boolean): number {
   if (phaseKey.includes('complete')) return 4;
   if (phaseKey.includes('failed') || phaseKey.includes('cancelled') || phaseKey.includes('stopped')) return 3;
   if (phaseKey.includes('waiting')) return 1;
+  if (phaseKey.includes('processing response')) return 2;
   if (phaseKey.includes('reason') || phaseKey.includes('generat')) return 2;
   if (phaseKey.includes('finish')) return 3;
   return running ? 1 : 0;
@@ -34,6 +35,10 @@ export function nextRunPhase(previous: string, event: WorkerEvent): string {
     if (phase === 'generating') return 'Generating';
     return phase.split(/\s+/).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
   }
+  if (event.type === 'request_dispatched') return 'Waiting for response headers';
+  if (event.type === 'request_headers') return 'Waiting for first token';
+  if (event.type === 'request_complete') return 'Processing response';
+  if (event.type === 'request_error') return event.cancelled ? 'Cancelling request' : 'Request failed';
   if (event.type === 'generation_complete') return 'Finishing turn';
   if (event.type === 'complete') return 'Turn complete';
   if (event.type === 'cancelled') return 'Cancelled';

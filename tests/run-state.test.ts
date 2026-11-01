@@ -33,6 +33,14 @@ describe('run status transitions', () => {
     expect(nextRunPhase('Reasoning', { type: 'phase', phase: 'generating' })).toBe('Generating');
   });
 
+  it('shows transport header wait separately from model prefill and generation', () => {
+    expect(nextRunPhase('Ready', { type: 'request_dispatched' })).toBe('Waiting for response headers');
+    expect(nextRunPhase('Waiting for response headers', { type: 'request_headers' })).toBe('Waiting for first token');
+    expect(nextRunPhase('Generating', { type: 'request_complete' })).toBe('Processing response');
+    expect(nextRunPhase('Waiting for response headers', { type: 'request_error', cancelled: true })).toBe('Cancelling request');
+    expect(runStepProgress('Processing response', true)).toBe(2);
+  });
+
   it('holds completion until the turn has been saved and the worker goes idle', () => {
     expect(nextRunPhase('Generating', { type: 'generation_complete' })).toBe('Finishing turn');
     expect(nextRunPhase('Finishing turn', { type: 'run_idle' })).toBe('Turn complete');

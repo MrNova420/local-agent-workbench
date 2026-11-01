@@ -331,8 +331,8 @@ class AgentService:
             if kind == "generation_usage":
                 enriched["first_token_seconds"] = run_state.get("request_first_token_seconds") if isinstance(run_state, dict) else None
             if activity:
-                if kind in {"inference_settings", "generation_usage"}:
-                    # Keep the existing live settings/metrics event and publish the same
+                if kind in {"inference_settings", "generation_usage", "request_dispatched", "request_headers", "request_complete", "request_error"}:
+                    # Keep live settings/metrics/phase events and publish the same
                     # durable prompt row update to the activity feed.
                     self.emit(enriched)
                     self.emit({**enriched, "type": "activity_event", "activity": copy.deepcopy(activity)})

@@ -129,8 +129,11 @@ def test_provider_request_settings_update_the_matching_prompt_activity_and_strea
     assert prompt["providerRequest"]["http_status"] == 200
     assert prompt["providerRequest"]["header_wait_seconds"] == 0.75
     assert any(event.get("type") == "inference_settings" for event in events)
+    assert any(event.get("type") == "request_headers" and event.get("http_status") == 200 for event in events)
     assert any(event.get("type") == "activity_event" and event.get("activity", {}).get("providerRequest")
                for event in events)
+    assert any(event.get("type") == "activity_event"
+               and event.get("activity", {}).get("status") == "response_stream_ended" for event in events)
 
 
 def test_plan_intent_seeds_live_checklist_and_enforces_read_only_builtin_tools(service, tmp_path, monkeypatch):
