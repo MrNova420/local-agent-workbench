@@ -292,7 +292,7 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
             "kind": "plan", "status": "updated", "items": copy.deepcopy(event.get("items", [])),
             "timestamp": event.get("timestamp", time.time()),
         }
-        if event.get("taskMode") in {"discussion", "plan", "implement"}:
+        if event.get("taskMode") in {"discussion", "plan_only", "plan", "implement"}:
             plan_activity["taskMode"] = event["taskMode"]
         if criteria_included:
             plan_activity["acceptanceCriteria"] = copy.deepcopy(acceptance_criteria)

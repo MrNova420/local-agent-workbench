@@ -349,11 +349,12 @@ class AgentService:
                 checkpoint = state.get("task_checkpoint")
                 if isinstance(checkpoint, dict):
                     record_plan(checkpoint, plan_items, acceptance_criteria if criteria_included and source == "agent" else None,
-                                event.get("decisions"), event.get("taskMode"))
+                                event.get("decisions"), event.get("taskMode"),
+                                plan_source="agent" if source == "agent" else "workbench")
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
                             "workspace": str(turn.workspace), "kind": "plan", "status": "updated", "source": source,
                             "items": copy.deepcopy(plan_items), "timestamp": time.time()}
-                if event.get("taskMode") in {"discussion", "plan", "implement"}:
+                if event.get("taskMode") in {"discussion", "plan_only", "plan", "implement"}:
                     activity["taskMode"] = event["taskMode"]
                 if criteria_included:
                     activity["acceptanceCriteria"] = copy.deepcopy(acceptance_criteria)

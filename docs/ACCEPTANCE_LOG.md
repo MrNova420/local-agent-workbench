@@ -716,13 +716,17 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 
 # 2026-11-01 — Automatic plans continue into implementation (source only)
 
-- The engine now treats a pending agent-authored plan in Automatic mode as active work even when its current task mode is `plan`; it continues into implementation and inspection rather than reporting plan-only success. A plan with no pending items can still finish as plan-only, while explicit Workbench Plan-only/Discuss remain read-only.
-- The settings copy now explains that distinction. Added a queued regression covering plan → write → inspect → close plan → final response. Source-only; no tests, typecheck, UI, package, or model acceptance has run. Current app pin is engine `a9131bb711cb3b11919afefdacc8cf95843771e7`.
+- The engine now treats a nonempty agent-authored plan in Automatic mode as an implementation obligation even when the model labels the phase `plan` or marks its checklist complete; it continues into project work and inspection rather than reporting plan-only success. Explicit Workbench Plan-only/Discuss remain read-only.
+- The settings copy now explains that distinction. Added a queued regression covering plan → write → inspect → close plan → final response. Source-only; no tests, typecheck, UI, package, or model acceptance has run. Current app pin is engine `89ff42f410fb31343e26816f43580a0115ee6f67`.
 
 # 2026-11-01 — Resume preserves agent plan ownership (source only)
 
 - Task checkpoints persist plan ownership (`agent` or `workbench`), and compaction carries that provenance. Restoring a session with an open agent-owned plan restores the implementation obligation before the next inference call, so a resumed Auto task continues instead of finishing as an ordinary chat response. Explicit Discuss/Plan intents override this behavior.
-- Added queued checkpoint and engine regressions. Current paired engine revision: `a9131bb711cb3b11919afefdacc8cf95843771e7`. No tests, typecheck, UI, package, or live model check ran.
-- Plan continuation treats only explicit terminal statuses as closed. Unknown statuses such as `planned` remain open and actionable; `deferred` is treated as closed. A regression for unknown statuses is queued, not run. Current paired engine revision: `a9131bb711cb3b11919afefdacc8cf95843771e7`.
-- Resume recovery now also keeps open Workbench implementation checklists active when their saved task mode is `implement`, in addition to agent-owned plans. The regression is queued. Current paired engine revision: `a9131bb711cb3b11919afefdacc8cf95843771e7`.
-- Continuation now compares stable plan fields and acceptance criteria: identical replans do not count as progress, while added items, status movement, and criteria changes do. This preserves expandable planning without a fixed iteration cap. Regression coverage is queued. Current paired engine revision: `a9131bb711cb3b11919afefdacc8cf95843771e7`.
+- Added queued checkpoint and engine regressions. Current paired engine revision: `89ff42f410fb31343e26816f43580a0115ee6f67`. No tests, typecheck, UI, package, or live model check ran.
+- Plan continuation treats only explicit terminal statuses as closed. Unknown statuses such as `planned` remain open and actionable; `deferred` is treated as closed. A regression for unknown statuses is queued, not run. Current paired engine revision: `89ff42f410fb31343e26816f43580a0115ee6f67`.
+- Resume recovery now also keeps open Workbench implementation checklists active when their saved task mode is `implement`, in addition to agent-owned plans. The regression is queued. Current paired engine revision: `89ff42f410fb31343e26816f43580a0115ee6f67`.
+- Continuation now compares stable plan fields and acceptance criteria: identical replans do not count as progress, while added items, status movement, and criteria changes do. This preserves expandable planning without a fixed iteration cap. Regression coverage is queued. Current paired engine revision: `89ff42f410fb31343e26816f43580a0115ee6f67`.
+# 2026-11-01 — Distinguish Auto plan-only from the planning phase (source only)
+
+- Added a structured `plan_only` mode for an explicit no-implementation request in Automatic intent. The ordinary `plan` mode is a phase; nonempty agent plans remain implementation obligations until project work is observed, even if the model marks their checklist complete. Plan provenance and mode are saved to the session checkpoint and activity trace; the renderer labels `plan_only` clearly.
+- The settings explanation now describes the distinction. Engine and sidecar regressions are authored and queued. No tests, typecheck, UI, package, or model acceptance has run. Current paired engine revision: `89ff42f410fb31343e26816f43580a0115ee6f67`.

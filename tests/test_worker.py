@@ -327,13 +327,19 @@ def test_agent_plan_decisions_are_saved_to_checkpoint_and_activity(service, tmp_
         "acceptanceCriteria": ["Deep links still work."], "decisions": [decision],
         "taskMode": "implement",
     })
+    service._publish_run_event(controller, SimpleNamespace(workspace=project), {
+        "type": "plan", "source": "agent", "items": [{"title": "Implement", "status": "deferred"}],
+        "taskMode": "plan_only",
+    })
 
     saved = service.sessions.load(state["session_id"], str(project))["state"]
     assert saved["task_checkpoint"]["current"]["decisions"][0]["text"] == decision
-    assert saved["task_checkpoint"]["current"]["task_mode"] == "implement"
-    plan_activity = next(row for row in saved["activity_events"] if row.get("kind") == "plan")
-    assert plan_activity["decisions"] == [decision]
-    assert plan_activity["taskMode"] == "implement"
+    assert saved["task_checkpoint"]["current"]["task_mode"] == "plan_only"
+    assert saved["task_checkpoint"]["current"]["plan_source"] == "agent"
+    plan_activities = [row for row in saved["activity_events"] if row.get("kind") == "plan"]
+    assert plan_activities[0]["decisions"] == [decision]
+    assert plan_activities[0]["taskMode"] == "implement"
+    assert plan_activities[1]["taskMode"] == "plan_only"
 
 
 def test_session_run_settings_cannot_change_during_active_run(service, tmp_path):
