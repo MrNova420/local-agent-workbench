@@ -18,4 +18,12 @@
 
 ## D-005: Verification gate before live model run
 
-**Status:** In progress. Mocked checks and Windows package build pass. Perform the expanded visible disposable-project workflow before the approved live model measurement. Record pre-run Ollama/runtime state and leave pre-existing model state intact. A Windows package build is being run for this checkpoint; it has not yet been verified in this log.
+**Status:** Partially satisfied; final release gates remain. Earlier source/package checks passed, and the user now reports the long disposable website task succeeded after about 2–3 hours. Rebuild and verify the current updater/UI source before release. Record model settings and preserve any pre-existing runtime state; do not change the selected context/output/reasoning.
+
+## D-006: Windows x64 update delivery through public GitHub Releases
+
+**Status:** Accepted for the first public beta. Use Electron's built-in Squirrel.Windows `autoUpdater` against the Electron public update service for this public repository. Publish the Squirrel `RELEASES`, full `.nupkg`, and Setup executable together. Check/download in the background, but require an explicit user action to restart and install; never install during a model task. Leave GitHub's prerelease flag off because the public updater service omits GitHub-marked prereleases; retain the beta identifier in the SemVer tag/release title. Current V1 release artifacts target Windows x64 only. The app is unsigned; update hashes/checksums and HTTPS do not equal Authenticode verification.
+
+## D-007: Preserve real-world slow successful development evidence
+
+**Status:** Accepted. The user reports the simple disposable website task succeeded after approximately 2–3 hours on their PC. Keep it as a successful, long-running end-to-end case and improve observation/scroll ergonomics without changing user-selected context, output, or reasoning settings. This does not prove general task quality, reliability, performance, or release readiness.

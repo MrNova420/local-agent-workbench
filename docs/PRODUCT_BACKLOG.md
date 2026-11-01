@@ -2,6 +2,13 @@
 
 The product target is full 1:1 user-facing feature and workflow parity with Codex and OpenCode, as tracked in [CORE_HARNESS_READINESS.md](CORE_HARNESS_READINESS.md). The current implementation sequence starts with stabilizing the core agent harness and full-project workflow; deferred parity items remain required for the overall target and must not be treated as dropped scope. The visual and analytics items below remain queued until the core gate passes. Existing runtime and model-support requirements remain in [MODEL_RUNTIME_EXPANSION.md](MODEL_RUNTIME_EXPANSION.md).
 
+## Current evidence and this release batch
+
+- The user reports a successful simple website project task completed in roughly 2–3 hours on their PC. This validates one real long-running project workflow; it does not establish speed, broad reliability, code quality, or release readiness. See `ACCEPTANCE_LOG.md`.
+- Release-preparation source now contains a Windows x64 GitHub Release updater, Squirrel launch-event handling, first-run/runtime setup guidance, scroll-follow behavior that respects reading history, compact expandable chat operations, and model-dot detail dismissal. These changes remain unverified until the final package, visible UI, install/upgrade, and updater checks pass.
+- Current screenshots are still a release gate. Only one historical Home/inference capture was present in the checked output folder, and the README labels it as historical.
+- The beta release remains gated on the last source checks, fresh package, visible acceptance, updater validation against a public GitHub Release, artifact/checksum inspection, and current Home/chat/worksheet screenshots. Keep user context/output/reasoning values unchanged.
+
 ## Queued for review and implementation
 
 ### B-008: Preserve chosen token settings and warm selected Ollama models
@@ -104,9 +111,42 @@ Design the local-retention and export controls first. Record provider-exact coun
 - Keep provider prompt prefixes stable and benchmark runtime cache flags only via repeatable A/B runs. Current source does not turn on cache-reuse or change Ollama/KV settings.
 - From the rebuilt package, verify bundled-worker protocol and UI toggle persistence, then in one visible packaged instance test a concise request, an explicit project build that first returns a plan, plan-only request, settings persistence, exact inference options, cache metrics when available, Home navigation, session resume, and project isolation.
 
-### B-010: Public beta repositories — published; beta release acceptance pending
+### B-010: Public beta repositories and first installer release — repositories published; beta release acceptance pending
 
-The app and shared engine have independent public MIT-licensed Git repositories with separate histories. On 2026-10-31, source suites passed, Windows x64 `0.1.0-beta.1` packaging succeeded, the bundled worker passed its JSONL startup/ping/shutdown smoke, and one visible packaged app restored a canceled disposable session and its five activity records. Both repositories were published through GitHub Desktop with professional names/descriptions and relevant topics. A targeted all-history credential-pattern scan found no matches; the engine's removed model-inspection file and its machine-local Ollama blob path remain in prior history to preserve commits and are disclosed in `ACCEPTANCE_LOG.md`. GitHub Actions on both repositories cannot start because GitHub reports an account-level billing lock. Production npm dependency audit is clean, while 18 moderate findings remain in the development Forge chain; npm proposes a major downgrade, so compatibility review is queued. The GitHub prerelease remains gated by final tests, package rebuild, and visible coding/cancel acceptance of the current source.
+The app and shared engine have independent public MIT-licensed Git repositories with separate histories. On 2026-10-31, the earlier source suites and Windows x64 `0.1.0-beta.1` package passed their recorded checks. The bundled worker passed its JSONL startup/ping/shutdown smoke. A user-reported long website project run has now completed successfully in 2–3 hours. Both repositories were published with professional names/descriptions. A targeted all-history credential-pattern scan found no matches; prior-history disclosures remain in `ACCEPTANCE_LOG.md`. GitHub Actions on both repositories previously could not start because GitHub reported an account-level billing lock. Production npm dependency audit was clean in the earlier snapshot, while 18 moderate findings remained in the development Forge chain; a fresh advisory review is still needed. A public beta release and release updater are not yet verified.
+
+### B-014: GitHub-release updater and first-run recovery
+
+**Status:** Source implemented; Windows package, update service, and clean install/upgrade acceptance pending.
+
+- Use Electron's Squirrel.Windows updater against the public GitHub release feed for installed Windows x64 builds. Publish the `RELEASES`, full `.nupkg`, and Setup `.exe` assets together; keep SHA-256 sums on the release.
+- Automatically check periodically and download in the background, but never restart silently. Show a user-controlled update action and block installation while a task is active.
+- Handle Squirrel install/update/uninstall launch events so they do not start the regular app or sidecar. Ensure first-run checks wait until Squirrel releases its installer lock.
+- Add first-run guidance and an in-app route to official Ollama setup; keep model weights and provider runtimes separately chosen and downloaded. Preserve no-model-load-on-launch behavior.
+- Validate previous-version install → discovery → download → user-approved restart → data preservation in a clean Windows x64 environment. Document that macOS, Linux, Windows ARM, and Authenticode signing are not provided by this beta workflow.
+
+### B-015: Chat reading continuity and concise tool activity
+
+**Status:** Source implemented; renderer and packaged acceptance pending.
+
+- Keep the transcript at the end only while the reader is already following live output. Show a jump-to-latest control after they scroll into earlier messages; restore follow mode when they return to the end.
+- Default tool activity to short chat rows with expandable arguments/output. Keep the complete activity trace and full results available in the worksheet and after session resume.
+- Verify long streamed output, reader scroll-up, jump-to-latest, session restore, and each display mode in the rebuilt app.
+
+### B-016: Accurate model-orbit home visualization
+
+**Status:** Adaptive slot layout and model-detail popover exist in source; visible click acceptance pending.
+
+- Render one interactive marker per installed local model; render zero model markers when no models are installed. Ring outlines remain decoration only and do not imply models.
+- Clicking a marker opens that model's metadata without loading it. Escape and clicking outside dismiss the card.
+- Test zero, three, and large model catalogs plus provider metadata and viewport placement in the packaged Home screen.
+
+### B-017: Release screenshots and README visuals
+
+**Status:** README refreshed and two authentic historical captures added; current release screenshots pending. A third earlier-commit image is labeled as a reconstruction and excluded from user-facing galleries.
+
+- Add real screenshots from the exact rebuilt release candidate: Home/model orbit, chat with compact live activity, and the worksheet showing plan, trace, and resource readings.
+- Keep historical screenshots clearly labeled and ensure captures contain no private project paths or credentials.
 ### B-011: Provider-accurate live KV-cache telemetry
 
 **Priority:** High; telemetry is implemented in source in both runtime adapters, with end-to-end packaged evidence pending.

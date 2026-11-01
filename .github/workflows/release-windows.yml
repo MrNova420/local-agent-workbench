@@ -1,0 +1,72 @@
+name: Windows x64 beta release
+on:
+  push:
+    tags:
+      - 'v*'
+permissions:
+  contents: write
+jobs:
+  package-and-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: MrNova420/local-agent-workbench-core
+          ref: 1d68312bd0e87c8e0e98ecf5b6252a5c88cf6348
+          path: engine
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify release tag matches package version
+        shell: pwsh
+        run: |
+          $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tagVersion = $env:GITHUB_REF_NAME.TrimStart('v')
+          if ($packageVersion -ne $tagVersion) { throw "Tag version $tagVersion does not match package version $packageVersion" }
+      - name: Install sidecar dependencies
+        run: python -m pip install -r engine/requirements.txt -r sidecar/requirements.txt pytest
+      - name: Install JavaScript dependencies
+        run: npm ci
+      - name: Verify desktop and agent engine
+        run: |
+          npm run typecheck
+          npm test
+        env:
+          LOCAL_AGENT_CORE_PATH: ${{ github.workspace }}/engine
+      - name: Verify shared agent engine
+        run: python -m pytest -q
+        working-directory: engine
+      - name: Build Windows installer and portable ZIP
+        run: npm run make
+        env:
+          LOCAL_AGENT_CORE_PATH: ${{ github.workspace }}/engine
+      - name: Create release checksums
+        shell: pwsh
+        run: |
+          $files = @(
+            Get-ChildItem 'out/make/squirrel.windows/x64' -File
+            Get-ChildItem 'out/make/zip/win32/x64' -File
+          )
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($file.Name)"
+          }
+          Set-Content -LiteralPath 'out/make/SHA256SUMS.txt' -Value $lines -Encoding ascii
+      - name: Publish public beta release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Local Agent Workbench ${{ github.ref_name }} · Public beta
+          # The Electron public update service ignores GitHub-marked prereleases.
+          # The SemVer tag still carries the beta identifier; this Release object is listed normally.
+          prerelease: false
+          files: |
+            out/make/squirrel.windows/x64/RELEASES
+            out/make/squirrel.windows/x64/*.exe
+            out/make/squirrel.windows/x64/*.nupkg
+            out/make/zip/win32/x64/*.zip
+            out/make/SHA256SUMS.txt
