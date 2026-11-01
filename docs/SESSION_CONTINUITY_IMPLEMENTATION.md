@@ -4,7 +4,7 @@
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
-**Current paired engine source:** `7b7e575203cd8e3110fe4e89c95c38f451a843d7` (unpublished; regressions intentionally queued).
+**Current paired engine source:** `3b22665286de0636591f7469850c3e5fa50f2710` (unpublished; regressions intentionally queued).
 
 ## Implemented in this source batch
 

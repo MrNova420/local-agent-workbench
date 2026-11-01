@@ -537,3 +537,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Provider dispatch/header/completion, request settings, usage, prompt manifests, tool batches/results, and plan events still flush to both append-only journals immediately, but no longer force a full session JSON replacement for each event. Full snapshots remain periodic (8 seconds) and forced at compaction, approval, and terminal boundaries.
 - Added a recovery regression ensuring journal replay restores provider request status, exact usage, plan progress, and complete tool results without an intermediate snapshot. It is queued; fault-injection and long-run save-lock acceptance remain pending.
 
+## 2026-11-01 small-model continuity guidance (verification queued)
+
+- Engine commit `3b22665286de0636591f7469850c3e5fa50f2710` adds small-model-only guidance to plan once, continue the next unfinished action, avoid repeating completed planning, and resume from the saved checkpoint after compaction. It adds no fixed action count, time limit, or inference setting change.
+- Added prompt regression coverage; it remains unrun. The app pin is synchronized to this engine revision; packaging and user-flow verification remain queued.
+
