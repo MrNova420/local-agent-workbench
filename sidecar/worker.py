@@ -73,7 +73,11 @@ class RequestScopedOllama:
                 if isinstance(result.get(key), (int, float)) and not isinstance(result.get(key), bool)
             }
             if usage:
-                emit({"type": "generation_usage", "usage": usage})
+                event = {"type": "generation_usage", "usage": usage}
+                request_index = state.get("request_index")
+                if isinstance(request_index, int) and not isinstance(request_index, bool):
+                    event["request_index"] = request_index
+                emit(event)
             return result
         except Exception as exc:
             if cancel.is_set():
@@ -121,7 +125,7 @@ class AgentService:
         run_state = state.get("run_state")
         enriched = {**event, "sessionId": state["session_id"], "turnId": controller["turn_id"],
                     "workspace": str(turn.workspace), "timestamp": event.get("at", time.time())}
-        force_save = event.get("type") in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "prompt_manifest", "approval_request", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete"}
+        force_save = event.get("type") in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "prompt_manifest", "inference_settings", "approval_request", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete"}
         with controller["checkpoint_lock"]:
             if isinstance(run_state, dict):
                 if event.get("type") == "phase" and event.get("phase") == "waiting":
@@ -257,9 +261,34 @@ class AgentService:
                             "workspace": str(turn.workspace), "kind": "prompt", "name": f"Model request {int(event.get('request_index', 0))}",
                             "status": "sent", "promptManifest": manifest, "timestamp": time.time()}
                 rows.append(activity)
+            elif kind == "inference_settings":
+                request_index = event.get("request_index")
+                activity = next((item for item in reversed(rows)
+                                 if item.get("kind") == "prompt"
+                                 and item.get("turnId") == controller["turn_id"]
+                                 and isinstance(item.get("promptManifest"), dict)
+                                 and item["promptManifest"].get("request_index") == request_index), None)
+                if activity is not None:
+                    activity["providerRequest"] = {
+                        key: copy.deepcopy(event[key])
+                        for key in ("provider", "request_api", "request_index", "model", "api_model", "stream", "tool_count", "requested_context",
+                                    "runtime_context", "max_output_tokens", "reasoning_override", "runtime_reasoning",
+                                    "reasoning_field_sent", "keep_alive", "request_options",
+                                    "estimated_input_tokens", "input_estimate_method")
+                        if key in event
+                    }
             elif kind == "generation_usage":
+                request_index = event.get("request_index")
+                activity = next((item for item in reversed(rows)
+                                 if item.get("kind") == "prompt"
+                                 and item.get("turnId") == controller["turn_id"]
+                                 and isinstance(item.get("promptManifest"), dict)
+                                 and item["promptManifest"].get("request_index") == request_index), None)
+                if activity is not None:
+                    activity["providerUsage"] = copy.deepcopy(event.get("usage", {}))
                 state.setdefault("usage_events", []).append({
                     "turn_id": controller["turn_id"], "session_id": state["session_id"],
+                    "request_index": request_index,
                     "model": state.get("model"), "provider_id": state.get("provider_id"),
                     "settings": copy.deepcopy(run_state.get("settings", {}) if isinstance(run_state, dict) else {}),
                     "usage": copy.deepcopy(event.get("usage", {})),
@@ -275,9 +304,15 @@ class AgentService:
             if kind == "generation_usage":
                 enriched["first_token_seconds"] = run_state.get("request_first_token_seconds") if isinstance(run_state, dict) else None
             if activity:
-                enriched["type"] = "activity_event"
-                enriched["activity"] = copy.deepcopy(activity) if kind != "operation_output" else None
-                self.emit(enriched)
+                if kind in {"inference_settings", "generation_usage"}:
+                    # Keep the existing live settings/metrics event and publish the same
+                    # durable prompt row update to the activity feed.
+                    self.emit(enriched)
+                    self.emit({**enriched, "type": "activity_event", "activity": copy.deepcopy(activity)})
+                else:
+                    enriched["type"] = "activity_event"
+                    enriched["activity"] = copy.deepcopy(activity) if kind != "operation_output" else None
+                    self.emit(enriched)
             else:
                 self.emit(enriched)
 

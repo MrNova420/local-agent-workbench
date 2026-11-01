@@ -105,7 +105,9 @@ Follow [RELEASE_RUNBOOK.md](RELEASE_RUNBOOK.md). Beta.3 was published at the use
 
 **Current paired source pin `536b37050566e64c67476de013629a83c089089b`:** approved commands canceled after launch or terminated by timeout now report uncertain side effects, trigger a bounded inspection request, and surface a warning; a command canceled before execution remains a clean cancellation. Regression coverage is queued. No tests or app/model runtime check has been run.
 
-**Current paired source pin `d4bf35cfb7d949b71a2e98242b0ccff421b1296a`:** the active-task compaction checkpoint now tells the model to inspect saved results and workspace state before repeating an operation marked uncertain, and explicitly forbids automatic replay. A continuity regression is queued; this change has not been tested.
+**Prior paired source pin `d4bf35cfb7d949b71a2e98242b0ccff421b1296a`:** the active-task compaction checkpoint now tells the model to inspect saved results and workspace state before repeating an operation marked uncertain, and explicitly forbids automatic replay. A continuity regression is queued; this change has not been tested.
+
+**Latest paired source follow-up:** exact per-request provider settings and provider-returned usage are now connected to the same durable prompt activity by turn/request index. The Activity Trace distinguishes the selected model from the API model ID, actual request options, the reasoning override's presence, provider-reported effective context, estimated input, and provider-returned token/timing counters. Mirrored journal recovery reconstructs those fields. The app is pinned to engine `4f12fd6eed7aeb708767a4de50474bbdd31a4241`; mocked regressions have been added but remain queued. No app/model/runtime or release verification has been performed; selected inference settings were not changed.
 
 These remain required for the intended capable local coding-agent platform; they are not dropped because the immediate release gate is narrow.
 

@@ -109,6 +109,10 @@ export type ActivityRecord = {
   checkpointIncluded?: boolean;
   checkpointEstimate?: number;
   promptManifest?: Record<string, unknown>;
+  /** Exact provider request fields captured immediately before dispatch. */
+  providerRequest?: Record<string, unknown>;
+  /** Provider-returned token and timing counters for this specific request. */
+  providerUsage?: Record<string, unknown>;
 };
 
 export type ActivityEventEnvelope = {

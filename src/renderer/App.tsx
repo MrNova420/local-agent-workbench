@@ -40,7 +40,7 @@ type Session = {
   activity_events?: ActivityRecord[];
   turns?: Array<{ turn_id?: string; prompt?: string; started_at?: number; finished_at?: number; status?: string; transcript_saved?: boolean }>;
   plan?: PlanItem[];
-  usage_events?: Array<{ turn_id?: string; first_token_seconds?: number; estimated_input_tokens?: number; usage?: Record<string, unknown> }>;
+  usage_events?: Array<{ turn_id?: string; request_index?: number; first_token_seconds?: number; estimated_input_tokens?: number; usage?: Record<string, unknown> }>;
   recovery_issues?: string[];
   skills_enabled?: boolean;
   skill_sources?: SkillSource[];

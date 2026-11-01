@@ -140,10 +140,10 @@ def test_stream_reports_exact_usage_for_every_ollama_response():
     events = []
     adapter = RequestScopedOllama(UsageRuntime())
 
-    result = adapter.stream({}, [], threading.Event(), events.append)
+    result = adapter.stream({"request_index": 7}, [], threading.Event(), events.append)
 
     assert result["eval_count"] == 9
-    assert events == [{"type": "generation_usage", "usage": {
+    assert events == [{"type": "generation_usage", "request_index": 7, "usage": {
         "prompt_eval_count": 100, "prompt_eval_cached_count": 60, "prompt_eval_duration": 800_000_000,
         "eval_count": 9, "eval_duration": 4_500_000_000, "load_duration": 30_000_000,
     }}]

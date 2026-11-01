@@ -410,3 +410,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Added a queued sidecar regression for cancellation before the worker thread begins. It checks the persisted terminal `cancelled` run state, the unsaved-transcript turn marker, and the terminal/idle events; it was not run.
 - Added a queued renderer regression that verifies an early canceled turn cannot shift restored activity links; existing turn records without the new marker retain legacy mapping behavior. It was not run.
 - Documented patch releases as monotonically increasing beta tags with the full Squirrel asset set. Release tags automatically publish and therefore remain reserved for a verified build; no tag was created for this development batch.
+
+## 2026-11-01 provider request evidence follow-up (verification queued)
+
+- Paired source pin advanced to engine `4f12fd6eed7aeb708767a4de50474bbdd31a4241`. Each prompt activity now receives the exact provider request settings and the corresponding provider-returned token/timing counters, correlated by turn and request index. Both are saved in the session snapshot and reconstructed from the mirrored event journal; the Activity Trace separates request settings, estimates, and provider-returned metrics. Legacy sessions say when exact request data was not captured.
+- Added mocked regression cases for Ollama default-versus-explicit reasoning fields, llama.cpp effective context, sidecar live correlation, journal recovery, and request-card rendering. These tests have not been run. No app, model, typecheck, package, visual acceptance, or external service was used. Context/output/reasoning choices and runtime placement remain unchanged.

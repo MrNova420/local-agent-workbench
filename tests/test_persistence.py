@@ -7,6 +7,39 @@ from sidecar.persistence import MirroredSessionStore, WorkspaceHistory, _replay_
 
 
 class MirroredSessionStoreTests(unittest.TestCase):
+    def test_journal_recovery_attaches_exact_provider_settings_to_matching_prompt_request(self):
+        state = {
+            "session_id": "s-provider", "workspace": "C:/project",
+            "run_state": {"turn_id": "turn-provider", "estimated_input_tokens": None},
+            "activity_events": [],
+        }
+        _replay_run_event(state, {"type": "prompt_manifest", "activityId": "turn-provider-request-2",
+                                  "turnId": "turn-provider", "request_index": 2,
+                                  "messages": [], "configured_context": 65536})
+        _replay_run_event(state, {"type": "inference_settings", "turnId": "turn-provider",
+                                  "request_index": 2, "provider": "ollama", "request_api": "/api/chat",
+                                  "model": "ornith:latest", "api_model": "ornith:latest", "stream": True,
+                                  "tool_count": 8, "requested_context": 65536,
+                                  "max_output_tokens": 8192, "reasoning_override": None,
+                                  "reasoning_field_sent": False, "keep_alive": "3h",
+                                  "request_options": {"num_ctx": 65536, "num_predict": 8192},
+                                  "estimated_input_tokens": 4100,
+                                  "input_estimate_method": "conservative estimate"})
+        _replay_run_event(state, {"type": "generation_usage", "turnId": "turn-provider",
+                                  "request_index": 2, "usage": {"prompt_eval_count": 4000,
+                                                                     "prompt_eval_cached_count": 3200,
+                                                                     "eval_count": 42}})
+
+        prompt = state["activity_events"][0]
+        self.assertEqual(prompt["id"], "turn-provider-request-2")
+        self.assertEqual(prompt["providerRequest"]["request_options"], {"num_ctx": 65536, "num_predict": 8192})
+        self.assertFalse(prompt["providerRequest"]["reasoning_field_sent"])
+        self.assertEqual(prompt["providerRequest"]["keep_alive"], "3h")
+        self.assertEqual(prompt["providerRequest"]["api_model"], "ornith:latest")
+        self.assertEqual(prompt["providerRequest"]["tool_count"], 8)
+        self.assertEqual(prompt["providerUsage"]["prompt_eval_count"], 4000)
+        self.assertEqual(prompt["providerUsage"]["prompt_eval_cached_count"], 3200)
+
     def test_new_task_plan_snapshot_clears_prior_acceptance_criteria_on_replay(self):
         state = {
             "session_id": "s1", "workspace": "C:/project", "plan": [{"title": "Old"}],

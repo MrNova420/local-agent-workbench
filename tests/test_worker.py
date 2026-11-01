@@ -73,6 +73,59 @@ def test_session_run_settings_persist_skill_controls_and_inference_values(servic
     assert service.sessions.load(session["session_id"], str(workspace))["state"]["skills_enabled"] is False
 
 
+def test_provider_request_settings_update_the_matching_prompt_activity_and_stream_live(service, tmp_path, monkeypatch):
+    events = []
+    service.emit = events.append
+
+    class RequestEvidenceEngine:
+        def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
+            self.event = event
+            self.state = {}
+            self.runtime = object()
+
+        def run(self, prompt, messages):
+            self.event({"type": "prompt_manifest", "activityId": "turn-1-request-1", "request_index": 1,
+                        "messages": [], "configured_context": 65536})
+            self.event({"type": "inference_settings", "request_index": 1, "provider": "ollama",
+                        "request_api": "/api/chat", "model": "model-a:latest", "api_model": "model-a:latest",
+                        "stream": True, "tool_count": 12, "requested_context": 65536,
+                        "max_output_tokens": 8192, "reasoning_override": None,
+                        "reasoning_field_sent": False, "keep_alive": "30m",
+                        "request_options": {"num_ctx": 65536, "num_predict": 8192},
+                        "estimated_input_tokens": 600, "input_estimate_method": "conservative estimate"})
+            self.event({"type": "generation_usage", "request_index": 1,
+                        "usage": {"prompt_eval_count": 580, "prompt_eval_cached_count": 120, "eval_count": 45}})
+            self.event({"type": "generation_complete", "workflowOutcome": "discussion",
+                        "verification": {"status": "not_verified", "steps": []}})
+            return messages
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(worker, "AgentEngine", RequestEvidenceEngine)
+    project = tmp_path / "request-evidence-project"
+    project.mkdir()
+    service.handle("run_start", {"options": {
+        "workspace": str(project), "prompt": "hello", "model": "model-a:latest",
+        "context": 65536, "maxTokens": 8192, "temperature": 0.2,
+        "access": "ask", "approvalMode": "per-action", "reasoning": None,
+    }})
+    controller = service.active
+    assert controller is not None
+    controller["thread"].join(3)
+
+    saved = service.sessions.load(controller["session"]["session_id"], str(project))["state"]
+    prompt = next(row for row in saved["activity_events"] if row.get("kind") == "prompt")
+    assert prompt["providerRequest"]["request_options"] == {"num_ctx": 65536, "num_predict": 8192}
+    assert prompt["providerRequest"]["reasoning_field_sent"] is False
+    assert prompt["providerRequest"]["api_model"] == "model-a:latest"
+    assert prompt["providerRequest"]["tool_count"] == 12
+    assert prompt["providerUsage"] == {"prompt_eval_count": 580, "prompt_eval_cached_count": 120, "eval_count": 45}
+    assert any(event.get("type") == "inference_settings" for event in events)
+    assert any(event.get("type") == "activity_event" and event.get("activity", {}).get("providerRequest")
+               for event in events)
+
+
 def test_plan_intent_seeds_live_checklist_and_enforces_read_only_builtin_tools(service, tmp_path, monkeypatch):
     events = []
     captured = {}

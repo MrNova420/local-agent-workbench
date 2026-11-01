@@ -97,6 +97,21 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
         run["partial_thinking"] = str(run.get("partial_thinking", "")) + str(event.get("text", ""))
     elif kind == "inference_settings":
         run["estimated_input_tokens"] = event.get("estimated_input_tokens")
+        request_index = event.get("request_index")
+        prompt = next((item for item in reversed(state.setdefault("activity_events", []))
+                       if item.get("kind") == "prompt"
+                       and item.get("turnId") == event.get("turnId", run.get("turn_id"))
+                       and isinstance(item.get("promptManifest"), dict)
+                       and item["promptManifest"].get("request_index") == request_index), None)
+        if prompt is not None:
+            prompt["providerRequest"] = {
+                key: copy.deepcopy(event[key])
+                for key in ("provider", "request_api", "request_index", "model", "api_model", "stream", "tool_count", "requested_context",
+                            "runtime_context", "max_output_tokens", "reasoning_override", "runtime_reasoning",
+                            "reasoning_field_sent", "keep_alive", "request_options",
+                            "estimated_input_tokens", "input_estimate_method")
+                if key in event
+            }
     elif kind == "tool_batch":
         run["tool_batch"] = {"assistant_message": copy.deepcopy(event.get("assistantMessage")),
                              "calls": copy.deepcopy(event.get("calls", [])),
@@ -204,8 +219,17 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
             "promptManifest": manifest, "timestamp": event.get("timestamp", time.time()),
         })
     elif kind == "generation_usage":
+        request_index = event.get("request_index")
+        prompt = next((item for item in reversed(state.setdefault("activity_events", []))
+                       if item.get("kind") == "prompt"
+                       and item.get("turnId") == event.get("turnId", run.get("turn_id"))
+                       and isinstance(item.get("promptManifest"), dict)
+                       and item["promptManifest"].get("request_index") == request_index), None)
+        if prompt is not None:
+            prompt["providerUsage"] = copy.deepcopy(event.get("usage", {}))
         state.setdefault("usage_events", []).append({"turn_id": event.get("turnId", run.get("turn_id")),
                                                      "session_id": state["session_id"],
+                                                     "request_index": request_index,
                                                      "model": state.get("model"), "provider_id": state.get("provider_id"),
                                                      "settings": copy.deepcopy(run.get("settings", {})),
                                                      "usage": copy.deepcopy(event.get("usage", {})),

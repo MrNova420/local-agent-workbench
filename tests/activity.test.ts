@@ -122,6 +122,35 @@ describe('durable live activity state', () => {
     expect(trace).toContain('4096');
   });
 
+  it('distinguishes saved provider request settings from prompt estimates and shows omitted reasoning overrides', () => {
+    const record: ActivityRecord = {
+      id: 'request-1', sessionId: 's-1', turnId: 't-1', kind: 'prompt', name: 'Model request 1', status: 'sent',
+      promptManifest: { request_index: 1, configured_context: 65536, maximum_output_tokens: 8192, messages: [] },
+      providerRequest: {
+        provider: 'ollama', model: 'ornith:latest', request_api: '/api/chat', request_index: 1,
+        requested_context: 65536, max_output_tokens: 8192, reasoning_override: null,
+        reasoning_field_sent: false, keep_alive: '30m', request_options: { num_ctx: 65536, num_predict: 8192 },
+        estimated_input_tokens: 4096,
+      },
+      providerUsage: { prompt_eval_count: 4096, prompt_eval_cached_count: 2048, eval_count: 212, eval_duration: 30_000_000_000 },
+    };
+    const trace = renderToStaticMarkup(createElement(ActivityFeed, { entries: [record], mode: 'sidebar', surface: 'sidebar' }));
+
+    expect(trace).toContain('Provider request actually sent');
+    expect(trace).toContain('ollama');
+    expect(trace).toContain('ornith:latest');
+    expect(trace).toContain('Reasoning override');
+    expect(trace).toContain('provider/model default');
+    expect(trace).toContain('65536');
+    expect(trace).toContain('8192');
+    expect(trace).toContain('30m');
+    expect(trace).toContain('num_predict');
+    expect(trace).toContain('Provider returned usage');
+    expect(trace).toContain('Cached prompt tokens');
+    expect(trace).toContain('2,048');
+    expect(trace).toContain('30.00 s');
+  });
+
   it('labels capped tool scans as partial rather than complete in activity views', () => {
     const record: ActivityRecord = {
       id: 'scan-1', sessionId: 's-1', turnId: 't-1', kind: 'operation', name: 'search_files',
