@@ -168,7 +168,14 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
             row.update(status=event.get("status", "completed"), result=event.get("result", ""),
                        affectedFiles=copy.deepcopy(event.get("affectedFiles", [])),
                        completedAt=event.get("completedAt", time.time()))
+        previous_operation = copy.deepcopy(run.get("active_operation"))
         run["active_operation"] = None
+        if event.get("status") == "uncertain":
+            uncertain = previous_operation if isinstance(previous_operation, dict) else {}
+            uncertain.update({key: copy.deepcopy(event.get(key))
+                              for key in ("operationId", "toolCallId", "name", "arguments", "result", "status", "affectedFiles", "completedAt")
+                              if key in event})
+            run["uncertain_operation"] = uncertain
         batch = run.get("tool_batch")
         if isinstance(batch, dict):
             results = run.setdefault("completed_tool_results", {})
@@ -615,7 +622,7 @@ class MirroredSessionStore:
                 state = self._replay_events(state, str(root) if root else state.get("workspace"), sources)
             rows.append({key: state.get(key) for key in ("session_id", "workspace", "workspace_id", "model", "provider_id", "model_id", "updated_at")}
                         | {"sync_conflict": conflict, "recommended_source": "project" if conflict else ("project" if any(row["source"] == "project" for row in versions) else "app"), "sources": [row["source"] for row in versions],
-                           "recovery_status": (state.get("run_state") or {}).get("status"), "uncertain_operation": ((state.get("run_state") or {}).get("active_operation") or {}).get("name"),
+                           "recovery_status": (state.get("run_state") or {}).get("status"), "uncertain_operation": (((state.get("run_state") or {}).get("uncertain_operation") or (state.get("run_state") or {}).get("active_operation") or {}).get("name")),
                            "recovery_issue_count": len(state.get("recovery_issues", []))})
         return sorted(rows, key=lambda row: row.get("updated_at") or 0, reverse=True)
 

@@ -45,7 +45,7 @@
 
 ## Remaining reliability work
 
-- The shared engine is pinned at `dd4278eeb8413093b58f85fb8c2ae95980c1f47d` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. It records provider-specific body fields alongside normalized options and persists those fields through session recovery. Reconcile and build the packaged app only after implementation is complete.
+- The shared engine is pinned at `ed1d27f86414bb97b208683d6625e41c87e723ea` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. It records provider-specific body fields alongside normalized options and persists uncertain dispatched MCP effects, blocking the remainder of the same tool batch until those effects are reviewed. Reconcile and build the packaged app only after implementation is complete.
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.
 - Add persisted context/input usage presentation and distinguish actual runtime allocation from selected context where the provider exposes it.

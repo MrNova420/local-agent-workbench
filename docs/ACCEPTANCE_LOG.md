@@ -431,3 +431,9 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 
 - The paired engine pin is `dd4278eeb8413093b58f85fb8c2ae95980c1f47d`. Request evidence now records provider-specific body fields in addition to normalized options: Ollama's explicit `think` field only when present, and llama.cpp's `stream_options.include_usage` setting. Omitted reasoning remains omitted and does not change the model default.
 - The sidecar persists these fields in snapshots and mirrored journal recovery; the Activity Trace displays them separately from normalized options. Added queued engine, persistence, worker, and renderer assertions. Tests, typecheck, package, UI, and model checks remain unrun by instruction.
+
+## 2026-11-01 uncertain remote MCP results (verification queued)
+
+- A dispatched MCP operation whose cancellation or response failure prevents confirmation now ends with an `uncertain` result and a durable record of the exact call arguments. The engine stops the rest of that response's tool batch; each unexecuted call is recorded as `blocked`, with no automatic retry. Recovered sessions retain the uncertain operation and its activity state.
+- Remote exception detail is not copied into the user-facing result, avoiding accidental disclosure of endpoint-provided credential text. Added mocked engine and journal-replay regressions; they remain queued. No MCP server, app, model, or test suite was run.
+- Paired engine commit: `ed1d27f86414bb97b208683d6625e41c87e723ea`. The compact activity row also surfaces “inspect before retry” without requiring expansion; a queued renderer assertion covers that cue.

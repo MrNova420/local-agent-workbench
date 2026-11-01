@@ -7,6 +7,25 @@ from sidecar.persistence import MirroredSessionStore, WorkspaceHistory, _replay_
 
 
 class MirroredSessionStoreTests(unittest.TestCase):
+    def test_journal_recovery_preserves_uncertain_remote_tool_effects(self):
+        state = {
+            "session_id": "s-mcp", "workspace": "C:/project",
+            "run_state": {"turn_id": "turn-mcp", "safe_messages": []},
+            "activity_events": [],
+        }
+        _replay_run_event(state, {"type": "tool_start", "turnId": "turn-mcp", "operationId": "op-mcp",
+                                  "toolCallId": "call-mcp", "name": "mcp__calendar__create_event",
+                                  "arguments": {"title": "Review"}, "startedAt": 1})
+        _replay_run_event(state, {"type": "tool_done", "turnId": "turn-mcp", "operationId": "op-mcp",
+                                  "toolCallId": "call-mcp", "name": "mcp__calendar__create_event",
+                                  "result": "Uncertain: response lost after dispatch", "status": "uncertain",
+                                  "affectedFiles": [], "completedAt": 2})
+
+        operation = state["run_state"]["uncertain_operation"]
+        self.assertEqual(operation["name"], "mcp__calendar__create_event")
+        self.assertEqual(operation["arguments"], {"title": "Review"})
+        self.assertEqual(state["activity_events"][0]["status"], "uncertain")
+
     def test_journal_recovery_attaches_exact_provider_settings_to_matching_prompt_request(self):
         state = {
             "session_id": "s-provider", "workspace": "C:/project",

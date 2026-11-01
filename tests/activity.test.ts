@@ -170,6 +170,15 @@ describe('durable live activity state', () => {
     expect(markup).toContain('partial');
   });
 
+  it('shows an inspect-before-retry warning for uncertain operations while collapsed', () => {
+    const record: ActivityRecord = {
+      id: 'mcp-uncertain', sessionId: 's-1', turnId: 't-1', kind: 'operation',
+      name: 'mcp_calendar_create_event', status: 'uncertain', result: 'The server may have applied the action.',
+    };
+    const markup = renderToStaticMarkup(createElement(ActivityFeed, { entries: [record], mode: 'compact', surface: 'chat' }));
+    expect(markup).toContain('inspect before retry');
+  });
+
   it('progressively reveals long output without discarding the remainder', () => {
     const record: ActivityRecord = {
       id: 'op-large', sessionId: 's-1', turnId: 't-1', kind: 'operation', name: 'run_command',

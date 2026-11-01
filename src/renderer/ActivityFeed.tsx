@@ -23,6 +23,7 @@ function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expande
         {firstFile && <code className="activity-chat-file">{firstFile}{extraFiles > 0 ? ` +${extraFiles}` : ''}</code>}
       </> : <strong>{title}</strong>}
       <span className="activity-status">{row.status.replaceAll('_', ' ')}</span>
+      {row.status === 'uncertain' && <span className="activity-review-warning">inspect before retry</span>}
       {row.approvalStatus && <span className={`activity-approval activity-approval-${row.approvalStatus}`}>approval {row.approvalStatus.replaceAll('_', ' ')}</span>}
       {surface === 'sidebar' && row.affectedFiles?.length ? <span className="activity-file-count">{row.affectedFiles.length} file{row.affectedFiles.length === 1 ? '' : 's'}</span> : null}
     </summary>

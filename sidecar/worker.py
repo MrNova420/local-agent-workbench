@@ -175,7 +175,14 @@ class AgentService:
                         output[stream] = str(output.get(stream, "")) + str(event.get("text", ""))
                 elif event.get("type") == "tool_done":
                     controller["current_operation_id"] = None
+                    previous_operation = copy.deepcopy(run_state.get("active_operation"))
                     run_state["active_operation"] = None
+                    if event.get("status") == "uncertain":
+                        uncertain = previous_operation if isinstance(previous_operation, dict) else {}
+                        uncertain.update({key: copy.deepcopy(event.get(key))
+                                          for key in ("operationId", "toolCallId", "name", "arguments", "result", "status", "affectedFiles", "completedAt")
+                                          if key in event})
+                        run_state["uncertain_operation"] = uncertain
                     batch = run_state.get("tool_batch")
                     if isinstance(batch, dict):
                         results = run_state.setdefault("completed_tool_results", {})
