@@ -856,8 +856,7 @@ class AgentService:
                 self.ollama_preload_lock.release()
             return {"started": True}
         if command == "run_cancel":
-            self.cancel()
-            return {"cancelled": True}
+            return {"cancelled": self.cancel()}
         if command == "run_stop_after_operation":
             with self.active_lock:
                 controller = self.active
@@ -1446,11 +1445,11 @@ class AgentService:
             condition.notify_all()
         return True
 
-    def cancel(self) -> None:
+    def cancel(self) -> bool:
         with self.active_lock:
             controller = self.active
         if not controller:
-            return
+            return False
         controller["cancel"].set()
         engine = controller.get("engine")
         if engine:
@@ -1461,6 +1460,7 @@ class AgentService:
             with condition:
                 result.update(done=True, approved=False)
                 condition.notify_all()
+        return True
 
 
 def main() -> None:

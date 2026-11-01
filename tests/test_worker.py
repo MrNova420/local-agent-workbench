@@ -929,3 +929,11 @@ def test_approval_state_is_recorded_on_the_operation_without_a_duplicate_trace_r
     assert operations[0]["kind"] == "operation"
     assert operations[0]["approvalStatus"] == "approved"
     assert operations[0]["status"] == "completed"
+
+
+def test_run_cancel_reports_whether_a_run_was_active(service):
+    assert service.handle("run_cancel", {}) == {"cancelled": False}
+    controller = {"cancel": threading.Event(), "engine": None, "pending": {}}
+    service.active = controller
+    assert service.handle("run_cancel", {}) == {"cancelled": True}
+    assert controller["cancel"].is_set()
