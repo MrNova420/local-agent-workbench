@@ -4,7 +4,7 @@ export type PersistedTranscriptRow = {
   thinking?: unknown;
 };
 
-export type PersistedTranscriptTurn = { turn_id?: string };
+export type PersistedTranscriptTurn = { turn_id?: string; transcript_saved?: boolean };
 
 export type TranscriptMessage = {
   role: 'user' | 'assistant';
@@ -20,11 +20,12 @@ export function appendTranscriptSegment(previous: string, chunk: string, separat
 }
 
 export function restoreTranscriptMessages(rows: PersistedTranscriptRow[], turns: PersistedTranscriptTurn[] = []): TranscriptMessage[] {
+  const savedTurns = turns.filter((turn) => turn.transcript_saved !== false);
   let userTurnIndex = 0;
   const restored: TranscriptMessage[] = [];
   for (const row of rows) {
     if ((row.role !== 'user' && row.role !== 'assistant') || typeof row.content !== 'string' || row.content.length === 0) continue;
-    const turnId = row.role === 'user' ? turns[userTurnIndex++]?.turn_id : undefined;
+    const turnId = row.role === 'user' ? savedTurns[userTurnIndex++]?.turn_id : undefined;
     restored.push({
       role: row.role,
       content: row.content,

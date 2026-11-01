@@ -34,7 +34,7 @@ type Session = {
   last_error?: { message: string; occurred_at: number };
   activity_mode?: ActivityMode;
   activity_events?: ActivityRecord[];
-  turns?: Array<{ turn_id?: string; prompt?: string; started_at?: number; finished_at?: number; status?: string }>;
+  turns?: Array<{ turn_id?: string; prompt?: string; started_at?: number; finished_at?: number; status?: string; transcript_saved?: boolean }>;
   plan?: Array<{ title?: string; text?: string; status?: string }>;
   run_state?: Record<string, unknown> | null;
 };

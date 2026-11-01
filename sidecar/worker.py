@@ -893,8 +893,10 @@ class AgentService:
         turn_records = state.setdefault("turns", [])
         if not isinstance(turn_records, list):
             turn_records = state["turns"] = []
+        prior_user_messages = sum(1 for row in state.get("messages", []) if isinstance(row, dict) and row.get("role") == "user")
         turn_records.append({"turn_id": turn_id, "prompt": prompt, "started_at": turn_started_at,
-                             "workspace": str(working), "approval_mode": approval_mode, "status": "running"})
+                             "workspace": str(working), "approval_mode": approval_mode, "status": "running",
+                             "transcript_saved": False, "prior_user_messages": prior_user_messages})
         state["run_state"] = {
             "status": "running", "turn_id": turn_id, "prompt": prompt, "started_at": turn_started_at,
             "safe_messages": copy.deepcopy(state.get("messages", [])), "partial_content": "",
@@ -927,10 +929,16 @@ class AgentService:
         state = controller["session"]
         relay = AgentEventRelay(lambda event: self._publish_run_event(controller, turn, event))
 
-        def update_turn_record(status: str) -> None:
+        def update_turn_record(status: str, transcript_saved: bool | None = None) -> None:
             for record in reversed(state.get("turns", [])):
                 if isinstance(record, dict) and record.get("turn_id") == controller["turn_id"]:
-                    record.update(status=status, finished_at=time.time())
+                    record["status"] = status
+                    if status != "running":
+                        record["finished_at"] = time.time()
+                        record.pop("prior_user_messages", None)
+                    if transcript_saved is not None:
+                        record["transcript_saved"] = transcript_saved
+                        record.pop("prior_user_messages", None)
                     break
 
         try:
@@ -1001,6 +1009,10 @@ class AgentService:
                 engine.cancel()
             messages = engine.run(turn.prompt, state.get("messages", []))
             state["messages"] = messages
+            saved_user_count = sum(1 for row in messages if isinstance(row, dict) and row.get("role") == "user")
+            prior_user_count = next((record.get("prior_user_messages", 0) for record in reversed(state.get("turns", []))
+                                     if isinstance(record, dict) and record.get("turn_id") == controller["turn_id"]), 0)
+            update_turn_record("running", saved_user_count > int(prior_user_count))
             terminal = relay.terminal_event
             run_state = state.get("run_state")
             if isinstance(run_state, dict):
