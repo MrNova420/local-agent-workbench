@@ -542,3 +542,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Engine commit `3b22665286de0636591f7469850c3e5fa50f2710` adds small-model-only guidance to plan once, continue the next unfinished action, avoid repeating completed planning, and resume from the saved checkpoint after compaction. It adds no fixed action count, time limit, or inference setting change.
 - Added prompt regression coverage; it remains unrun. The app pin is synchronized to this engine revision; packaging and user-flow verification remain queued.
 
+## 2026-11-01 checkpoint follows visible plan progress (verification queued)
+
+- Engine commit `7f26a2ba4e10ff389ebf7dd215e2d05d72c73373` updates the durable task checkpoint's `next_action` whenever the Workbench starter checklist advances, so compaction receives the next unfinished step rather than stale generic guidance.
+- Added a focused engine regression; it remains unrun. The app pin is synchronized; no model or inference setting changed.
+

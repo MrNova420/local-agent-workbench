@@ -8,7 +8,7 @@ Deliver **1:1 user-facing feature and workflow parity with Codex and OpenCode** 
 
 ## Current active source state (2026-11-01)
 
-- Unpublished app source pins engine commit `3b22665286de0636591f7469850c3e5fa50f2710` in `core-revision.txt`. These commits are isolated in worktrees and have not been pushed or packaged.
+- Unpublished app source pins engine commit `7f26a2ba4e10ff389ebf7dd215e2d05d72c73373` in `core-revision.txt`. These commits are isolated in worktrees and have not been pushed or packaged.
 - The Ollama request adapter now prevents generic runtime options from silently overriding selected context, output-token, and temperature controls. Conflicts are recorded in request provenance and called out in activity details. A regression is queued; settings were not changed and no inference was run.
 - Cancelled, partial, uncertain, and otherwise incomplete commands now produce an explicit incomplete-verification outcome even when other project files changed. Their run result stays in the evidence record; no command is labeled as a passing test from exit status alone. Regression coverage is queued.
 - Oversized checkpoints now have a budgeted inference-only summary. The full checkpoint remains on disk; the summary preserves the active goal/plan and latest progress and reports any history categories omitted. The Activity Trace displays these counts. Regression coverage is queued and unrun.
@@ -18,6 +18,7 @@ Deliver **1:1 user-facing feature and workflow parity with Codex and OpenCode** 
 - Invalid or unreadable saved permission policy now falls back to no persistent overrides without overwriting the original file, and the app surfaces a startup warning. The selected per-run approval mode still applies. Recovery tests are queued.
 - Provider request metadata, usage, tool batches/results, and plans now force the durable event journal but not a full JSON session snapshot for each event. Full snapshots remain periodic and are forced at compaction, approval, and terminal boundaries. Replay coverage is queued; lock/fault acceptance remains pending.
 - Small-model guidance now explicitly resumes from the saved checkpoint, avoids repeating completed planning, and advances the next unfinished action without a fixed action or runtime cap. Engine prompt tests are queued.
+- Host-observed starter-plan progress now updates the durable checkpoint's `next_action` to the first unfinished plan step, keeping compaction continuity aligned with the visible Plan section. Engine coverage is queued.
 - Project change review now excludes `.agent-workbench` in both non-Git snapshot mode and Git diff mode, including when a user opts those files into Git tracking. Regression cases cover private session data; they are queued with the full verification pass.
 - New source changes add progressive rendering for long activity timelines, separate Ollama/llama.cpp worker CPU/RAM and NVIDIA worker-process VRAM from device-wide GPU readings, and remove the approved-command default of 120 seconds and one-hour ceiling. Standalone operation-result retrieval now works from engine memory when no app session store is available.
 - The cancel chooser now waits for a positive sidecar acknowledgment and stays open on transport failure; a stale click after a run ended is reported as no active run rather than success.
