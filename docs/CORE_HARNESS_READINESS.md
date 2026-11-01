@@ -8,7 +8,7 @@ Deliver **1:1 user-facing feature and workflow parity with Codex and OpenCode** 
 
 ## Current active source state (2026-11-01)
 
-- Unpublished app source pins engine commit `67edf824327779a98332fe271b0b247dd68ebdee` in `core-revision.txt`. These commits are isolated in worktrees and have not been pushed or packaged.
+- Unpublished app source pins engine commit `60a9420176202040be732b2e128a9d356a876c42` in `core-revision.txt`. These commits are isolated in worktrees and have not been pushed or packaged.
 - The Ollama request adapter now prevents generic runtime options from silently overriding selected context, output-token, and temperature controls. Conflicts are recorded in request provenance and called out in activity details. A regression is queued; settings were not changed and no inference was run.
 - Cancelled, partial, uncertain, and otherwise incomplete commands now produce an explicit incomplete-verification outcome even when other project files changed. Their run result stays in the evidence record; no command is labeled as a passing test from exit status alone. Regression coverage is queued.
 - Oversized checkpoints now have a budgeted inference-only summary. The full checkpoint remains on disk; the summary preserves the active goal/plan and latest progress and reports any history categories omitted. The Activity Trace displays these counts. Regression coverage is queued and unrun.
@@ -33,6 +33,7 @@ Deliver **1:1 user-facing feature and workflow parity with Codex and OpenCode** 
 - The app-close chooser now also waits for Electron's accepted choice; cancel-and-close verifies the sidecar accepted cancellation and waits for the run to become idle before shutdown. This source behavior remains unverified in a packaged UI.
 - Streamed tool-call preparation is now a durable activity row keyed by turn/request/call. Only provider, tool name, and argument character count are persisted; partial arguments remain hidden until the engine validates and dispatches the complete call. A completed model tool batch changes the preparation row to `assembled`; a request failure changes it to `interrupted`. Activity journal replay restores these states after relaunch. The paired engine emits the request index on each tool batch.
 - Regression coverage has been added but **not run** for these changes. The earlier verification numbers below describe their historical commits only, not this active source pair. Final engine/app tests, typecheck, package, visible workflow, installer/update, and live-model/hardware acceptance remain queued.
+- Structured `ask_user` clarification is now implemented in unpublished source: a run can pause on a material missing requirement, present a required non-dismissible answer dialog, journal the exchange, and return the user’s answer to the model. It remains separate from file/command approval and preserves answered versus unanswered state during recovery. Paired regression cases are queued and unrun.
 - No model, inference setting, OpenCode configuration, or loaded runtime was changed during this source work.
 
 ## Codex / OpenCode parity map

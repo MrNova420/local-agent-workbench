@@ -13,7 +13,7 @@ function ProgressiveText({ value }: { value: string }) {
 }
 
 function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expanded: boolean; surface: 'chat' | 'sidebar' }) {
-  const title = row.name?.replaceAll('_', ' ') || (row.kind === 'plan' ? 'Plan updated' : row.kind === 'approval' ? 'Action approval' : row.kind === 'context' ? 'Request context compacted' : row.kind === 'prompt' ? 'Model prompt sources' : 'Activity');
+  const title = row.name?.replaceAll('_', ' ') || (row.kind === 'plan' ? 'Plan updated' : row.kind === 'approval' ? 'Action approval' : row.kind === 'question' ? row.title || 'Question for you' : row.kind === 'context' ? 'Request context compacted' : row.kind === 'prompt' ? 'Model prompt sources' : 'Activity');
   const chatTitle = row.kind === 'operation' ? title.replace(/\bfile\b/gi, '').trim() : title;
   const firstFile = row.affectedFiles?.[0];
   const extraFiles = Math.max(0, (row.affectedFiles?.length || 0) - 1);
@@ -35,6 +35,7 @@ function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expande
       {row.arguments !== undefined && <details className="activity-subdetails"><summary>Arguments</summary><ProgressiveText value={JSON.stringify(row.arguments, null, 2)}/></details>}
       {Object.entries(output).map(([stream, value]) => value ? <details className="activity-subdetails" key={stream}><summary>{stream} · {value.length.toLocaleString()} characters</summary><ProgressiveText value={value}/></details> : null)}
       {row.result ? <details className="activity-subdetails"><summary>Result · {row.result.length.toLocaleString()} characters</summary><ProgressiveText value={row.result}/></details> : null}
+      {row.kind === 'question' && <div className="activity-question"><b>{row.question}</b>{row.options?.map((option, index) => <span key={`${row.id}-option-${index}`}>{option.label}{option.description ? ` · ${option.description}` : ''}</span>)}{row.answer && <p><strong>Answer:</strong> {row.answer}</p>}</div>}
       {row.items?.map((item, index) => <div className="activity-plan-item" key={`${row.id}-${index}`}><b>{item.group && <small className="plan-group">{item.group}</small>}{item.title || item.text || 'Work item'}</b><span>{item.status || 'pending'}</span></div>)}
       {row.acceptanceCriteria?.length ? <details className="activity-subdetails"><summary>Acceptance criteria · {row.acceptanceCriteria.length}</summary><ul className="activity-plan-list">{row.acceptanceCriteria.map((criterion, index) => <li key={`${row.id}-criterion-${index}`}>{criterion}</li>)}</ul></details> : null}
       {row.decisions?.length ? <details className="activity-subdetails"><summary>Recorded decisions · {row.decisions.length}</summary><ul className="activity-plan-list">{row.decisions.map((decision, index) => <li key={`${row.id}-decision-${index}`}>{decision}</li>)}</ul></details> : null}

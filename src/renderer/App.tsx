@@ -51,6 +51,7 @@ type Session = {
 };
 type TraceRow = { id: string; title: string; description?: string; kind: 'tool' | 'status' | 'plan' | 'error'; time: number };
 type Approval = { actionId: string; name: string; arguments: unknown; workspace: string; mode: ApprovalMode };
+type AgentQuestion = { questionId: string; title: string; question: string; options: Array<{ label: string; description?: string }> };
 type Notice = { tone: 'good' | 'warn' | 'bad'; text: string };
 type TelemetryView = {
   cpu: number | null; ram: string; gpu: string; gpuUtil: number | null;
@@ -207,6 +208,8 @@ export default function App() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [updateState, setUpdateState] = useState<AppUpdateState>({ supported: false, status: 'unsupported', currentVersion: window.agent.version });
   const [approval, setApproval] = useState<Approval | null>(null);
+  const [agentQuestion, setAgentQuestion] = useState<AgentQuestion | null>(null);
+  const [questionAnswering, setQuestionAnswering] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [permissionsOpen, setPermissionsOpen] = useState(false);
   const [permissionRules, setPermissionRules] = useState<PermissionRuleDraft[]>([]);
@@ -451,6 +454,19 @@ export default function App() {
       if (event.type === 'activity_event') {
         const activityEvent = event as unknown as ActivityEventEnvelope;
         setActivities((current) => applyActivityEvent(current, activityEvent));
+        const activity = activityEvent.activity;
+        if (activity?.kind === 'question') {
+          const questionId = String(activity.questionId || activity.id);
+          if (activity.status === 'awaiting_user') {
+            const options = Array.isArray(activity.options) ? activity.options.filter((option): option is { label: string; description?: string } =>
+              typeof option === 'object' && option !== null && typeof option.label === 'string') : [];
+            setAgentQuestion({ questionId, title: String(activity.title || 'The agent needs input'),
+              question: String(activity.question || ''), options });
+          } else {
+            setAgentQuestion((current) => current?.questionId === questionId ? null : current);
+            setQuestionAnswering(false);
+          }
+        }
         // Plan updates are delivered through the same durable activity event stream
         // used by the chat cards and Activity Trace, rather than as a second UI-only event.
         if (activityEvent.activity?.kind === 'plan' && Array.isArray(activityEvent.activity.items)) {
@@ -545,6 +561,10 @@ export default function App() {
       }
       if (event.type === 'approval_request') {
         setApproval({ actionId: String(event.actionId), name: String(event.name), arguments: event.arguments, workspace: String(event.workspace), mode: event.mode === 'per-task' ? 'per-task' : 'per-action' });
+      }
+      if (['cancelled', 'error', 'stopped_after_operation', 'generation_complete'].includes(String(event.type))) {
+        setAgentQuestion(null);
+        setQuestionAnswering(false);
       }
       if (event.type === 'session_saved') {
         const root = String(event.workspace || workspace);
@@ -829,6 +849,21 @@ export default function App() {
     catch (error) { notify((error as Error).message, 'bad'); }
   }
 
+  async function answerAgentQuestion(answer: string) {
+    if (!agentQuestion || !answer.trim() || questionAnswering) return;
+    setQuestionAnswering(true);
+    try {
+      const result = await request<{ answered: boolean }>({ command: 'question_reply', questionId: agentQuestion.questionId, answer: answer.trim() });
+      if (!result.answered) {
+        setQuestionAnswering(false);
+        notify('That question is no longer waiting for an answer.', 'warn');
+      }
+    } catch (error) {
+      setQuestionAnswering(false);
+      notify(`Could not send your answer: ${(error as Error).message}`, 'bad');
+    }
+  }
+
   async function chooseCloseAction(choice: 'keep' | 'hide' | 'cancel-close') {
     setCloseChoicePending(choice);
     try {
@@ -1049,6 +1084,7 @@ export default function App() {
       <div className="modal-actions"><Button kind="quiet" onClick={() => setToolsOpen(false)}>Close</Button><Button kind="bright" onClick={openMcp}>Manage integrations</Button></div>
     </Modal>}
     {approval && <ApprovalModal approval={approval} onChoice={(yes) => void answerApproval(yes)} onCancelRun={() => void cancelRun()} />}
+    {agentQuestion && <AgentQuestionModal question={agentQuestion} disabled={questionAnswering} onAnswer={(answer) => void answerAgentQuestion(answer)} onCancelRun={() => void cancelRun()} />}
     {activityChoiceOpen && <Modal title="Choose live activity display" eyebrow="NEW SESSION" dismissible={false} onClose={() => undefined}>
       <p className="modal-copy">Choose how tool calls, file changes, and command output should appear while the model works. This session’s choice can be changed later.</p>
       <div className="activity-mode-choices">{([['compact', 'Compact cards', 'Show concise operation cards with expandable details.'], ['sidebar', 'Activity sidebar only', 'Keep the conversation focused and show operations in the trace.'], ['inline', 'Full inline output', 'Expand tool output directly in the conversation.']] as const).map(([mode, title, detail]) => <button key={mode} className={`activity-mode-choice ${activityDefault === mode ? 'recommended' : ''}`} onClick={() => { setActivityChoiceOpen(false); void newSession(mode); }}><b>{title}{activityDefault === mode ? ' · DEFAULT' : ''}</b><small>{detail}</small></button>)}</div>
@@ -1482,5 +1518,19 @@ function ApprovalModal({ approval, onChoice, onCancelRun }: { approval: Approval
     {hostExecution && <div className="execution-boundary-warning"><b>Runs with your Windows account permissions</b><span>The selected folder is the working directory. It is not an OS security boundary: this command or MCP server may access other files and services your account can reach.</span></div>}
     <pre className="diff-view approval-preview">{JSON.stringify(approval.arguments, null, 2)}</pre>
     <div className="modal-actions"><Button kind="quiet" onClick={onCancelRun}>Cancel task</Button><Button kind="outline" onClick={() => onChoice(false)}>Deny action</Button><Button kind="bright" onClick={() => onChoice(true)}>Approve {approval.mode === 'per-task' ? 'task' : 'action'}</Button></div>
+  </Modal>;
+}
+
+function AgentQuestionModal({ question, disabled, onAnswer, onCancelRun }: {
+  question: AgentQuestion; disabled: boolean; onAnswer: (answer: string) => void; onCancelRun: () => void;
+}) {
+  const [answer, setAnswer] = useState('');
+  useEffect(() => setAnswer(''), [question.questionId]);
+  return <Modal title={question.title} eyebrow="AGENT QUESTION · RUN PAUSED" wide dismissible={false} onClose={() => undefined}>
+    <p className="modal-copy">The agent paused because this choice changes the work. Select an option or enter your own answer. This is separate from action approval.</p>
+    <div className="agent-question-prompt">{question.question}</div>
+    {question.options.length > 0 && <div className="activity-mode-choices">{question.options.map((option, index) => <button key={`${question.questionId}-${index}`} className="activity-mode-choice" disabled={disabled} onClick={() => onAnswer(option.label)}><b>{option.label}</b>{option.description && <small>{option.description}</small>}</button>)}</div>}
+    <label className="settings-field agent-question-field"><span>Your answer</span><textarea value={answer} disabled={disabled} onChange={(event) => setAnswer(event.target.value)} placeholder="Type a response…"/></label>
+    <div className="modal-actions"><Button kind="quiet" disabled={disabled} onClick={onCancelRun}>Cancel task…</Button><Button kind="bright" disabled={disabled || !answer.trim()} onClick={() => onAnswer(answer)}>{disabled ? 'Sending answer…' : 'Send answer'}</Button></div>
   </Modal>;
 }

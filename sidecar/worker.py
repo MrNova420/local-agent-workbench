@@ -145,8 +145,8 @@ class AgentService:
         enriched = {**event, "sessionId": state["session_id"], "turnId": controller["turn_id"],
                     "workspace": str(turn.workspace), "timestamp": event.get("at", time.time())}
         event_kind = event.get("type")
-        force_journal = event_kind in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "prompt_manifest", "inference_settings", "request_dispatched", "request_headers", "request_complete", "request_error", "approval_request", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
-        force_snapshot = event_kind in {"context_compacted", "approval_request", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
+        force_journal = event_kind in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "prompt_manifest", "inference_settings", "request_dispatched", "request_headers", "request_complete", "request_error", "approval_request", "question_request", "question_answered", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
+        force_snapshot = event_kind in {"context_compacted", "approval_request", "question_request", "question_answered", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
         with controller["checkpoint_lock"]:
             if isinstance(run_state, dict):
                 if event.get("type") == "phase" and event.get("phase") == "waiting":
@@ -249,7 +249,7 @@ class AgentService:
             kind = event.get("type")
             activity: dict[str, Any] | None = None
             activity_updates: list[dict[str, Any]] = []
-            activity_id = str(event.get("operationId") or event.get("actionId") or event.get("activityId") or uuid.uuid4().hex)
+            activity_id = str(event.get("operationId") or event.get("actionId") or event.get("activityId") or event.get("questionId") or uuid.uuid4().hex)
             if kind == "tool_call_progress":
                 activity_id = f"tool-call:{controller['turn_id']}:{int(event.get('request_index', 0))}:{int(event.get('call_index', 0))}"
                 event["activityId"] = activity_id
@@ -288,6 +288,21 @@ class AgentService:
                 if activity:
                     activity.update(status=event.get("status", "completed"), result=event.get("result", ""),
                                     affectedFiles=event.get("affectedFiles", []), completedAt=event.get("completedAt", time.time()))
+            elif kind == "question_request":
+                question_id = str(event.get("questionId") or activity_id)
+                activity = {"id": question_id, "questionId": question_id, "operationId": event.get("operationId"),
+                            "turnId": controller["turn_id"], "sessionId": state["session_id"],
+                            "workspace": str(turn.workspace), "kind": "question",
+                            "title": str(event.get("title") or "The agent needs input"),
+                            "question": str(event.get("question", "")), "options": copy.deepcopy(event.get("options", [])),
+                            "status": "awaiting_user", "timestamp": event.get("timestamp", time.time())}
+                rows.append(activity)
+            elif kind == "question_answered":
+                activity = next((item for item in rows if item.get("kind") == "question"
+                                 and item.get("questionId") == event.get("questionId")), None)
+                if activity:
+                    activity.update(status=str(event.get("status", "answered")), answer=str(event.get("answer", "")),
+                                    completedAt=event.get("timestamp", time.time()))
             elif kind == "plan":
                 source = "workbench" if event.get("source") == "workbench" else "agent"
                 plan_items = copy.deepcopy(event.get("items", []))
@@ -881,8 +896,27 @@ class AgentService:
                 prior_uncertain = run_state.get("uncertain_operations")
                 uncertain_operations = [copy.deepcopy(item) for item in prior_uncertain if isinstance(item, dict)] if isinstance(prior_uncertain, list) else []
                 known_uncertain_ids = {str(item.get("operationId", "")) for item in uncertain_operations}
+                completed_tool_results = run_state.setdefault("completed_tool_results", {})
                 for active in active_operations.values():
                     if not isinstance(active, dict):continue
+                    if active.get("name") == "ask_user":
+                        active["status"] = "interrupted"
+                        call_id = str(active.get("toolCallId", ""))
+                        question = next((item for item in state["activity_events"]
+                                         if item.get("kind") == "question"
+                                         and item.get("operationId") == active.get("operationId")), None)
+                        if call_id:
+                            if question and question.get("status") == "answered":
+                                completed_tool_results[call_id] = f"The user answered: {question.get('answer', '')}"
+                            elif question and question.get("status") == "cancelled":
+                                completed_tool_results[call_id] = "The user cancelled the run while this question was waiting. Ask again only if the answer is still needed."
+                            else:
+                                completed_tool_results[call_id] = "The app closed before this question received an answer. Ask again only if the answer is still needed."
+                        for activity in state["activity_events"]:
+                            if activity.get("operationId") == active.get("operationId"):
+                            if activity.get("status") == "awaiting_user":
+                                activity["status"] = "interrupted"
+                        continue
                     active["status"] = "uncertain"
                     operation_id = str(active.get("operationId", ""))
                     if operation_id not in known_uncertain_ids:
@@ -892,6 +926,9 @@ class AgentService:
                         if activity.get("operationId") == active.get("operationId"):
                             activity["status"] = "uncertain"
                 run_state["uncertain_operations"] = uncertain_operations
+                for activity in state["activity_events"]:
+                    if activity.get("kind") == "question" and activity.get("status") == "awaiting_user":
+                        activity["status"] = "interrupted"
                 if uncertain_operations:run_state["uncertain_operation"] = copy.deepcopy(uncertain_operations[-1])
                 run_state["active_operations"] = {}
                 run_state["active_operation"] = None
@@ -980,6 +1017,11 @@ class AgentService:
             return {"requested": controller is not None}
         if command == "approval_reply":
             return self.approval_reply(str(message["actionId"]), bool(message.get("approved")))
+        if command == "question_reply":
+            answer = message.get("answer")
+            if not isinstance(answer, str) or not answer.strip():
+                raise ValueError("Provide a non-empty answer to the active question.")
+            return {"answered": self.question_reply(str(message["questionId"]), answer.strip())}
         if command == "copy_review":
             session = self.sessions.load(str(message["sessionId"]))
             if session.get("access") != "copy" or not session.get("copy_manifest"):
@@ -1324,7 +1366,7 @@ class AgentService:
             temperature=state["temperature"], runtime_options=state.get("runtime_options", {}),
             prompt=prompt, session=state, mcp_tools=list(self.mcp_tools),
         )
-        controller = {"cancel": threading.Event(), "engine": None, "pending": {}, "session": turn.session, "source": source, "working": working,
+        controller = {"cancel": threading.Event(), "engine": None, "pending": {}, "pending_questions": {}, "session": turn.session, "source": source, "working": working,
                      "turn_id": turn_id, "checkpoint_lock": threading.RLock(), "last_checkpoint": time.monotonic(),
                      "last_journal_flush": time.monotonic(), "journal_pending": [], "current_operation_id": None,
                      "stop_after_operation": False}
@@ -1453,6 +1495,7 @@ class AgentService:
                 task_intent=str(turn.session.get("task_intent", "auto")),
                 operation_result_lookup=lambda operation_id: _saved_operation_result(state, operation_id),
                 permission_rules=run_permission_rules,
+                ask_user=lambda args: self._ask_user(controller, turn, args),
             )
             chosen_runtime = self.providers.runtime_for(turn.model, engine.runtime, state.get("provider_id"))
             engine.runtime = RequestScopedOllama(chosen_runtime)
@@ -1571,6 +1614,43 @@ class AgentService:
             condition.notify_all()
         return True
 
+    def question_reply(self, question_id: str, answer: str) -> bool:
+        with self.active_lock:
+            pending = self.active.get("pending_questions", {}).get(question_id) if self.active else None
+        if not pending:
+            return False
+        condition, result = pending
+        with condition:
+            result.update(done=True, answer=answer)
+            condition.notify_all()
+        return True
+
+    def _ask_user(self, controller: dict[str, Any], turn: TurnContext, args: dict[str, Any]) -> str:
+        question_id = uuid.uuid4().hex
+        condition = threading.Condition()
+        result: dict[str, Any] = {"done": False, "answer": ""}
+        with self.active_lock:
+            controller.setdefault("pending_questions", {})[question_id] = (condition, result)
+        self._publish_run_event(controller, turn, {
+            "type": "question_request", "questionId": question_id,
+            "operationId": controller.get("current_operation_id"),
+            "title": str(args.get("title") or "The agent needs input"),
+            "question": str(args.get("question", "")),
+            "options": copy.deepcopy(args.get("options", [])),
+        })
+        with condition:
+            while not result["done"] and not controller["cancel"].is_set():
+                condition.wait(0.25)
+        with self.active_lock:
+            controller["pending_questions"].pop(question_id, None)
+        cancelled = controller["cancel"].is_set()
+        answer = "" if cancelled else str(result.get("answer", ""))
+        self._publish_run_event(controller, turn, {
+            "type": "question_answered", "questionId": question_id,
+            "status": "cancelled" if cancelled else "answered", "answer": answer,
+        })
+        return "The user stopped the run while this question was waiting." if cancelled else answer
+
     def cancel(self) -> bool:
         with self.active_lock:
             controller = self.active
@@ -1582,9 +1662,14 @@ class AgentService:
             engine.cancel()
         with self.active_lock:
             pending = list(controller.get("pending", {}).values())
+            pending_questions = list(controller.get("pending_questions", {}).values())
         for condition, result in pending:
             with condition:
                 result.update(done=True, approved=False)
+                condition.notify_all()
+        for condition, result in pending_questions:
+            with condition:
+                result["done"] = True
                 condition.notify_all()
         return True
 

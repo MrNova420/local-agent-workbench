@@ -73,6 +73,21 @@ class MirroredSessionStoreTests(unittest.TestCase):
         self.assertEqual(set(state["run_state"]["active_operations"]), {"op-b"})
         self.assertEqual(state["run_state"]["active_operation"]["operationId"], "op-b")
 
+    def test_question_request_and_answer_replay_as_durable_activity(self):
+        state = {"session_id": "s-question", "workspace": "C:/project",
+                 "run_state": {"turn_id": "turn-question", "safe_messages": []}, "activity_events": []}
+        _replay_run_event(state, {"type": "question_request", "turnId": "turn-question",
+                                  "questionId": "q-1", "operationId": "op-1", "workspace": "C:/project",
+                                  "title": "Choose", "question": "Which framework?",
+                                  "options": [{"label": "React"}]})
+        _replay_run_event(state, {"type": "question_answered", "turnId": "turn-question",
+                                  "questionId": "q-1", "status": "answered", "answer": "React"})
+
+        self.assertEqual(len(state["activity_events"]), 1)
+        self.assertEqual(state["activity_events"][0]["kind"], "question")
+        self.assertEqual(state["activity_events"][0]["status"], "answered")
+        self.assertEqual(state["activity_events"][0]["answer"], "React")
+
     def test_journal_recovery_attaches_exact_provider_settings_to_matching_prompt_request(self):
         state = {
             "session_id": "s-provider", "workspace": "C:/project",

@@ -71,6 +71,7 @@ export type WorkerCommand =
   | { command: 'run_cancel' }
   | { command: 'run_stop_after_operation' }
   | { command: 'approval_reply'; actionId: string; approved: boolean }
+  | { command: 'question_reply'; questionId: string; answer: string }
   | { command: 'copy_review'; sessionId: string }
   | { command: 'copy_apply'; sessionId: string; paths: string[] }
   | { command: 'shutdown' };
@@ -88,7 +89,12 @@ export type ActivityRecord = {
   turnId: string;
   sessionId: string;
   workspace?: string;
-  kind: 'operation' | 'tool_preparation' | 'approval' | 'plan' | 'context' | 'prompt' | 'error';
+  kind: 'operation' | 'tool_preparation' | 'approval' | 'question' | 'plan' | 'context' | 'prompt' | 'error';
+  questionId?: string;
+  question?: string;
+  title?: string;
+  options?: Array<{ label: string; description?: string }>;
+  answer?: string;
   name?: string;
   status: string;
   source?: 'workbench' | 'agent';

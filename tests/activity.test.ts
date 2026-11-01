@@ -5,6 +5,18 @@ import { applyActivityEvent, shouldRefreshWorkspaceForActivity, type ActivityRec
 import { ActivityFeed } from '../src/renderer/ActivityFeed';
 
 describe('durable live activity state', () => {
+  it('renders paused user questions and records their answer after resume', () => {
+    const question = { id: 'q-1', questionId: 'q-1', turnId: 'turn-1', sessionId: 'session-1',
+      kind: 'question' as const, title: 'Choose a framework', question: 'Which framework should I use?',
+      options: [{ label: 'React', description: 'Use the existing ecosystem.' }], status: 'awaiting_user' };
+    const waiting = renderToStaticMarkup(createElement(ActivityFeed, { entries: [question], mode: 'compact', surface: 'chat' }));
+    expect(waiting).toContain('Which framework should I use?');
+    expect(waiting).toContain('React');
+    const answered = renderToStaticMarkup(createElement(ActivityFeed, { entries: [{ ...question, status: 'answered', answer: 'React' }], mode: 'compact', surface: 'sidebar' }));
+    expect(answered).toContain('Answer:');
+    expect(answered).toContain('React');
+  });
+
   it('restores plan decisions and acceptance criteria in the activity card', () => {
     const markup = renderToStaticMarkup(createElement(ActivityFeed, { entries: [{
       id: 'plan-1', turnId: 'turn-1', sessionId: 'session-1', kind: 'plan', status: 'in_progress',

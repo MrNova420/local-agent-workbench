@@ -185,6 +185,21 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
                     "status": "running", "startedAt": event.get("startedAt", time.time()), "output": {},
                     "result": "", "affectedFiles": []}
         state.setdefault("activity_events", []).append(activity)
+    elif kind == "question_request":
+        question_id = str(event.get("questionId", ""))
+        activity = {"id": question_id, "questionId": question_id, "operationId": event.get("operationId"),
+                    "turnId": event.get("turnId", run.get("turn_id")), "sessionId": state["session_id"],
+                    "workspace": event.get("workspace", state.get("workspace")), "kind": "question",
+                    "title": str(event.get("title") or "The agent needs input"),
+                    "question": str(event.get("question", "")), "options": copy.deepcopy(event.get("options", [])),
+                    "status": "awaiting_user", "timestamp": event.get("timestamp", time.time())}
+        state.setdefault("activity_events", []).append(activity)
+    elif kind == "question_answered":
+        activity = next((item for item in state.setdefault("activity_events", [])
+                         if item.get("kind") == "question" and item.get("questionId") == event.get("questionId")), None)
+        if activity:
+            activity.update(status=str(event.get("status", "answered")), answer=str(event.get("answer", "")),
+                            completedAt=event.get("timestamp", time.time()))
     elif kind == "operation_output":
         row = next((item for item in state.setdefault("activity_events", [])
                     if item.get("operationId") == event.get("operationId")), None)

@@ -576,6 +576,62 @@ def test_session_recovery_returns_every_uncertain_concurrent_operation(service, 
     assert '"operationId": "op-b"' in recovered["prompt"]
 
 
+def test_crash_while_waiting_for_user_marks_question_interrupted_without_fake_uncertain_side_effect(service, tmp_path):
+    project = tmp_path / "question-recovery-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    state["run_state"] = {
+        "status": "running", "turn_id": "turn-question-recovery", "prompt": "choose a framework",
+        "safe_messages": [{"role": "user", "content": "choose a framework"}], "partial_content": "",
+        "partial_thinking": "", "active_operation": {"operationId": "op-question", "toolCallId": "call-question", "name": "ask_user"},
+        "active_operations": {"op-question": {"operationId": "op-question", "toolCallId": "call-question", "name": "ask_user"}},
+        "tool_batch": {"assistant_message": {"role": "assistant", "tool_calls": [{"id": "call-question"}]},
+                       "calls": [{"id": "call-question", "name": "ask_user"}],
+                       "base_messages": [{"role": "user", "content": "choose a framework"}]},
+        "completed_tool_results": {},
+    }
+    state["activity_events"] = [
+        {"id": "op-question", "operationId": "op-question", "kind": "operation", "name": "ask_user", "status": "running"},
+        {"id": "q-1", "questionId": "q-1", "operationId": "op-question", "kind": "question",
+         "question": "Which framework?", "status": "awaiting_user"},
+    ]
+    service.sessions.save(state)
+
+    loaded = service.handle("session_resume", {"sessionId": state["session_id"], "workspace": str(project)})
+    recovered_tools = [item for item in loaded["run_state"]["safe_messages"] if item.get("role") == "tool"]
+
+    assert [item["status"] for item in loaded["activity_events"]] == ["interrupted", "interrupted"]
+    assert loaded["run_state"]["uncertain_operations"] == []
+    assert "Ask again only if the answer is still needed" in recovered_tools[0]["content"]
+
+
+def test_crash_after_user_answer_preserves_answer_in_tool_batch_recovery(service, tmp_path):
+    project = tmp_path / "answered-question-recovery-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    state["run_state"] = {
+        "status": "running", "turn_id": "turn-answered-question", "prompt": "choose a framework",
+        "safe_messages": [{"role": "user", "content": "choose a framework"}], "partial_content": "",
+        "partial_thinking": "", "active_operation": {"operationId": "op-question", "toolCallId": "call-question", "name": "ask_user"},
+        "active_operations": {"op-question": {"operationId": "op-question", "toolCallId": "call-question", "name": "ask_user"}},
+        "tool_batch": {"assistant_message": {"role": "assistant", "tool_calls": [{"id": "call-question"}]},
+                       "calls": [{"id": "call-question", "name": "ask_user"}],
+                       "base_messages": [{"role": "user", "content": "choose a framework"}]},
+        "completed_tool_results": {},
+    }
+    state["activity_events"] = [
+        {"id": "q-answered", "questionId": "q-answered", "operationId": "op-question", "kind": "question",
+         "question": "Which framework?", "answer": "React", "status": "answered"},
+    ]
+    service.sessions.save(state)
+
+    loaded = service.handle("session_resume", {"sessionId": state["session_id"], "workspace": str(project)})
+    recovered_tools = [item for item in loaded["run_state"]["safe_messages"] if item.get("role") == "tool"]
+
+    assert loaded["run_state"]["uncertain_operations"] == []
+    assert recovered_tools[0]["content"] == "The user answered: React"
+
+
 def test_tool_call_progress_is_live_safe_and_durable(service, tmp_path, monkeypatch):
     project = tmp_path / "tool-progress-project"
     project.mkdir()
@@ -1063,6 +1119,36 @@ def test_approval_reply_signals_only_matching_pending_action(service):
     assert service.approval_reply("missing", True) is False
     assert service.approval_reply("action-1", True) is True
     assert result == {"done": True, "approved": True}
+
+
+def test_ask_user_pauses_for_answer_and_resumes_with_saved_tool_result(service, tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    project = tmp_path / "question-project"
+    project.mkdir()
+    events = []
+    controller = {"cancel": threading.Event(), "pending_questions": {}}
+    service.active = controller
+    monkeypatch.setattr(service, "_publish_run_event", lambda _controller, _turn, event: events.append(event))
+    result = []
+    thread = threading.Thread(target=lambda: result.append(service._ask_user(
+        controller, SimpleNamespace(workspace=project),
+        {"title": "Choose a framework", "question": "Which framework should I use?",
+         "options": [{"label": "React"}, {"label": "Vue"}]},
+    )))
+    thread.start()
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline and not events:
+        time.sleep(0.01)
+    assert events[0]["type"] == "question_request"
+    question_id = events[0]["questionId"]
+    assert service.question_reply(question_id, "React") is True
+    thread.join(2)
+
+    assert not thread.is_alive()
+    assert result == ["React"]
+    assert events[1]["type"] == "question_answered"
+    assert events[1]["status"] == "answered"
 
 
 def test_approval_state_is_recorded_on_the_operation_without_a_duplicate_trace_row(service, tmp_path, monkeypatch):
