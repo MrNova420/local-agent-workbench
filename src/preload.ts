@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { DesktopApi, WorkerCommand, WorkerEvent } from './shared/protocol';
+import type { AppUpdateState, DesktopApi, WorkerCommand, WorkerEvent } from './shared/protocol';
 
 const api: DesktopApi = {
   request: <T>(command: WorkerCommand) => ipcRenderer.invoke('agent:request', command) as Promise<T>,
@@ -19,6 +19,15 @@ const api: DesktopApi = {
   chooseLlamaBinary: () => ipcRenderer.invoke('app:choose-llama-binary') as Promise<string | null>,
   chooseModelDirectory: () => ipcRenderer.invoke('app:choose-model-directory') as Promise<string | null>,
   revealPath: (path) => ipcRenderer.invoke('app:reveal-path', path) as Promise<void>,
+  openOllamaDownload: () => ipcRenderer.invoke('app:open-ollama-download') as Promise<void>,
+  updateState: () => ipcRenderer.invoke('app:update-state') as Promise<AppUpdateState>,
+  onUpdateState: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: AppUpdateState) => listener(state);
+    ipcRenderer.on('app:update-state', handler);
+    return () => ipcRenderer.removeListener('app:update-state', handler);
+  },
+  checkForUpdate: () => ipcRenderer.invoke('app:check-update') as Promise<AppUpdateState>,
+  installUpdate: () => ipcRenderer.invoke('app:install-update') as Promise<{ installed: boolean; reason?: string }>,
   version: process.env.npm_package_version ?? '0.1.0',
 };
 

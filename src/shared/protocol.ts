@@ -129,7 +129,20 @@ export type DesktopApi = {
   chooseLlamaBinary: () => Promise<string | null>;
   chooseModelDirectory: () => Promise<string | null>;
   revealPath: (path: string) => Promise<void>;
+  openOllamaDownload: () => Promise<void>;
+  updateState: () => Promise<AppUpdateState>;
+  onUpdateState: (listener: (state: AppUpdateState) => void) => () => void;
+  checkForUpdate: () => Promise<AppUpdateState>;
+  installUpdate: () => Promise<{ installed: boolean; reason?: string }>;
   version: string;
+};
+
+export type AppUpdateState = {
+  supported: boolean;
+  status: 'unsupported' | 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error';
+  currentVersion: string;
+  releaseName?: string;
+  error?: string;
 };
 
 export type ModelInfo = {

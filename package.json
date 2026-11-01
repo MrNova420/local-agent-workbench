@@ -1,7 +1,7 @@
 {
   "name": "local-agent-workbench",
   "productName": "Local Agent Workbench",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "author": "Local Agent Workbench",
   "private": true,
   "description": "A local-first development workbench for Ollama and Hugging Face models.",
@@ -16,6 +16,7 @@
     "make": "npm run sidecar:build && electron-forge make"
   },
   "dependencies": {
+    "electron-squirrel-startup": "^1.0.1",
     "highlight.js": "^11.12.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",

@@ -1,10 +1,19 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell, Tray } from 'electron';
+import { app, autoUpdater, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell, Tray } from 'electron';
+import squirrelStartup from 'electron-squirrel-startup';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { publicWindowsUpdateFeed } from './shared/update-feed';
 import type { WorkerCommand, WorkerEvent, WorkerResponse } from './shared/protocol';
+
+// Squirrel invokes the app during install/update/uninstall. Handle those
+// lifecycle launches before creating a window or starting the sidecar.
+const isSquirrelLifecycle = Boolean(squirrelStartup);
+if (isSquirrelLifecycle) app.quit();
+const hasSingleInstanceLock = isSquirrelLifecycle ? false : app.requestSingleInstanceLock();
+if (!isSquirrelLifecycle && !hasSingleInstanceLock) app.quit();
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'agent-workbench', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false } },
@@ -127,6 +136,51 @@ let mainWindow: BrowserWindow | undefined;
 let quitting = false;
 let closeDecisionPending = false;
 let tray: Tray | undefined;
+const updateState = {
+  supported: false,
+  status: 'unsupported' as 'unsupported' | 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error',
+  currentVersion: app.getVersion(),
+  releaseName: undefined as string | undefined,
+  error: undefined as string | undefined,
+};
+let updaterStarted = false;
+let updateCheckInProgress = false;
+
+function publishUpdateState(patch: Partial<typeof updateState>) {
+  Object.assign(updateState, patch);
+  mainWindow?.webContents.send('app:update-state', { ...updateState });
+}
+
+function checkForUpdateNow() {
+  if (!updaterStarted || !updateState.supported) return { ...updateState };
+  if (updateCheckInProgress) return { ...updateState };
+  updateCheckInProgress = true;
+  publishUpdateState({ status: 'checking', error: undefined });
+  try { autoUpdater.checkForUpdates(); }
+  catch (error) { updateCheckInProgress = false; publishUpdateState({ status: 'error', error: (error as Error).message }); }
+  return { ...updateState };
+}
+
+function startUpdateChecks() {
+  const squirrelUpdateExe = path.resolve(path.dirname(process.execPath), '..', 'Update.exe');
+  const feed = publicWindowsUpdateFeed(app.getVersion(), process.platform, process.arch, existsSync(squirrelUpdateExe));
+  if (!app.isPackaged || !feed) return;
+  updateState.supported = true;
+  updateState.status = 'idle';
+  // Squirrel holds a lock briefly after a first install; wait before contacting
+  // the public GitHub release feed.
+  const firstRun = process.argv.includes('--squirrel-firstrun');
+  autoUpdater.setFeedURL({ url: feed });
+  autoUpdater.on('checking-for-update', () => { updateCheckInProgress = true; publishUpdateState({ status: 'checking', error: undefined }); });
+  autoUpdater.on('update-available', () => publishUpdateState({ status: 'downloading', error: undefined }));
+  autoUpdater.on('update-not-available', () => { updateCheckInProgress = false; publishUpdateState({ status: 'not-available', releaseName: undefined, error: undefined }); });
+  autoUpdater.on('update-downloaded', (_event, _notes, releaseName) => { updateCheckInProgress = false; publishUpdateState({ status: 'downloaded', releaseName: String(releaseName || 'New version'), error: undefined }); });
+  autoUpdater.on('error', (error) => { updateCheckInProgress = false; publishUpdateState({ status: 'error', error: error.message || String(error) }); });
+  updaterStarted = true;
+  const checkWhenIdle = () => { if (!service.isRunActive()) checkForUpdateNow(); };
+  setTimeout(checkWhenIdle, firstRun ? 12000 : 18000).unref();
+  setInterval(checkWhenIdle, 6 * 60 * 60 * 1000).unref();
+}
 
 function requestCloseDecision() {
   if (!mainWindow || closeDecisionPending) return;
@@ -183,7 +237,11 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = undefined; });
 }
 
+if (hasSingleInstanceLock) app.on('second-instance', () => { mainWindow?.show(); mainWindow?.focus(); });
+
 app.whenReady().then(async () => {
+  if (isSquirrelLifecycle || !hasSingleInstanceLock) return;
+  app.setAppUserModelId('com.squirrel.LocalAgentWorkbench.LocalAgentWorkbench');
   protocol.handle('agent-workbench', async (request) => {
     const url = new URL(request.url);
     if (url.host !== 'app') return new Response('Not found', { status: 404 });
@@ -217,6 +275,21 @@ app.whenReady().then(async () => {
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory'], title: 'Select a local Safetensors model directory' });
     return result.canceled ? null : result.filePaths[0] ?? null;
   });
+  ipcMain.handle('app:open-ollama-download', async (event) => {
+    assertTrusted(event);
+    await shell.openExternal('https://ollama.com/download/windows');
+  });
+  ipcMain.handle('app:update-state', (event) => { assertTrusted(event); return { ...updateState }; });
+  ipcMain.handle('app:check-update', (event) => { assertTrusted(event); return service.isRunActive() ? { ...updateState } : checkForUpdateNow(); });
+  ipcMain.handle('app:install-update', async (event) => {
+    assertTrusted(event);
+    if (service.isRunActive()) return { installed: false, reason: 'A task is still running. Finish or cancel it before applying an update.' };
+    if (updateState.status !== 'downloaded') return { installed: false, reason: 'No downloaded update is ready to install.' };
+    quitting = true;
+    await service.shutdown();
+    autoUpdater.quitAndInstall(false, true);
+    return { installed: true };
+  });
   ipcMain.handle('app:reveal-path', async (event, value: unknown) => {
     assertTrusted(event);
     if (typeof value !== 'string' || !path.isAbsolute(value)) throw new Error('Expected an absolute path.');
@@ -236,6 +309,7 @@ app.whenReady().then(async () => {
     void service.shutdown().finally(() => app.exit(0));
   });
   createWindow();
+  startUpdateChecks();
   void service.start().catch((error: Error) => mainWindow?.webContents.send('agent:event', { type: 'service_error', error: error.message }));
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
