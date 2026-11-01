@@ -647,3 +647,8 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - Resume recovery marks unanswered prompts interrupted without labeling them uncertain side effects, and preserves an already journaled answer if the app stops between answer and tool completion.
 - Engine, sidecar, persistence, and activity-rendering regressions were added but intentionally not run. Typecheck, package, and visible interaction acceptance remain queued.
 - A stale question reply now dismisses only the matching obsolete dialog and reports that the run is no longer waiting, avoiding a stuck non-dismissible modal. Renderer interaction verification remains queued.
+
+# 2026-11-01 — Budget-safe task checkpoint projection (unverified)
+
+- Engine commit `4ec81e176aa7257b03b71b345f62b896d170439c` compacts the inference-only checkpoint to its assigned budget, preserves the full canonical plan and history, and reports omitted details for paging. The fixed assistant-update character cutoff was removed.
+- Regression cases for large expandable plans and oversized task goals were added. No tests, typecheck, package, app launch, or model request was run.
