@@ -140,10 +140,12 @@ function WindowControls() {
   return <div
     className={`window-control-hotspot${revealed ? ' is-revealed' : ''}`}
     onMouseEnter={() => setRevealed(true)}
-    onMouseLeave={() => setRevealed(false)}
+    onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) setRevealed(false); }}
     onFocus={() => setRevealed(true)}
-    onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setRevealed(false); }}
-    aria-label="Window controls"
+    onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !event.currentTarget.matches(':hover')) setRevealed(false); }}
+    tabIndex={0}
+    role="group"
+    aria-label="Window controls; focus or hover at the top-right edge to reveal"
   >
     <div className="window-control-buttons">
       <button type="button" onClick={() => run('minimize')} aria-label="Minimize window" title="Minimize">−</button>
@@ -164,6 +166,7 @@ function SheetPanelControls({ panel, layout, onMove, onResize }: { panel: RunShe
 
 export default function App() {
   const [models, setModels] = useState<string[]>([]);
+  const [modelCatalogStatus, setModelCatalogStatus] = useState<'loading' | 'refreshing' | 'ready' | 'error'>('loading');
   const [modelLabels, setModelLabels] = useState<Record<string, string>>({});
   const displayModelLabels = useMemo(() => buildModelLabels(models, modelLabels), [models, modelLabels]);
   const [model, setModel] = useState('');
@@ -171,7 +174,10 @@ export default function App() {
   const [workspace, setWorkspace] = useState(localStorage.getItem('agent-workspace') || '');
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [homeSessions, setHomeSessions] = useState<SessionSummary[]>([]);
+  const [sessionHistoryStatus, setSessionHistoryStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [workspaces, setWorkspaces] = useState<WorkspaceHistoryEntry[]>([]);
+  const [workspaceHistoryStatus, setWorkspaceHistoryStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [workspaceSearch, setWorkspaceSearch] = useState('');
   const [session, setSession] = useState<Session | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -234,6 +240,9 @@ export default function App() {
   const endRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const assistantSegmentBreakRef = useRef(false);
+  const workspaceHistoryRequestId = useRef(0);
+  const modelCatalogLoaded = useRef(false);
+  const modelCatalogRequestId = useRef(0);
 
   const notify = useCallback((text: string, tone: Notice['tone'] = 'good') => {
     setNotice({ text, tone });
@@ -243,19 +252,24 @@ export default function App() {
   const request = useCallback(async <T,>(command: WorkerCommand): Promise<T> => window.agent.request<T>(command), []);
 
   const refreshModels = useCallback(async (quiet = false) => {
-    if (!quiet) setConnected('checking');
+    const requestId = ++modelCatalogRequestId.current;
+    if (!quiet) { setConnected('checking'); setModelCatalogStatus(modelCatalogLoaded.current ? 'refreshing' : 'loading'); }
     try {
       const catalog = await request<ModelCatalog>({ command: 'model_catalog' });
+      if (requestId !== modelCatalogRequestId.current) return;
       const rows = [...new Set([...catalog.ollama, ...catalog.gguf.map((entry) => entry.id)].filter(Boolean))].sort((a, b) => a.localeCompare(b));
       setModels(rows);
       setModelLabels(Object.fromEntries(catalog.gguf.map((entry) => [entry.id, entry.label])));
+      modelCatalogLoaded.current = true;
+      setModelCatalogStatus('ready');
       setConnected(catalog.ollama_error ? 'no' : 'yes');
       setModel((current) => chooseDefaultModel(rows, current));
       if (!quiet && catalog.ollama_error && !catalog.gguf.length) notify(`Ollama is not reachable: ${catalog.ollama_error}`, 'bad');
       else if (!quiet && !catalog.ollama_error && !rows.length) notify('Ollama is connected, but no models are installed.', 'warn');
     } catch (error) {
+      if (requestId !== modelCatalogRequestId.current) return;
       setConnected('no');
-      setModels([]);
+      setModelCatalogStatus('error');
       if (!quiet) notify(`Ollama is not reachable: ${(error as Error).message}`, 'bad');
     }
   }, [notify, request]);
@@ -270,33 +284,56 @@ export default function App() {
   }, [request]);
 
   const refreshWorkspaceHistory = useCallback(async (query = '') => {
-    setWorkspaces(await request<WorkspaceHistoryEntry[]>({ command: 'workspaces_list', query }));
+    const requestId = ++workspaceHistoryRequestId.current;
+    setWorkspaceHistoryStatus('loading');
+    try {
+      const rows = await request<WorkspaceHistoryEntry[]>({ command: 'workspaces_list', query });
+      if (requestId === workspaceHistoryRequestId.current) {
+        setWorkspaces(rows);
+        setWorkspaceHistoryStatus('ready');
+      }
+    } catch (error) {
+      if (requestId !== workspaceHistoryRequestId.current) return;
+      setWorkspaceHistoryStatus('error');
+      throw error;
+    }
   }, [request]);
 
   const refreshHome = useCallback(async () => {
-    const [history, rows] = await Promise.all([
-      request<WorkspaceHistoryEntry[]>({ command: 'workspaces_list', query: '' }),
+    setSessionHistoryStatus('loading');
+    const [historyResult, sessionsResult] = await Promise.allSettled([
+      refreshWorkspaceHistory(''),
       request<SessionSummary[]>({ command: 'sessions_list' }),
     ]);
-    setWorkspaces(history);
-    setSessions(rows);
-  }, [request]);
+    if (sessionsResult.status === 'fulfilled') {
+      setHomeSessions(sessionsResult.value);
+      setSessionHistoryStatus('ready');
+    } else setSessionHistoryStatus('error');
+    const failures = [historyResult, sessionsResult].filter((result) => result.status === 'rejected');
+    if (failures.length) throw new Error(failures.map((result) => result.status === 'rejected' ? String(result.reason) : '').join('; '));
+  }, [refreshWorkspaceHistory, request]);
 
   const showProject = useCallback(async (root: string) => {
     try {
       const filesResult = await request<ProjectFile[]>({ command: 'workspace_files', workspace: root });
-      await request({ command: 'workspace_record', workspace: root });
+      const sessionRows = await request<SessionSummary[]>({ command: 'sessions_list', workspace: root });
       setWorkspace(root);
       localStorage.setItem('agent-workspace', root);
       setFiles(filesResult);
-      setSessions(await request<SessionSummary[]>({ command: 'sessions_list', workspace: root }));
-      await refreshWorkspaceHistory('');
+      setSessions(sessionRows);
       setSession(null);
       setMessages([]);
       setWorkflowOutcome(null);
       setVerificationEvidence(null);
       setView('project');
       setProjectTab('overview');
+      try {
+        await request({ command: 'workspace_record', workspace: root });
+        await refreshWorkspaceHistory('');
+      } catch (historyError) {
+        setWorkspaceHistoryStatus('error');
+        notify(`Project opened, but workspace history could not be saved or refreshed: ${(historyError as Error).message}`, 'warn');
+      }
     } catch (error) { notify(`Could not open project: ${(error as Error).message}`, 'bad'); }
   }, [notify, refreshWorkspaceHistory, request]);
 
@@ -1063,7 +1100,7 @@ export default function App() {
       <div className="model-control no-drag">
         <span className="model-glyph"><Icon name="spark"/></span>
         <label><small>LOCAL MODEL</small><select value={model} onChange={(e) => selectModel(e.target.value)} disabled={running || modelPreloading}>
-          {!models.length && <option value="">No local models</option>}{models.map((name) => <option value={name} key={name}>{displayModelLabels[name] || shortModel(name)}</option>)}
+          {!models.length && <option value="">{modelCatalogStatus === 'loading' || modelCatalogStatus === 'refreshing' ? 'Syncing model inventory…' : modelCatalogStatus === 'error' ? 'Model inventory unavailable' : 'No local models'}</option>}{models.map((name) => <option value={name} key={name}>{displayModelLabels[name] || shortModel(name)}</option>)}
         </select></label><button className="model-preload-button" type="button" onClick={() => void preloadSelectedModel()} disabled={running || modelPreloading || !model || model.startsWith('gguf::')} title="Preload the selected Ollama model without changing reasoning or token settings">{modelPreloading ? 'WARMING…' : 'PRELOAD'}</button>
       </div>
       <div className={`connection-pill no-drag ${model.startsWith('gguf::') ? (snapshot.llama && (snapshot.llama as Record<string, unknown>).running ? 'yes' : 'no') : connected}`}><span className="connection-light"/>{model.startsWith('gguf::') ? snapshot.llama && (snapshot.llama as Record<string, unknown>).running ? 'GGUF LOADED' : 'GGUF NOT LOADED' : connected === 'yes' ? 'OLLAMA READY' : connected === 'no' ? 'OLLAMA OFFLINE' : 'CHECKING'}</div>
@@ -1073,11 +1110,11 @@ export default function App() {
 
     <main className="main-stage">
       {view === 'landing' && <Landing
-        workspaces={workspaces} workspaceSearch={workspaceSearch} sessions={sessions} models={models} modelLabels={displayModelLabels} model={model} modelPreloading={modelPreloading} context={options.context}
+        workspaces={workspaces} workspaceSearch={workspaceSearch} workspaceHistoryStatus={workspaceHistoryStatus} sessions={homeSessions} sessionHistoryStatus={sessionHistoryStatus} models={models} modelLabels={displayModelLabels} modelCatalogStatus={modelCatalogStatus} model={model} modelPreloading={modelPreloading} context={options.context}
         connected={connected} telemetry={telemetry} onChoose={chooseWorkspace} onOpen={showProject}
-        onModel={selectModel} onRefresh={() => { void refreshHome(); void refreshModels(); }}
+        onModel={selectModel} onRefresh={() => { void refreshHome().catch((error) => notify(`Could not refresh saved history: ${(error as Error).message}`, 'warn')); void refreshModels(); }}
         onModelInfo={(name) => request<ModelInfo>({ command: 'model_info', model: name })}
-        onSearch={(value) => { setWorkspaceSearch(value); void refreshWorkspaceHistory(value); }}
+        onSearch={(value) => { setWorkspaceSearch(value); void refreshWorkspaceHistory(value).catch(() => undefined); }}
         onPin={(root, pinned) => void request({ command: 'workspace_pin', workspace: root, pinned }).then(() => refreshWorkspaceHistory(workspaceSearch)).catch((error) => notify((error as Error).message, 'warn'))}
         onRemove={(root) => void request({ command: 'workspace_remove', workspace: root }).then(() => refreshWorkspaceHistory(workspaceSearch)).catch((error) => notify((error as Error).message, 'warn'))}
         onLibrary={() => setModelLibraryOpen(true)}
@@ -1087,7 +1124,7 @@ export default function App() {
         root={workspace} tab={projectTab} setTab={setProjectTab} files={availableFiles} sessions={currentSessions}
         onNew={() => void newSession()} onOpenSession={(id) => void loadSession(id, workspace)} onFiles={() => void refreshWorkspace(workspace)}
         onDiff={showDiff} onMcp={openMcp} onTools={openTools} running={running}
-        onHome={() => setView('landing')}
+        onHome={() => { setView('landing'); void refreshHome().catch((error) => notify(`Could not refresh saved workspace history: ${(error as Error).message}`, 'warn')); }}
       />}
       {view === 'session' && <SessionRoom
         root={workspace} session={session} messages={messages} activities={activities} activityMode={activityMode} plan={plan} acceptanceCriteria={acceptanceCriteria} phase={phase} workflowOutcome={workflowOutcome} verificationEvidence={verificationEvidence} toolCallProgress={toolCallProgress}
@@ -1176,12 +1213,13 @@ export default function App() {
   </div>;
 }
 
-function Landing({ workspaces, workspaceSearch, sessions, models, modelLabels, model, modelPreloading, context, connected, telemetry, onChoose, onOpen, onModel, onModelInfo, onRefresh, onSearch, onPin, onRemove, onLibrary, onInstallOllama }: {
-  workspaces: WorkspaceHistoryEntry[]; workspaceSearch: string; sessions: SessionSummary[]; models: string[]; modelLabels: Record<string, string>; model: string; modelPreloading: boolean; context: number; connected: string;
+function Landing({ workspaces, workspaceSearch, workspaceHistoryStatus, sessions, sessionHistoryStatus, models, modelLabels, modelCatalogStatus, model, modelPreloading, context, connected, telemetry, onChoose, onOpen, onModel, onModelInfo, onRefresh, onSearch, onPin, onRemove, onLibrary, onInstallOllama }: {
+  workspaces: WorkspaceHistoryEntry[]; workspaceSearch: string; workspaceHistoryStatus: 'loading' | 'ready' | 'error'; sessions: SessionSummary[]; sessionHistoryStatus: 'loading' | 'ready' | 'error'; models: string[]; modelLabels: Record<string, string>; modelCatalogStatus: 'loading' | 'refreshing' | 'ready' | 'error'; model: string; modelPreloading: boolean; context: number; connected: string;
   telemetry: TelemetryView;
   onChoose: () => void; onOpen: (root: string) => void; onModel: (name: string) => void; onModelInfo: (name: string) => Promise<ModelInfo>; onRefresh: () => void;
   onSearch: (value: string) => void; onPin: (root: string, pinned: boolean) => void; onRemove: (root: string) => void; onLibrary: () => void; onInstallOllama: () => void;
 }) {
+  const installedCount = modelCatalogStatus === 'loading' || modelCatalogStatus === 'refreshing' ? 'SYNC' : modelCatalogStatus === 'error' && !models.length ? '—' : String(models.length).padStart(2, '0');
   return <section className="landing-view">
     <div className="landing-grid">
       <div className="landing-copy">
@@ -1189,36 +1227,38 @@ function Landing({ workspaces, workspaceSearch, sessions, models, modelLabels, m
         <h1>Give the model<br/><span>room to work.</span></h1>
         <p className="landing-description">A development desk for patient local agents. Keep the full project in view, see what the model is doing, and decide what reaches your files.</p>
         <div className="launch-actions"><Button kind="bright" onClick={onChoose}><Icon name="folder"/> Open a project <Icon name="arrow"/></Button><span className="launch-note"><kbd>CTRL</kbd> <b>+</b> <kbd>O</kbd> to switch workspaces</span></div>
-        <div className="landing-stats"><div><small>INSTALLED MODELS</small><strong>{String(models.length).padStart(2, '0')}</strong></div><div><small>ACTIVE CONTEXT</small><strong>{fmt(context)} <i>tokens</i></strong></div><div><small>LOCAL ENGINE</small><strong className={connected === 'yes' ? 'text-mint' : connected === 'no' ? 'text-rose' : ''}>{connected === 'yes' ? 'ONLINE' : connected === 'no' ? 'OFFLINE' : 'CHECKING'}</strong></div></div>
+        <div className="landing-stats"><div><small>INSTALLED MODELS</small><strong>{installedCount}{modelCatalogStatus === 'error' && models.length ? '*' : ''}</strong></div><div><small>ACTIVE CONTEXT</small><strong>{fmt(context)} <i>tokens</i></strong></div><div><small>LOCAL ENGINE</small><strong className={connected === 'yes' ? 'text-mint' : connected === 'no' ? 'text-rose' : ''}>{connected === 'yes' ? 'ONLINE' : connected === 'no' ? 'OFFLINE' : 'CHECKING'}</strong></div></div>
+        {modelCatalogStatus === 'error' && models.length > 0 && <small className="catalog-stale-note">Showing the last synced inventory; refresh failed.</small>}
       </div>
       <div className="landing-visual" aria-label="Installed local models arranged around the local AI workspace">
-        <LocalModelOrbit models={models} labels={modelLabels} selectedModel={model} onModelInfo={onModelInfo} />
+        <LocalModelOrbit models={models} labels={modelLabels} selectedModel={model} status={modelCatalogStatus} onModelInfo={onModelInfo} />
         <div className="visual-core"><span>LOCAL</span><strong>AI</strong><small>WORKS IN YOUR SPACE</small></div>
         <div className="orbit-label label-tl"><i/> PRIVATE BY DEFAULT</div><div className="orbit-label label-br"><i/> NO REMOTE ROUTING</div>
         <div className="visual-coordinate">[LOCATION REMOVED]<br/>[LOCATION REMOVED]</div>
       </div>
     </div>
-    {!workspaces.length && <section className="first-run-guide" aria-label="First run setup">
+    {workspaceHistoryStatus === 'ready' && !workspaceSearch && !workspaces.length && <section className="first-run-guide" aria-label="First run setup">
       <div><span className="eyebrow-line">QUICK SETUP / NO MODEL LOAD ON LAUNCH</span><h2>Ready your first workspace</h2><p>The app bundles its agent service. Connect a runtime, select or add a local model, then open a project. A model starts only when you explicitly run or preload it.</p></div>
-      <div className="first-run-steps"><span className={connected === 'yes' ? 'step-ready' : ''}><b>01</b><strong>{connected === 'yes' ? 'Runtime connected' : 'Connect a runtime'}</strong><small>{connected === 'yes' ? 'Ollama is reachable' : 'Ollama or local GGUF server'}</small></span><span className={models.length ? 'step-ready' : ''}><b>02</b><strong>{models.length ? `${models.length} model${models.length === 1 ? '' : 's'} available` : 'Choose a model'}</strong><small>Browse installed or add one</small></span><button onClick={onChoose}><b>03</b><strong>Open a project</strong><small>Keep files and sessions scoped</small></button></div>
+      <div className="first-run-steps"><span className={connected === 'yes' ? 'step-ready' : ''}><b>01</b><strong>{connected === 'yes' ? 'Runtime connected' : 'Connect a runtime'}</strong><small>{connected === 'yes' ? 'Ollama is reachable' : 'Ollama or local GGUF server'}</small></span><span className={modelCatalogStatus === 'ready' && models.length ? 'step-ready' : ''}><b>02</b><strong>{modelCatalogStatus === 'loading' || modelCatalogStatus === 'refreshing' ? 'Syncing local models' : modelCatalogStatus === 'error' ? 'Model inventory unavailable' : models.length ? `${models.length} model${models.length === 1 ? '' : 's'} available` : 'Choose a model'}</strong><small>{modelCatalogStatus === 'ready' && !models.length ? 'Browse installed or add one' : modelCatalogStatus === 'loading' || modelCatalogStatus === 'refreshing' ? 'Waiting for the local catalog' : 'Your installed models remain unchanged'}</small></span><button onClick={onChoose}><b>03</b><strong>Open a project</strong><small>Keep files and sessions scoped</small></button></div>
     </section>}
     <div className="landing-lower">
       <div className="landing-column">
         <div className="section-heading"><div><span className="section-number">01</span><h2>Recent workspaces</h2></div><button onClick={onRefresh}><Icon name="refresh"/> Refresh</button></div>
         <input className="workspace-history-search" value={workspaceSearch} onChange={(event) => onSearch(event.target.value)} placeholder="Search workspace history…" aria-label="Search workspace history"/>
-        {workspaces.length ? <div className="project-tiles workspace-history-list">{workspaces.map((entry) => <div key={`${entry.path}-${entry.first_opened_at}`} className={`workspace-history-row ${entry.available ? '' : 'unavailable'}`}>
+        {workspaceHistoryStatus === 'error' && workspaces.length > 0 && <small className="workspace-history-stale" role="status">Refresh failed; showing the last saved workspace history.</small>}
+        {workspaceHistoryStatus === 'loading' && !workspaces.length ? <div className="empty-inline" role="status"><span className="empty-art"><Icon name="folder"/></span><span><b>Loading saved workspace history…</b><small>Recent projects remain saved while the app reconnects.</small></span></div> : workspaces.length ? <div className="project-tiles workspace-history-list">{workspaces.map((entry) => <div key={`${entry.path}-${entry.first_opened_at}`} className={`workspace-history-row ${entry.available ? '' : 'unavailable'}`}>
           <button className="project-tile-main" disabled={!entry.available} onClick={() => onOpen(entry.path)}><span className="tile-glyph"><Icon name="folder"/></span><span><strong>{shortPath(entry.path)}{entry.pinned ? ' · PINNED' : ''}</strong><small>{entry.path}</small><em>{entry.available ? 'AVAILABLE' : 'FOLDER UNAVAILABLE'}</em></span><Icon name="arrow"/></button>
           <button className="workspace-history-action" title={entry.pinned ? 'Unpin workspace' : 'Pin workspace'} onClick={() => onPin(entry.path, !entry.pinned)}>{entry.pinned ? 'Unpin' : 'Pin'}</button>
           <button className="workspace-history-action remove" title="Remove from workspace history" onClick={() => onRemove(entry.path)}>Remove</button>
-        </div>)}</div> : <div className="empty-inline"><span className="empty-art"><Icon name="folder"/></span><span><b>{workspaceSearch ? 'No workspaces match this search.' : 'No workspace has been opened here yet.'}</b><small>Open a project folder to add it to persistent local history.</small></span></div>}
+        </div>)}</div> : <div className="empty-inline" role={workspaceHistoryStatus === 'error' ? 'alert' : undefined}><span className="empty-art"><Icon name="folder"/></span><span><b>{workspaceHistoryStatus === 'error' ? 'Saved workspace history could not be loaded.' : workspaceSearch ? 'No workspaces match this search.' : 'No workspace has been opened here yet.'}</b><small>{workspaceHistoryStatus === 'error' ? 'Your history has not been removed. Refresh to try again.' : 'Open a project folder to add it to persistent local history.'}</small></span></div>}
       </div>
       <div className="landing-column engine-column">
         <div className="section-heading"><div><span className="section-number">02</span><h2>Inference source</h2></div><span className={`source-status ${connected}`}>{connected === 'yes' ? 'REACHABLE' : connected === 'no' ? 'OFFLINE' : 'CHECKING'}</span></div>
-        <label className="model-picker-card"><span className="picker-symbol"><Icon name="spark"/></span><span className="picker-content"><small>LOCAL MODEL</small><select value={model} disabled={modelPreloading} onChange={(e) => onModel(e.target.value)}>{!models.length && <option value="">No installed models</option>}{models.map((name) => <option key={name} value={name}>{modelLabels[name] || shortModel(name)}</option>)}</select><span>{modelPreloading ? 'Model warming; selection returns when ready.' : 'Choose Ollama models or add Hugging Face GGUF files.'}</span></span><Icon name="chevron"/></label>
+        <label className="model-picker-card"><span className="picker-symbol"><Icon name="spark"/></span><span className="picker-content"><small>LOCAL MODEL</small><select value={model} disabled={modelPreloading} onChange={(e) => onModel(e.target.value)}>{!models.length && <option value="">{modelCatalogStatus === 'loading' || modelCatalogStatus === 'refreshing' ? 'Syncing model inventory…' : modelCatalogStatus === 'error' ? 'Model inventory unavailable' : 'No installed models'}</option>}{models.map((name) => <option key={name} value={name}>{modelLabels[name] || shortModel(name)}</option>)}</select><span>{modelPreloading ? 'Model warming; selection returns when ready.' : modelCatalogStatus === 'error' ? 'The last successful inventory is retained; refresh to reconnect.' : 'Choose Ollama models or add Hugging Face GGUF files.'}</span></span><Icon name="chevron"/></label>
         <Button kind="outline" onClick={onLibrary}>Browse Hugging Face / add local models</Button>
         {connected === 'no' && <div className="setup-help" role="status"><b>Ollama is not responding</b><span>Use the official Windows installer, then check the connection again. Existing model data is not changed.</span><div><Button kind="outline" onClick={onInstallOllama}>Open Ollama setup</Button><button onClick={onRefresh}>Check connection</button></div></div>}
-        {connected === 'yes' && models.length === 0 && <div className="setup-help"><b>No local models found</b><span>Add an Ollama model or download a Hugging Face GGUF to get started.</span><div><Button kind="outline" onClick={onLibrary}>Add a model</Button></div></div>}
-        <div className="engine-foot"><span><Icon name="cpu"/> {telemetry.serviceCpu == null ? 'SERVICE READY' : `SERVICE ${telemetry.serviceCpu}% CPU`}</span><span><Icon name="memory"/> {telemetry.serviceRss} SIDECAR</span><span>{sessions.length} SAVED SESSIONS</span></div>
+        {connected === 'yes' && modelCatalogStatus === 'ready' && models.length === 0 && <div className="setup-help"><b>No local models found</b><span>Add an Ollama model or download a Hugging Face GGUF to get started.</span><div><Button kind="outline" onClick={onLibrary}>Add a model</Button></div></div>}
+        <div className="engine-foot"><span><Icon name="cpu"/> {telemetry.serviceCpu == null ? 'SERVICE READY' : `SERVICE ${telemetry.serviceCpu}% CPU`}</span><span><Icon name="memory"/> {telemetry.serviceRss} SIDECAR</span><span>{sessionHistoryStatus === 'loading' ? 'SYNCING SESSIONS' : sessionHistoryStatus === 'error' ? `${sessions.length} SAVED SESSIONS · LAST SYNC FAILED` : `${sessions.length} SAVED SESSIONS`}</span></div>
       </div>
     </div>
   </section>;

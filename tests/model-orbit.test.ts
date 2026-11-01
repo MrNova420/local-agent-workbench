@@ -7,8 +7,23 @@ import { LocalModelOrbit } from '../src/renderer/ModelOrbit';
 describe('home model orbit slots', () => {
   it('shows no model markers when no models are installed', () => {
     expect(buildModelOrbitSlots([], {}, '')).toEqual([]);
-    const markup = renderToStaticMarkup(createElement(LocalModelOrbit, { models: [], labels: {}, selectedModel: '' }));
+    const markup = renderToStaticMarkup(createElement(LocalModelOrbit, { models: [], labels: {}, selectedModel: '', status: 'ready' }));
     expect(markup.match(/class="model-orbit-dot/g)).toBeNull();
+    expect(markup).toContain('NO LOCAL MODELS FOUND');
+  });
+
+  it('keeps inventory pending instead of displaying a false zero before synchronization', () => {
+    const markup = renderToStaticMarkup(createElement(LocalModelOrbit, { models: [], labels: {}, selectedModel: '', status: 'loading' }));
+    expect(markup.match(/class="model-orbit-dot/g)).toBeNull();
+    expect(markup).toContain('SYNCING LOCAL MODELS');
+    expect(markup).not.toContain('NO LOCAL MODELS FOUND');
+  });
+
+  it('keeps last synced markers visible while a refresh is underway', () => {
+    const markup = renderToStaticMarkup(createElement(LocalModelOrbit, { models: ['qwen3:8b'], labels: {}, selectedModel: '', status: 'refreshing' }));
+    expect(markup.match(/class="model-orbit-dot/g)).toHaveLength(1);
+    expect(markup).toContain('REFRESHING MODEL INVENTORY');
+    expect(markup).not.toContain('NO LOCAL MODELS FOUND');
   });
 
   it('creates one labeled marker per installed model and marks the selected model', () => {
@@ -19,22 +34,21 @@ describe('home model orbit slots', () => {
     expect(slots.map((slot) => slot.label)).toEqual(['coder:Q4_K_M', 'llama3:8b', 'Qwen 3 8B']);
     expect(slots.filter((slot) => slot.selected).map((slot) => slot.id)).toEqual(['llama3:8b']);
     expect(new Set(slots.map((slot) => `${slot.ring},${slot.left},${slot.top}`)).size).toBe(3);
-    const markup = renderToStaticMarkup(createElement(LocalModelOrbit, { models, labels: {}, selectedModel: 'llama3:8b' }));
-    expect(markup.match(/class="visual-orbit orbit-[abc]" data-model-count="1"/g)).toHaveLength(3);
+    const markup = renderToStaticMarkup(createElement(LocalModelOrbit, { models, labels: {}, selectedModel: 'llama3:8b', status: 'ready' }));
+    expect(markup.match(/class="visual-orbit orbit-[abc]" data-model-count="\d+"/g)).toHaveLength(3);
     expect(markup.match(/class="model-orbit-dot/g)).toHaveLength(3);
     expect(markup.match(/aria-haspopup="dialog"/g)).toHaveLength(3);
     expect(markup.match(/<button/g)).toHaveLength(3);
-    expect(markup).toContain('model-orbit-dot ring-1 selected');
+    expect(slots.find((slot) => slot.selected)?.id).toBe('llama3:8b');
+    expect(markup).toContain('SLOW ORBIT');
   });
 
-  it('distributes a larger catalog across all three rings with in-bounds positions', () => {
+  it('places a larger catalog across all rings with stable identity-based positions', () => {
     const models = Array.from({ length: 27 }, (_, index) => `model-${index}`);
     const slots = buildModelOrbitSlots(models, {}, 'model-26');
 
     expect(slots).toHaveLength(27);
-    expect(slots.filter((slot) => slot.ring === 0)).toHaveLength(9);
-    expect(slots.filter((slot) => slot.ring === 1)).toHaveLength(9);
-    expect(slots.filter((slot) => slot.ring === 2)).toHaveLength(9);
+    expect(new Set(slots.map((slot) => slot.ring))).toEqual(new Set([0, 1, 2]));
     expect(slots.every((slot) => {
       const x = (Number.parseFloat(slot.left) - 50) / 50;
       const y = (Number.parseFloat(slot.top) - 50) / 50;
@@ -42,30 +56,23 @@ describe('home model orbit slots', () => {
     })).toBe(true);
     expect(slots.find((slot) => slot.selected)?.id).toBe('model-26');
 
-    const markup = renderToStaticMarkup(createElement(LocalModelOrbit, { models, labels: {}, selectedModel: 'model-26' }));
-    const dimensions = [[114.5, 114.5], [152.5, 91.5], [91.5, 152.5]] as const;
+    const markup = renderToStaticMarkup(createElement(LocalModelOrbit, { models, labels: {}, selectedModel: 'model-26', status: 'ready' }));
     for (const [ringIndex, ring] of ['a', 'b', 'c'].entries()) {
-      const ringMarkup = markup.match(new RegExp(`<div class="visual-orbit orbit-${ring}" data-model-count="9">([\\s\\S]*?)<\\/div>`))?.[1] ?? '';
-      expect(ringMarkup.match(/class="model-orbit-dot/g)).toHaveLength(9);
+      const ringCount = slots.filter((slot) => slot.ring === ringIndex).length;
+      const ringMarkup = markup.match(new RegExp(`<div class="visual-orbit orbit-${ring}" data-model-count="${ringCount}">([\\s\\S]*?)<\\/div>`))?.[1] ?? '';
+      expect(ringMarkup.match(/class="model-orbit-dot/g)).toHaveLength(ringCount);
 
-      const [radiusX, radiusY] = dimensions[ringIndex];
-      const ringSlots = slots.filter((slot) => slot.ring === ringIndex);
-      const angles = ringSlots.map((slot) => Math.atan2(Number.parseFloat(slot.top) - 50, Number.parseFloat(slot.left) - 50));
-      for (let index = 1; index < angles.length; index += 1) {
-        while (angles[index] < angles[index - 1]) angles[index] += Math.PI * 2;
-      }
-      const distances = angles.map((angle, index) => {
-        const next = angles[(index + 1) % angles.length] + (index + 1 === angles.length ? Math.PI * 2 : 0);
-        const segments = 256;
-        const step = (next - angle) / segments;
-        let distance = 0;
-        for (let segment = 0; segment < segments; segment += 1) {
-          const sample = angle + (segment + 0.5) * step;
-          distance += Math.hypot(radiusX * Math.sin(sample), radiusY * Math.cos(sample)) * step;
-        }
-        return distance;
-      });
-      expect(Math.max(...distances) - Math.min(...distances)).toBeLessThan(0.01);
+      expect(slots.filter((slot) => slot.ring === ringIndex).every((slot) => {
+        const x = (Number.parseFloat(slot.left) - 50) / 50;
+        const y = (Number.parseFloat(slot.top) - 50) / 50;
+        return Math.abs(Math.hypot(x, y) - 1) < 1e-12;
+      })).toBe(true);
+    }
+
+    const before = new Map(slots.filter((slot) => slot.id !== 'model-27').map((slot) => [slot.id, `${slot.ring},${slot.left},${slot.top}`]));
+    const after = buildModelOrbitSlots([...models, 'model-27'], {}, '');
+    for (const slot of after.filter((entry) => before.has(entry.id))) {
+      expect(`${slot.ring},${slot.left},${slot.top}`).toBe(before.get(slot.id));
     }
   });
 });

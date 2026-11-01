@@ -12,40 +12,14 @@ const ORBIT_RADII = [
   [152.5, 91.5],
   [91.5, 152.5],
 ] as const;
-const ORBIT_COUNT = ORBIT_RADII.length;
-const PERIMETER_SAMPLES = 4096;
 
-function ellipseAngles(count: number, radiusX: number, radiusY: number): number[] {
-  if (count === 0) return [];
-
-  const step = Math.PI * 2 / PERIMETER_SAMPLES;
-  const cumulative = new Float64Array(PERIMETER_SAMPLES + 1);
-  let previousX = 0;
-  let previousY = -radiusY;
-
-  for (let sample = 1; sample <= PERIMETER_SAMPLES; sample += 1) {
-    const angle = -Math.PI / 2 + sample * step;
-    const x = radiusX * Math.cos(angle);
-    const y = radiusY * Math.sin(angle);
-    cumulative[sample] = cumulative[sample - 1] + Math.hypot(x - previousX, y - previousY);
-    previousX = x;
-    previousY = y;
+function stableHash(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
   }
-
-  const perimeter = cumulative[PERIMETER_SAMPLES];
-  return Array.from({ length: count }, (_, position) => {
-    const target = perimeter * position / count;
-    let low = 0;
-    let high = PERIMETER_SAMPLES;
-    while (low + 1 < high) {
-      const middle = (low + high) >> 1;
-      if (cumulative[middle] < target) low = middle;
-      else high = middle;
-    }
-    const segmentLength = cumulative[high] - cumulative[low];
-    const withinSegment = segmentLength === 0 ? 0 : (target - cumulative[low]) / segmentLength;
-    return -Math.PI / 2 + (low + withinSegment) * step;
-  });
+  return hash >>> 0;
 }
 
 export function buildModelOrbitSlots(
@@ -53,30 +27,23 @@ export function buildModelOrbitSlots(
   labels: Record<string, string>,
   selectedModel: string,
 ): ModelOrbitSlot[] {
-  // The source catalog may contain the same installed model through multiple
-  // provider views. Give each unique local model exactly one stable marker.
-  modelIds = [...new Set(modelIds.filter((id) => typeof id === 'string' && id.trim()))].sort((a, b) => a.localeCompare(b));
-  const ringCounts = Array.from({ length: ORBIT_COUNT }, (_, ring) =>
-    modelIds.reduce((total, _id, index) => total + Number(index % ORBIT_COUNT === ring), 0),
-  );
-  const ringOffsets = Array.from({ length: ORBIT_COUNT }, () => 0);
-  const angles = ORBIT_RADII.map(([radiusX, radiusY], ring) =>
-    ellipseAngles(ringCounts[ring], radiusX, radiusY),
-  );
+  // A marker is keyed to the installed model identity, not the catalog's array
+  // position. The same inventory therefore keeps its layout across refreshes
+  // and app restarts, while new/removed models cannot create fake placeholders.
+  const uniqueIds = [...new Set(modelIds.filter((id) => typeof id === 'string' && id.trim()))];
 
-  return modelIds.map((id, index) => {
-    const ring = (index % ORBIT_COUNT) as ModelOrbitSlot['ring'];
-    const angle = angles[ring][ringOffsets[ring]++];
-    const left = 50 + Math.cos(angle) * 50;
-    const top = 50 + Math.sin(angle) * 50;
-
+  return uniqueIds.map((id) => {
+    const hash = stableHash(id);
+    const ring = (hash % ORBIT_RADII.length) as ModelOrbitSlot['ring'];
+    const angle = ((hash / 0x1_0000_0000) * Math.PI * 2) - Math.PI / 2;
+    const label = labels[id] || id.split(/[\\/]/).filter(Boolean).at(-1) || id;
     return {
       id,
-      label: labels[id] || id.split(/[\\/]/).filter(Boolean).at(-1) || id,
+      label,
       ring,
-      left: `${left}%`,
-      top: `${top}%`,
+      left: `${50 + Math.cos(angle) * 50}%`,
+      top: `${50 + Math.sin(angle) * 50}%`,
       selected: id === selectedModel,
     };
-  });
+  }).sort((left, right) => left.id.localeCompare(right.id));
 }

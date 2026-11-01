@@ -497,6 +497,18 @@ def test_workspace_history_and_session_conflict_resolution(service, tmp_path):
     assert resolved["messages"][-1]["content"] == "project-only update"
 
 
+def test_corrupt_workspace_history_is_reported_without_being_replaced(service):
+    history = service.workspaces.path
+    history.parent.mkdir(parents=True, exist_ok=True)
+    original = '{"not":"a workspace list"'
+    history.write_text(original, encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="malformed and was preserved"):
+        service.handle("workspaces_list", {})
+
+    assert history.read_text(encoding="utf-8") == original
+
+
 def test_activity_mode_is_saved_in_both_session_copies_and_restored(service, tmp_path):
     project = tmp_path / "activity-mode-project"
     project.mkdir()

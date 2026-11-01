@@ -4,7 +4,7 @@
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
-**Current paired engine source:** `a9360935fd1bb733d23ce35273bfe50798e23cce` (unpublished; regressions intentionally queued).
+**Current paired engine source:** `7203d1123852fb3669fc2c5d1a2c86ce5df73d5b` (unpublished; regressions intentionally queued).
 
 ## Implemented in this source batch
 
@@ -72,7 +72,7 @@
 
 ## Remaining reliability work
 
-- The paired app currently pins engine `a9360935fd1bb733d23ce35273bfe50798e23cce` in `core-revision.txt`; CI and the Windows release workflow read that pin. The engine records provider-specific request data, uncertain MCP effects, safe tool-preparation metadata, MCP schema capability gaps, within-task compaction and result lookup, and separate local runtime worker CPU/RAM/NVIDIA process VRAM measurements where available. JSON Schema `format` remains an annotation without value validation; GPU load remains device-wide. Reconcile and build the packaged app only after implementation is complete.
+- The paired app currently pins engine `7203d1123852fb3669fc2c5d1a2c86ce5df73d5b` in `core-revision.txt`; CI and the Windows release workflow read that pin. The engine records provider-specific request data, uncertain MCP effects, safe tool-preparation metadata, MCP schema capability gaps, within-task compaction and result lookup, and separate local runtime worker CPU/RAM/NVIDIA process VRAM measurements where available. JSON Schema `format` remains an annotation without value validation; GPU load remains device-wide. Reconcile and build the packaged app only after implementation is complete.
 - Finish-after-operation drains every independent read that was already launched as part of a validated concurrent batch before stopping ahead of the next model request. Writes, commands, and MCP actions remain sequential; they are not silently parallelized.
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.
@@ -118,6 +118,6 @@ No live model, app process, OpenCode setting, selected token value, model reason
 
 ## 2026-11-01 progress-based implementation continuation (verification queued)
 
-- Engine commit `a9360935fd1bb733d23ce35273bfe50798e23cce` replaces the fixed one-shot implementation continuation with progress-state comparison over the agent-owned plan, completed operation fingerprints, changed files, and verification steps. Open plan items prompt further implementation; no elapsed-time or total-iteration cap was introduced.
+- Engine commits `862cf59b2e17345c7d77d287c8d9062b7e759ec0` and `7203d1123852fb3669fc2c5d1a2c86ce5df73d5b` remove response-phrase/regex continuation detection. The engine now checks the host's project-change evidence, post-effect inspection, denial state, and agent-owned plan; running a command alone does not count as a completed project change. It compares plan/operation/verification progress and preserves an incomplete resumable outcome when state stops changing. No elapsed-time or total-iteration cap was introduced. Regression cases are committed but remain unrun.
 - Repeating the same tool arguments/results and plan without new evidence does not count as progress. The engine ends that unchanged loop with a saved `stopped` checkpoint and `implementation_incomplete` outcome, which the UI explains as resumable work instead of successful completion.
 - Regressions for continuing through planning into a write/inspection and detecting repeated identical planning are queued and unrun. No typecheck, package, UI, or model acceptance has occurred.

@@ -715,10 +715,20 @@ class WorkspaceHistory:
 
     def _read(self) -> list[dict[str, Any]]:
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-            return data if isinstance(data, list) else []
-        except (OSError, json.JSONDecodeError):
+            raw = self.path.read_text(encoding="utf-8")
+        except FileNotFoundError:
             return []
+        except OSError as exc:
+            raise RuntimeError(f"Workspace history could not be read; the existing file was preserved at {self.path}: {exc}") from exc
+        except UnicodeError as exc:
+            raise RuntimeError(f"Workspace history encoding is invalid and the existing file was preserved at {self.path}: {exc}") from exc
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Workspace history is malformed and was preserved at {self.path}: {exc}") from exc
+        if not isinstance(data, list) or any(not isinstance(row, dict) or not isinstance(row.get("path"), str) or not row["path"] for row in data):
+            raise RuntimeError(f"Workspace history has an invalid shape and was preserved at {self.path}.")
+        return data
 
     def record(self, workspace: str, allow_missing: bool = False) -> dict[str, Any]:
         root = Path(workspace).resolve(strict=not allow_missing)

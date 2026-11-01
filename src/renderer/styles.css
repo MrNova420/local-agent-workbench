@@ -117,7 +117,9 @@
 
 /* Native titlebar controls stay out of the way until the top-right edge is reached. */
 .topbar{padding-right:158px}
-.window-control-hotspot{position:fixed;z-index:30;top:0;right:0;width:148px;height:42px;padding:5px 8px 5px 18px;display:flex;justify-content:flex-end;align-items:flex-start;-webkit-app-region:no-drag}
+.window-control-hotspot{position:fixed;z-index:30;top:0;right:0;width:20px;height:14px;padding:0;display:flex;justify-content:flex-end;align-items:flex-start;-webkit-app-region:no-drag;transition:width .12s ease,height .12s ease}
+.window-control-hotspot.is-revealed{width:148px;height:42px;padding:5px 8px 5px 18px}
+.window-control-hotspot:focus-visible{outline:1px solid rgba(125,232,192,.65);outline-offset:-2px;border-radius:3px}
 .window-control-buttons{display:flex;gap:3px;opacity:0;visibility:hidden;transform:translateY(-3px);transition:opacity .12s ease,transform .12s ease,visibility .12s;pointer-events:none}
 .window-control-hotspot.is-revealed .window-control-buttons{opacity:1;visibility:visible;transform:translateY(0);pointer-events:auto}
 .window-control-buttons button{display:grid;place-items:center;width:34px;height:29px;border:0;border-radius:5px;background:rgba(21,31,43,.94);color:#c4d0dc;font:16px/1 'Segoe UI',sans-serif;cursor:pointer}
@@ -125,6 +127,23 @@
 .window-control-buttons button>span{width:10px;height:10px;border:1px solid currentColor}
 .window-control-buttons button>span.restore-glyph{width:10px;height:9px;border:1px solid currentColor;box-shadow:2px -2px 0 -1px #131d29,2px -2px 0 0 currentColor}
 .window-control-buttons button.window-close{font-size:20px}
+
+/* Orbit positions are keyed to model identity; motion is optional and slow. */
+.model-orbit-controls{position:absolute;z-index:3;right:18px;bottom:14px;display:flex;align-items:center;gap:8px;color:#789092;font:7px var(--mono);letter-spacing:.07em}
+.orbit-motion-toggle{border:1px solid rgba(125,232,192,.2);border-radius:4px;padding:5px 7px;background:rgba(8,16,23,.72);color:#9fc8bb;font:7px var(--mono);letter-spacing:.06em;cursor:pointer}
+.orbit-motion-toggle:hover{border-color:rgba(125,232,192,.48);color:#d2f4e5}
+.model-orbit-dot{will-change:transform}
+.visual-orbit.orbit-motion{animation-duration:108s;animation-timing-function:linear;animation-iteration-count:infinite}
+.visual-orbit.orbit-motion.orbit-paused{animation-play-state:paused}
+.orbit-a.orbit-motion{animation-name:model-orbit-a}
+.orbit-b.orbit-motion{animation-duration:132s;animation-name:model-orbit-b}
+.orbit-c.orbit-motion{animation-duration:120s;animation-name:model-orbit-c}
+@keyframes model-orbit-a{to{transform:translate(-50%,-50%) rotate(360deg)}}
+@keyframes model-orbit-b{to{transform:translate(-50%,-50%) rotate(327deg)}}
+@keyframes model-orbit-c{to{transform:translate(-50%,-50%) rotate(393deg)}}
+.catalog-stale-note{display:block;margin-top:8px;color:#d5b779;font:8px var(--mono)}
+.workspace-history-stale{display:block;margin-top:7px;color:#d5b779;font:8px var(--mono)}
+@media(prefers-reduced-motion:reduce){.visual-orbit.orbit-motion{animation:none!important}}
 .window-control-buttons button.window-close:hover{background:#b83e50;color:white}
 @media(max-width:1220px){.topbar>.top-settings:nth-last-child(2){display:none}.model-control{min-width:170px}.workspace-chip{min-width:125px}}
 .skill-source-choices{display:grid;grid-template-columns:1fr 1fr;gap:8px}.skill-source-choices label{display:flex;align-items:center;gap:7px;min-height:34px;padding:7px 9px;border:1px solid rgba(130,158,184,.14);border-radius:5px;background:rgba(17,25,36,.45);color:#aebdca;font-size:9px}.skill-source-choices input{accent-color:var(--mint)}.skill-source-choices label:has(input:disabled){opacity:.55}

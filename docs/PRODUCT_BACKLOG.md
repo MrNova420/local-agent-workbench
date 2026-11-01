@@ -32,7 +32,7 @@ The product target is full 1:1 user-facing feature and workflow parity with Code
 These core items take priority over visual polish, orbit popovers, usage dashboards, and other quality-of-life backlog work. Verification and visible packaged acceptance remain grouped for the final gate, as requested.
 
 1. **Close the model/tool protocol gate:** exact Ollama second-request payload, streamed and batched calls, the shared engine's stricter common-schema validation, broader MCP schema compatibility, truthful partial/error activity outcomes, cancellation/approval transitions, and legacy session migration. Unsupported MCP schema features are now disclosed during discovery and in Tool Catalog while runtime validation remains fail-closed. A safe transient tool-preparation cue reports tool name and argument size before dispatch without exposing partial arguments. Newly added schema, outcome, and streamed-preview regression cases remain queued for the final verification phase.
-   - The active app worktree pins engine commit `a9360935fd1bb733d23ce35273bfe50798e23cce` in `core-revision.txt`; CI and release workflows read that pin. The engine supports appendable/revisable plans, phase-based host progress, dynamically budgeted tool results, concurrent validated read-only batches with correct finish-after-operation draining, paged checkpoint/transcript recovery, and cooperative cancellation during project reads/search. Large outputs can be built with ordered append chunks and durable file activity. Small-model guidance now encourages batching independent calls. Repository scans have no implicit default file/byte ceiling. The app renders plan workstream labels in the worksheet and activity history. Regressions remain queued; no tests, typecheck, package, or visible acceptance has run for this source pair.
+   - The active app worktree pins engine commit `7203d1123852fb3669fc2c5d1a2c86ce5df73d5b` in `core-revision.txt`; CI and release workflows read that pin. The engine supports appendable/revisable plans, phase-based host progress, dynamically budgeted tool results, concurrent validated read-only batches with correct finish-after-operation draining, paged checkpoint/transcript recovery, and cooperative cancellation during project reads/search. Large outputs can be built with ordered append chunks and durable file activity. Small-model guidance now encourages batching independent calls. Repository scans have no implicit default file/byte ceiling. The app renders plan workstream labels in the worksheet and activity history. Regressions remain queued; no tests, typecheck, package, or visible acceptance has run for this source pair.
    - The active source change adds structured `ask_user` clarification to desktop runs, with a required modal choice, durable activity, answer-as-tool-result, and safe interruption recovery. It remains distinct from action approval and does not replace the model's ability to refine or expand plans repeatedly. Tests are queued; no verification has run.
 2. **Prove full-project workflow correctness:** build a real project through inspect → plan → edit/write → inspect diff → run relevant checks → report evidence. Replace intent/completion heuristics with an explicit workflow state so discussion, plan-only, blocked, changed, and verified outcomes are distinct.
 3. **Complete permission and workspace boundaries:** finish testing persistent per-tool allow/ask/deny with hard-deny precedence, exact command previews, and a real opt-in Windows containment backend. Until then, host commands (including PowerShell) must be identified as uncontained even when their working directory is the selected project or disposable copy.
@@ -145,11 +145,12 @@ The app and shared engine have independent public MIT-licensed Git repositories 
 
 ### B-016: Accurate model-orbit home visualization
 
-**Status:** Source catalog is deduplicated and stable-sorted, with the Home catalog refreshed every 30 seconds while visible. Each unique installed local model maps to one clickable marker; visible count/click acceptance remains queued.
+**Status:** Source now waits for a successful model inventory before reporting zero, preserves the last known inventory on a refresh error, and derives a repeatable, identity-keyed ring position per installed model. A persisted slow-orbit toggle respects reduced-motion preferences and pauses while a model card is open. The authored zero/three/large-catalog and stable-position regressions remain queued; packaged visual acceptance is still pending.
 
 - Render one interactive marker per installed local model; render zero model markers when no models are installed. Ring outlines remain decoration only and do not imply models.
 - Clicking a marker opens that model's metadata without loading it. Escape and clicking outside dismiss the card.
 - Test zero, three, and large model catalogs plus provider metadata and viewport placement in the packaged Home screen.
+- Verify the inventory status on startup, confirmed empty, transient runtime failure, and recovery; each real model marker remains clickable and the optional motion toggle survives relaunch.
 
 ### B-017: Release screenshots and README visuals
 
@@ -160,10 +161,18 @@ The app and shared engine have independent public MIT-licensed Git repositories 
 
 ### B-018: Hover-revealed desktop window controls
 
-**Status:** Source implementation added; native packaged interaction remains unverified.
+**Status:** Source implementation added; the idle hit target is now limited to the far top-right corner and expands only when revealed. Native packaged interaction remains unverified.
 
 - Hide minimize, maximize/restore, and close controls during normal use. Reveal them only in the top-right edge hotspot; reserve header space so they cannot overlap application actions.
 - Route close through the existing required running-task close decision. Validate hover, keyboard focus, maximize/restore state, and window close behavior in the packaged app.
+
+### B-019: Optional project-scoped operation profile
+
+**Status:** Design and capability audit queued. Existing project tools are path-scoped, but approved commands and MCP run with host-user permissions; disposable-copy mode is not OS containment.
+
+- Explore an opt-in project-scoped file-operation profile that keeps normal project development available while making each operation's root visible. Keep commands/MCP separately permissioned and clearly host-scoped until a real Windows containment mechanism exists.
+- Preserve current full-development behavior by default. Do not describe a project-root policy or approval dialog as an OS sandbox.
+- Compare safe file-root enforcement, generated-file/build directories, external toolchains, command execution, and MCP before choosing boundaries; add a real contained mode only with an explicit capability and recovery design.
 ### B-011: Provider-accurate live KV-cache telemetry
 
 **Priority:** High; telemetry is implemented in source in both runtime adapters, with end-to-end packaged evidence pending.

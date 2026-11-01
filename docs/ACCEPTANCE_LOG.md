@@ -670,4 +670,4 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 # 2026-11-01 — Progress-based implementation continuation (source only)
 
 - The engine now continues implementation while plan, operation, changed-file, or verification evidence advances; it has no fixed continuation count or runtime deadline. Repeating an unchanged no-progress state ends with a durable `implementation_incomplete` checkpoint and resumable instructions.
-- The app pins engine `a9360935fd1bb733d23ce35273bfe50798e23cce`. Regressions are queued and unrun; no settings or active model were changed.
+- The app pins engine `7203d1123852fb3669fc2c5d1a2c86ce5df73d5b`. Regressions are queued and unrun; no settings or active model were changed.
