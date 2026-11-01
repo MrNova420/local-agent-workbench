@@ -363,6 +363,16 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - The app now pins shared engine `ef711bda954a2eba289760221813de5d20239d48`; CI and the Windows release workflow consume that same `core-revision.txt` value.
 - Renderer evidence now exposes possible command side effects and whether a later inspection occurred. Command-only implementation is labeled unverified when structured file tools did not observe a write; failed commands warn that partial effects may remain.
 - Renderer regressions were added but not run. Engine regressions, all source suites, typecheck, packaging, visible acceptance, updater canary, and exact-model live measurement remain queued.
+
+## 2026-11-01 task acceptance criteria source follow-up (verification queued)
+
+- The app now pins engine `e9c02cd936fd8404d4e3c152801d05ef2b900ac1`. Task plans can carry concrete acceptance criteria in the checkpoint and mirrored plan activity; session restore uses the latest plan snapshot and new tasks reset old criteria.
+- The Plan panel displays criteria separately from plan-step status. Engine, sidecar persistence, worker and renderer regressions were added but remain unrun. All full source/package/visible/model gates remain queued.
+
+## 2026-11-01 uncertain command-stop source follow-up (verification queued)
+
+- The app now pins engine `536b37050566e64c67476de013629a83c089089b`. An approved command stopped after launch or terminated by timeout is recorded as uncertain because it may have left partial files; it prompts a bounded workspace inspection and the renderer warns the user. A command denied or canceled before launch is not reported as having possible effects.
+- A mock status regression was added but not run. All tests, typecheck, package, visible acceptance, updater canary, and exact-model measurement remain queued.
 - Added Workbench-owned skill enablement/source selection, captured it per run, excluded the skill tool when disabled, and added a sidecar command that persists session run settings. Added queued regressions for source filtering, disabled-skill exclusion, captured turn settings, and session persistence; they have not been run.
 - Run Configuration now writes selected model and settings to both session mirrors rather than relying on the next run to persist them; changes are refused while a task is active. Switching model selection resets reasoning to that model's default before the user chooses an override.
 - Terminal turns now persist an observed workflow outcome distinct from “the run ended”; the worksheet labels discussion, plan-only, blocked, changed, inspected, command-completed, and command-failed evidence. A new task clears stale plan rows. Added queued engine, sidecar, and renderer coverage; no tests or UI verification were run.

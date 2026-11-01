@@ -101,6 +101,10 @@ Follow [RELEASE_RUNBOOK.md](RELEASE_RUNBOOK.md). Beta.3 was published at the use
 
 **Follow-up engine source (commit `ef711bda954a2eba289760221813de5d20239d48`, paired app pin updated):** implementation commands are now treated as possible project side effects even when structured file tools did not observe a write. The engine stores exact command arguments and subsequent inspection targets, requests one bounded inspection after a possible effect, and reports command-only work as `implementation_unverified`; failed commands can leave partial files and remain `command_failed`. This is still source-only: tests, typecheck, package, visible workflow, and live-model checks remain queued.
 
+**Current paired source pin `e9c02cd936fd8404d4e3c152801d05ef2b900ac1`:** plans now support agent-defined task acceptance criteria that persist through compaction, mirrored activity replay, and session restore; new task snapshots explicitly clear prior criteria. The Plan panel separates these criteria from progress steps. Review also found and fixed a registry plan-state initialization gap before the first model request. Regressions are queued, not run; no package, visible UI, or model check has been performed for this source.
+
+**Current paired source pin `536b37050566e64c67476de013629a83c089089b`:** approved commands canceled after launch or terminated by timeout now report uncertain side effects, trigger a bounded inspection request, and surface a warning; a command canceled before execution remains a clean cancellation. Regression coverage is queued. No tests or app/model runtime check has been run.
+
 These remain required for the intended capable local coding-agent platform; they are not dropped because the immediate release gate is narrow.
 
 1. **Permissions and containment:** persistent per-tool/path/command allow/ask/deny rules with hard-deny precedence, precise previews, and real opt-in Windows process containment. Clearly distinguish host execution from containment; approval alone is not a sandbox.

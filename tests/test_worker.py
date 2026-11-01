@@ -113,6 +113,9 @@ def test_plan_intent_seeds_live_checklist_and_enforces_read_only_builtin_tools(s
     assert captured["kwargs"]["mcp_tools"] == []
     assert saved["task_intent"] == "plan"
     assert saved["plan"][0]["title"] == "Use the task brief and project instructions as the objective"
+    assert saved["task_checkpoint"]["current"]["acceptance_criteria_source"] == "awaiting_agent_refinement"
+    plan_activity = next(event["activity"] for event in events if event.get("type") == "activity_event" and event.get("activity", {}).get("kind") == "plan")
+    assert plan_activity["acceptanceCriteria"] == []
     assert saved["turns"][-1]["settings"]["task_intent"] == "plan"
     assert saved["turns"][-1]["settings"]["effective_access"] == "plan"
     assert any(event.get("type") == "activity_event" and event.get("activity", {}).get("kind") == "plan" for event in events)

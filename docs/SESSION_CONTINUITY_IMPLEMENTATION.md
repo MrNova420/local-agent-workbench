@@ -23,10 +23,13 @@
 - Terminal verification now carries an evidence contract in both the run state and task checkpoint: whether a requested implementation changed the project, whether changed files were inspected afterward, and the results of approved commands. A command exit of zero is not represented as a passing test. The engine requests an inspection when changes exist but none has been recorded; if an implementation request still returns without a host-observed change, the outcome is `implementation_incomplete` instead of discussion. Explicit Implement under Read-only access is reported as blocked. This code is unverified.
 - The outcome card restores that evidence from the session snapshot and shows it after relaunch. A completed command cannot hide a missing post-change inspection; the renderer warns from the inspection contract and displays the exact persisted evidence summary. Queued renderer coverage also keeps older records readable without inventing evidence. Source-only, UI acceptance still pending.
 - Every actual provider request now emits a compact prompt-provenance record into the same mirrored activity journal. It reports request message roles/sizes, context/output budget, checkpoint and compaction inclusion, project instruction and retrieved-file paths, exact tool/MCP names, enabled/available/catalog-included skills, and skill results retained in that request. Prompt text and credentials are not duplicated. Source-only, restoration/UI acceptance pending.
+- The plan tool now accepts optional task-specific acceptance criteria. The engine carries them through compaction checkpoints; the sidecar stores them in the plan activity journal; session restoration reads the latest plan snapshot; and the Plan panel presents criteria separately from checklist progress. A new task's explicit empty snapshot prevents stale criteria from a previous task resurfacing. Source-only, regression coverage queued.
+- ToolRegistry now initializes its plan state before the first inference request; review found the engine accessed the field before the first model `update_plan` call could create it. A queued regression covers the initial empty state.
+- Approved commands stopped after launch or terminated by timeout are now marked `uncertain` because partial file effects may already exist. Their possible effects trigger workspace inspection; the renderer warns before the user treats the result as a clean cancel or definite failure. A queued regression distinguishes these from cancellation before launch.
 
 ## Verification queue (not run in this implementation phase)
 
-1. Unit-test task checkpoint continuation, legacy migration, task history, operation references, host-generated task-intent plans, read-only tool catalogs, model plan updates, implementation-incomplete outcomes, persisted verification evidence, exact prompt-source manifests, and skill inclusion references.
+1. Unit-test task checkpoint continuation, legacy migration, task history, operation references, host-generated task-intent plans, acceptance-criteria refinement/restoration, read-only tool catalogs, model plan updates, implementation-incomplete outcomes, persisted verification evidence, exact prompt-source manifests, and skill inclusion references.
 2. Fault-inject app/project snapshot lock errors, asymmetric one-store journal failure and targeted retry, both-store journal failure, duplicate journal records, truncated final JSONL lines, and restart between tool start and completion.
 3. Verify a completed response is reconstructed if the process exits after final stream events but before the session snapshot.
 4. Exercise live Plan updates from model update_plan through sidecar, JSONL, renderer, and reopened session.
@@ -39,7 +42,7 @@
 
 ## Remaining reliability work
 
-- The shared engine is pinned at `ef711bda954a2eba289760221813de5d20239d48` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. Reconcile and build the packaged app only after implementation is complete.
+- The shared engine is pinned at `536b37050566e64c67476de013629a83c089089b` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. Reconcile and build the packaged app only after implementation is complete.
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.
 - Add persisted context/input usage presentation and distinguish actual runtime allocation from selected context where the provider exposes it.

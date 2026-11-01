@@ -228,12 +228,18 @@ class AgentService:
                         if isinstance(item, dict):
                             item["source"] = source
                 state["plan"] = plan_items
+                acceptance_criteria = event.get("acceptanceCriteria", [])
+                criteria_included = isinstance(acceptance_criteria, list)
+                if not criteria_included:
+                    acceptance_criteria = []
                 checkpoint = state.get("task_checkpoint")
                 if isinstance(checkpoint, dict):
-                    record_plan(checkpoint, plan_items)
+                    record_plan(checkpoint, plan_items, acceptance_criteria if criteria_included and source == "agent" else None)
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
                             "workspace": str(turn.workspace), "kind": "plan", "status": "updated", "source": source,
                             "items": copy.deepcopy(plan_items), "timestamp": time.time()}
+                if criteria_included:
+                    activity["acceptanceCriteria"] = copy.deepcopy(acceptance_criteria)
                 rows.append(activity)
             elif kind == "context_compacted":
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
@@ -1123,8 +1129,9 @@ class AgentService:
         if not (saved["app_saved"] and saved["project_saved"]):
             self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"], "error": saved["error"] or "Session storage is unavailable."})
         self.emit({"type": "run_started", "sessionId": state["session_id"], "turnId": turn_id})
-        if new_task and state.get("plan"):
-            self._publish_run_event(controller, turn, {"type": "plan", "items": copy.deepcopy(state["plan"]), "source": "workbench"})
+        if new_task:
+            self._publish_run_event(controller, turn, {"type": "plan", "items": copy.deepcopy(state["plan"]),
+                                                       "acceptanceCriteria": [], "source": "workbench"})
         thread = threading.Thread(target=self._run_turn, args=(controller, turn), name="agent-run", daemon=True)
         controller["thread"] = thread
         thread.start()

@@ -161,17 +161,28 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
                         changed.append(path)
     elif kind == "plan":
         state["plan"] = copy.deepcopy(event.get("items", []))
+        acceptance_criteria = event.get("acceptanceCriteria")
+        criteria_included = isinstance(acceptance_criteria, list)
+        if not criteria_included:
+            acceptance_criteria = []
         checkpoint = state.get("task_checkpoint")
         if isinstance(checkpoint, dict):
             task = checkpoint.get("current", checkpoint)
-            if isinstance(task, dict) and isinstance(event.get("items"), list):
-                task["plan"] = copy.deepcopy(event["items"])
-        state.setdefault("activity_events", []).append({
+            if isinstance(task, dict):
+                if isinstance(event.get("items"), list):
+                    task["plan"] = copy.deepcopy(event["items"])
+                if criteria_included:
+                    task["acceptance_criteria"] = copy.deepcopy(acceptance_criteria)
+                    task["acceptance_criteria_source"] = "agent" if event.get("source") != "workbench" else "awaiting_agent_refinement"
+        plan_activity = {
             "id": event.get("actionId") or uuid.uuid4().hex, "turnId": event.get("turnId", run.get("turn_id")),
             "sessionId": state["session_id"], "workspace": event.get("workspace", state.get("workspace")),
             "kind": "plan", "status": "updated", "items": copy.deepcopy(event.get("items", [])),
             "timestamp": event.get("timestamp", time.time()),
-        })
+        }
+        if criteria_included:
+            plan_activity["acceptanceCriteria"] = copy.deepcopy(acceptance_criteria)
+        state.setdefault("activity_events", []).append(plan_activity)
     elif kind == "context_compacted":
         state.setdefault("activity_events", []).append({
             "id": event.get("actionId") or uuid.uuid4().hex, "turnId": event.get("turnId", run.get("turn_id")),

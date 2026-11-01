@@ -46,6 +46,20 @@ describe('durable live activity state', () => {
     expect(updated[1].result).toBe('ok');
   });
 
+  it('keeps plan acceptance criteria in durable activity and honors an empty new-task snapshot', () => {
+    const first = applyActivityEvent([], { type: 'activity_event', activity: {
+      id: 'plan-1', sessionId: 's', turnId: 't1', kind: 'plan', status: 'updated',
+      items: [{ title: 'Build', status: 'in_progress' }], acceptanceCriteria: ['The page renders.'],
+    } });
+    const next = applyActivityEvent(first, { type: 'activity_event', activity: {
+      id: 'plan-2', sessionId: 's', turnId: 't2', kind: 'plan', status: 'updated',
+      source: 'workbench', items: [], acceptanceCriteria: [],
+    } });
+
+    expect(first[0].acceptanceCriteria).toEqual(['The page renders.']);
+    expect(next[1].acceptanceCriteria).toEqual([]);
+  });
+
   it('keeps approval state on the operation row instead of rendering a duplicate action', () => {
     const operation: ActivityRecord = {
       id: 'op-1', operationId: 'op-1', sessionId: 's-1', turnId: 't-1', kind: 'operation',

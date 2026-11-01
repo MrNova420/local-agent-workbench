@@ -13,6 +13,7 @@ import { DEFAULT_RUN_SHEET_LAYOUT, moveRunSheetPanel, normalizeRunSheetLayout, r
 import { nextHarnessProfile } from '../shared/harness-profile';
 import { isNearTranscriptEnd } from '../shared/transcript-follow';
 import { readVerificationEvidence, verificationEvidenceLabel, type VerificationEvidence } from '../shared/verification-evidence';
+import { readPlanAcceptanceCriteria } from '../shared/plan-criteria';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; turnId?: string; thinking?: string; streaming?: boolean; recoveredPartial?: boolean };
 type PlanItem = { title?: string; text?: string; status?: string; source?: 'workbench' | 'agent' };
@@ -177,6 +178,7 @@ export default function App() {
   const [closeChoiceOpen, setCloseChoiceOpen] = useState(false);
   const [trace, setTrace] = useState<TraceRow[]>([]);
   const [plan, setPlan] = useState<PlanItem[]>([]);
+  const [acceptanceCriteria, setAcceptanceCriteria] = useState<string[]>([]);
   const [diff, setDiff] = useState('');
   const [diffLoading, setDiffLoading] = useState(false);
   const [diffError, setDiffError] = useState('');
@@ -318,6 +320,7 @@ export default function App() {
       setMessages(rows);
       setActivities(Array.isArray(loaded.activity_events) ? loaded.activity_events : []);
       setPlan(Array.isArray(loaded.plan) ? loaded.plan : []);
+      setAcceptanceCriteria(readPlanAcceptanceCriteria(loaded.activity_events));
       const latestTurnId = loaded.turns?.at(-1)?.turn_id;
       setRunMetrics(restoreRunMetrics((loaded.usage_events || []).filter((row) => !latestTurnId || row.turn_id === latestTurnId)));
       const nextMode: ActivityMode = loaded.activity_mode === 'sidebar' || loaded.activity_mode === 'inline' ? loaded.activity_mode : 'compact';
@@ -362,6 +365,8 @@ export default function App() {
     if (partial || partialThinking) restored.push({ role: 'assistant', content: partial, thinking: partialThinking, turnId: typeof recovered.state.run_state?.turn_id === 'string' ? recovered.state.run_state.turn_id : undefined, recoveredPartial: true });
     setMessages(restored);
     setActivities(Array.isArray(recovered.state.activity_events) ? recovered.state.activity_events : []);
+    setPlan(Array.isArray(recovered.state.plan) ? recovered.state.plan : []);
+    setAcceptanceCriteria(readPlanAcceptanceCriteria(recovered.state.activity_events));
     if (action === 'restore' || !recovered.prompt) return;
     const settings = (recovered.state.run_state?.settings || {}) as Record<string, unknown>;
     const run: RunOptions = {
@@ -434,6 +439,7 @@ export default function App() {
         // used by the chat cards and Activity Trace, rather than as a second UI-only event.
         if (activityEvent.activity?.kind === 'plan' && Array.isArray(activityEvent.activity.items)) {
           setPlan(activityEvent.activity.items as PlanItem[]);
+          if (Array.isArray(activityEvent.activity.acceptanceCriteria)) setAcceptanceCriteria(activityEvent.activity.acceptanceCriteria);
         }
         if (activityEvent.activity && shouldRefreshWorkspaceForActivity(activityEvent.activity)) {
           const root = activityEvent.activity.workspace || workspace;
@@ -511,6 +517,7 @@ export default function App() {
       if (event.type === 'plan') {
         const items = Array.isArray(event.items) ? event.items as PlanItem[] : [];
         setPlan(items);
+        if (Array.isArray(event.acceptanceCriteria)) setAcceptanceCriteria(event.acceptanceCriteria.filter((item): item is string => typeof item === 'string'));
       }
       if (event.type === 'approval_request') {
         setApproval({ actionId: String(event.actionId), name: String(event.name), arguments: event.arguments, workspace: String(event.workspace), mode: event.mode === 'per-task' ? 'per-task' : 'per-action' });
@@ -544,6 +551,8 @@ export default function App() {
         const verificationStatus = verification && typeof verification === 'object' && 'status' in verification ? String(verification.status) : 'unknown';
         if (event.implementationRequested && verificationStatus === 'command_failed') {
           notify('An approved command failed and may have left partial project changes. Inspect the workspace before retrying.', 'warn');
+        } else if (event.implementationRequested && evidence?.contract?.approved_command_results?.includes('uncertain')) {
+          notify('An approved command stopped or timed out; it may have left partial project changes. Review the command output and workspace.', 'warn');
         } else if (event.implementationRequested && event.projectChanged && evidence?.contract?.post_change_inspection !== 'completed') {
           notify('Changes were made, but no successful post-change inspection was recorded. Treat this result as unverified.', 'warn');
         } else if (event.implementationRequested && evidence?.contract?.command_side_effects_possible && evidence.contract.post_command_inspection !== 'completed') {
@@ -706,7 +715,7 @@ export default function App() {
       const tokenPreferences = readRunTokenPreferences(localStorage.getItem('agent-run-token-preferences'));
       const chosenMode = selectedActivityMode || activityDefault;
       const created = await request<Session>({ command: 'session_new', workspace, model: selectedModel, context: tokenPreferences.context, activityMode: chosenMode });
-      setSession(created); setMessages([]); setTrace([]); setPlan([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setElapsed(0); setPhase('Ready'); setView('session');
+      setSession(created); setMessages([]); setTrace([]); setPlan([]); setAcceptanceCriteria([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setElapsed(0); setPhase('Ready'); setView('session');
       setActivities([]); setActivityMode(chosenMode); sessionStorage.setItem('agent-activity-mode', chosenMode);
       setRunMetrics(emptyRunMetrics());
       setOptions((old) => ({ ...old, context: created.context, maxTokens: tokenPreferences.maxTokens, approvalMode: 'per-action', reasoning: null }));
@@ -741,7 +750,7 @@ export default function App() {
     };
     if (options.approvalMode === 'auto') setOptions((current) => ({ ...current, approvalMode: 'per-action' }));
     setMessages((current) => [...current, { role: 'user', content: task }]);
-    setTrace([]); setPlan([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setRunning(true); setPhase('Connecting to Ollama');
+    setTrace([]); setPlan([]); setAcceptanceCriteria([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setRunning(true); setPhase('Connecting to Ollama');
     setStartedAt(Date.now()); setElapsed(0); setRunMetrics(emptyRunMetrics());
     try { await request({ command: 'run_start', options: run }); }
     catch (error) { setRunning(false); setPhase('Run failed'); setWorkflowOutcome('failed'); notify((error as Error).message, 'bad'); }
@@ -911,7 +920,7 @@ export default function App() {
         onHome={() => setView('landing')}
       />}
       {view === 'session' && <SessionRoom
-        root={workspace} session={session} messages={messages} activities={activities} activityMode={activityMode} plan={plan} phase={phase} workflowOutcome={workflowOutcome} verificationEvidence={verificationEvidence}
+        root={workspace} session={session} messages={messages} activities={activities} activityMode={activityMode} plan={plan} acceptanceCriteria={acceptanceCriteria} phase={phase} workflowOutcome={workflowOutcome} verificationEvidence={verificationEvidence}
         elapsed={elapsed} running={running} prompt={prompt} setPrompt={setPrompt} promptRef={promptRef}
         options={options} setOptions={setOptions} files={availableFiles} telemetry={telemetry}
         runMetrics={runMetrics} onRun={startRun} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
@@ -1062,8 +1071,8 @@ function ProjectHome({ root, tab, setTab, files, sessions, onNew, onOpenSession,
   </section>;
 }
 
-function SessionRoom({ root, session, messages, activities, activityMode, plan, phase, workflowOutcome, verificationEvidence, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
-  root: string; session: Session | null; messages: ChatMessage[]; activities: ActivityRecord[]; activityMode: ActivityMode; plan: PlanItem[];
+function SessionRoom({ root, session, messages, activities, activityMode, plan, acceptanceCriteria, phase, workflowOutcome, verificationEvidence, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
+  root: string; session: Session | null; messages: ChatMessage[]; activities: ActivityRecord[]; activityMode: ActivityMode; plan: PlanItem[]; acceptanceCriteria: string[];
   phase: string; elapsed: number; running: boolean; prompt: string; setPrompt: (value: string) => void;
   workflowOutcome: string | null; verificationEvidence: VerificationEvidence | null; promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
   setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>; files: ProjectFile[];
@@ -1144,7 +1153,11 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
           </div>
           {telemetry.contextMismatch && <p className="context-warning" role="status">Ollama reports a smaller runtime context than requested. Available memory may limit allocation.</p>}
         </section>
-        <div className="sheet-section sheet-panel" style={panelStyle('plan')}><div className="sheet-heading"><h3>Plan</h3><span>{plan.length ? `${plan.length} steps · ${plan.every((item) => item.source === 'workbench') ? 'starter' : 'live'}` : 'Awaiting agent'}</span><SheetPanelControls panel="plan" layout={sheetLayout} onMove={movePanel} onResize={resizePanel}/></div>{plan.length ? <ol className="plan-list">{plan.map((item, index) => <li key={`${index}-${item.title || item.text}`}><span>{String(index + 1).padStart(2, '0')}</span><b>{item.title || item.text || 'Work item'}{item.title && item.text && item.title !== 'Requested outcome' && <small className="plan-detail">{item.text}</small>}</b><small>{item.status || 'pending'}</small></li>)}</ol> : <p className="sheet-empty">A checklist appears immediately for plan/build tasks and can be refined by the agent.</p>}</div>
+        <div className="sheet-section sheet-panel" style={panelStyle('plan')}>
+          <div className="sheet-heading"><h3>Plan</h3><span>{plan.length ? `${plan.length} steps · ${plan.every((item) => item.source === 'workbench') ? 'starter' : 'live'}` : 'Awaiting agent'}</span><SheetPanelControls panel="plan" layout={sheetLayout} onMove={movePanel} onResize={resizePanel}/></div>
+          {plan.length ? <ol className="plan-list">{plan.map((item, index) => <li key={`${index}-${item.title || item.text}`}><span>{String(index + 1).padStart(2, '0')}</span><b>{item.title || item.text || 'Work item'}{item.title && item.text && item.title !== 'Requested outcome' && <small className="plan-detail">{item.text}</small>}</b><small>{item.status || 'pending'}</small></li>)}</ol> : <p className="sheet-empty">A checklist appears immediately for plan/build tasks and can be refined by the agent.</p>}
+          <div className="plan-acceptance"><h4>Acceptance criteria <span>{acceptanceCriteria.length ? `${acceptanceCriteria.length} agent-defined` : 'awaiting task refinement'}</span></h4>{acceptanceCriteria.length ? <ul>{acceptanceCriteria.map((criterion, index) => <li key={`${index}-${criterion}`}>{criterion}</li>)}</ul> : <p>The agent can add concrete completion checks after inspecting the task and project.</p>}</div>
+        </div>
         <div className="sheet-section trace-section sheet-panel" style={panelStyle('activity')}><div className="sheet-heading"><h3>Activity trace</h3><span>{activities.length} events</span><SheetPanelControls panel="activity" layout={sheetLayout} onMove={movePanel} onResize={resizePanel}/></div><ActivityFeed entries={activities} mode={activityMode} surface="sidebar"/></div>
         <div className="resource-summary sheet-panel" style={panelStyle('resources')}>
           <div className="resource-heading"><span>RESOURCE / SYSTEM</span><SheetPanelControls panel="resources" layout={sheetLayout} onMove={movePanel} onResize={resizePanel}/></div>

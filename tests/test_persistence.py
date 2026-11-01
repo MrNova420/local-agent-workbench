@@ -3,10 +3,24 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from sidecar.persistence import MirroredSessionStore, WorkspaceHistory
+from sidecar.persistence import MirroredSessionStore, WorkspaceHistory, _replay_run_event
 
 
 class MirroredSessionStoreTests(unittest.TestCase):
+    def test_new_task_plan_snapshot_clears_prior_acceptance_criteria_on_replay(self):
+        state = {
+            "session_id": "s1", "workspace": "C:/project", "plan": [{"title": "Old"}],
+            "task_checkpoint": {"current": {"plan": [{"title": "Old"}],
+                                                "acceptance_criteria": ["Old criterion"],
+                                                "acceptance_criteria_source": "agent"}},
+        }
+        _replay_run_event(state, {"type": "plan", "turnId": "new-turn", "source": "workbench",
+                                  "items": [], "acceptanceCriteria": []})
+
+        self.assertEqual(state["task_checkpoint"]["current"]["acceptance_criteria"], [])
+        self.assertEqual(state["task_checkpoint"]["current"]["acceptance_criteria_source"], "awaiting_agent_refinement")
+        self.assertEqual(state["activity_events"][-1]["acceptanceCriteria"], [])
+
     def test_session_is_saved_to_app_library_and_project_mirror(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "project"
@@ -78,13 +92,15 @@ class MirroredSessionStoreTests(unittest.TestCase):
             root.mkdir()
             store = MirroredSessionStore(Path(temp) / "app")
             state = store.create(str(root), "model", 65536)
+            state["task_checkpoint"] = {"current": {"task_id": "task-1", "plan": []}}
             state["run_state"] = {"status": "running", "turn_id": "turn-1", "safe_messages": [],
                                   "partial_content": "", "partial_thinking": "", "active_operation": None}
             store.save(state)
             appended = store.append_events(state["session_id"], str(root), [
                 {"_journal_event_id": "evt-1", "_journal_recorded_at_ns": 1, "type": "text", "turnId": "turn-1", "text": "working"},
                 {"_journal_event_id": "evt-2", "_journal_recorded_at_ns": 2, "type": "plan", "turnId": "turn-1",
-                 "workspace": str(root), "items": [{"title": "Build", "status": "in_progress"}]},
+                 "workspace": str(root), "items": [{"title": "Build", "status": "in_progress"}],
+                 "acceptanceCriteria": ["The page renders without errors."]},
                 {"_journal_event_id": "evt-3", "_journal_recorded_at_ns": 3, "type": "tool_start", "turnId": "turn-1",
                  "workspace": str(root), "operationId": "op-1", "name": "write_file", "arguments": {"path": "index.html"}},
             ])
@@ -95,6 +111,8 @@ class MirroredSessionStoreTests(unittest.TestCase):
 
             self.assertEqual(recovered["run_state"]["partial_content"], "working")
             self.assertEqual(recovered["plan"][0]["title"], "Build")
+            self.assertEqual(recovered["activity_events"][0].get("acceptanceCriteria"), ["The page renders without errors."])
+            self.assertEqual(recovered["task_checkpoint"]["current"]["acceptance_criteria"], ["The page renders without errors."])
             self.assertEqual(recovered["run_state"]["active_operation"]["operationId"], "op-1")
             self.assertTrue(any(row.get("operationId") == "op-1" for row in recovered["activity_events"]))
 

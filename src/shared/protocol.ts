@@ -100,6 +100,7 @@ export type ActivityRecord = {
   result?: string;
   affectedFiles?: string[];
   items?: Array<{ title?: string; text?: string; status?: string; source?: 'workbench' | 'agent' }>;
+  acceptanceCriteria?: string[];
   omittedTurns?: number;
   retainedTurns?: number;
   configuredContext?: number;
