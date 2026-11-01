@@ -16,7 +16,7 @@ describe('home model orbit slots', () => {
     const slots = buildModelOrbitSlots(models, { 'qwen3:8b': 'Qwen 3 8B' }, 'llama3:8b');
 
     expect(slots).toHaveLength(3);
-    expect(slots.map((slot) => slot.label)).toEqual(['Qwen 3 8B', 'coder:Q4_K_M', 'llama3:8b']);
+    expect(slots.map((slot) => slot.label)).toEqual(['coder:Q4_K_M', 'llama3:8b', 'Qwen 3 8B']);
     expect(slots.filter((slot) => slot.selected).map((slot) => slot.id)).toEqual(['llama3:8b']);
     expect(new Set(slots.map((slot) => `${slot.ring},${slot.left},${slot.top}`)).size).toBe(3);
     const markup = renderToStaticMarkup(createElement(LocalModelOrbit, { models, labels: {}, selectedModel: 'llama3:8b' }));
@@ -24,7 +24,7 @@ describe('home model orbit slots', () => {
     expect(markup.match(/class="model-orbit-dot/g)).toHaveLength(3);
     expect(markup.match(/aria-haspopup="dialog"/g)).toHaveLength(3);
     expect(markup.match(/<button/g)).toHaveLength(3);
-    expect(markup).toContain('model-orbit-dot ring-2 selected');
+    expect(markup).toContain('model-orbit-dot ring-1 selected');
   });
 
   it('distributes a larger catalog across all three rings with in-bounds positions', () => {
