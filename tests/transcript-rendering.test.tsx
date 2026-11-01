@@ -36,4 +36,19 @@ describe('resumed transcript rendering', () => {
     expect(markup).toContain('class="hljs language-javascript"');
     expect(markup).toContain('class="hljs-keyword"');
   });
+
+  it('does not shift restored activity links after a canceled turn without a transcript prompt', () => {
+    const restored = restoreTranscriptMessages([
+      { role: 'user', content: 'First saved task' },
+      { role: 'assistant', content: 'First result' },
+      { role: 'user', content: 'Second saved task' },
+      { role: 'assistant', content: 'Second result' },
+    ], [
+      { turn_id: 'canceled-before-inference', transcript_saved: false },
+      { turn_id: 'turn-one', transcript_saved: true },
+      { turn_id: 'turn-two' },
+    ]);
+
+    expect(restored.filter((message) => message.role === 'user').map((message) => message.turnId)).toEqual(['turn-one', 'turn-two']);
+  });
 });
