@@ -579,3 +579,8 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - Engine commit `fd1104d1ef6fe321ae238721fe523c9bc4ca854e` adds optional concise design-decision/assumption summaries to `update_plan`. The engine writes them to the durable task checkpoint; the app includes them in Plan activity and reconstructs them from event journals. Guidance excludes hidden chain-of-thought.
 - Added engine, sidecar, and journal-replay coverage; it remains unrun. The app pin is synchronized. No model or inference settings changed.
 
+
+## 2026-11-01 restore plan decisions and criteria in activity cards (verification queued)
+
+- Renderer activity cards now expose persisted concise plan decisions and acceptance criteria in expandable details, so the activity sheet retains why work was chosen and how success is checked after session restoration.
+- Added renderer coverage; tests and visible session-reopen acceptance remain queued.

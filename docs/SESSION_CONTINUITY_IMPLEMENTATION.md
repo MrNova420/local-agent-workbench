@@ -68,3 +68,5 @@
 - Continue the approved core harness plan: richer task-specific acceptance criteria and plan refinement, exact prompt-content preview if safe local rendering can be added without duplicating credentials or huge context, provider capability reporting, permissions and process containment, developer tooling parity, transcript rendering after reopen, and remaining product backlog. Workbench-owned skill enable/source controls, host-observed outcomes, task intent/checklists, terminal evidence, and source-level request provenance are implemented but unverified. See MASTER_ROADMAP.md, CORE_HARNESS_READINESS.md, and PRODUCT_BACKLOG.md.
 
 No live model, app process, OpenCode setting, selected token value, model reasoning default, or runtime placement was changed for this work.
+
+- Plan activity cards now restore concise decisions and acceptance criteria in compact disclosures alongside task items. The shared activity event already persisted these fields; this closes the renderer gap after app or session reopen. Renderer regression coverage is added and queued; it has not been run.

@@ -102,6 +102,8 @@ export type ActivityRecord = {
   result?: string;
   affectedFiles?: string[];
   items?: Array<{ title?: string; text?: string; status?: string; source?: 'workbench' | 'agent' }>;
+  /** Concise task decisions, not private chain-of-thought. */
+  decisions?: string[];
   acceptanceCriteria?: string[];
   omittedTurns?: number;
   omittedOperationGroups?: number;

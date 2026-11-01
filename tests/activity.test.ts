@@ -5,6 +5,19 @@ import { applyActivityEvent, shouldRefreshWorkspaceForActivity, type ActivityRec
 import { ActivityFeed } from '../src/renderer/ActivityFeed';
 
 describe('durable live activity state', () => {
+  it('restores plan decisions and acceptance criteria in the activity card', () => {
+    const markup = renderToStaticMarkup(createElement(ActivityFeed, { entries: [{
+      id: 'plan-1', turnId: 'turn-1', sessionId: 'session-1', kind: 'plan', status: 'in_progress',
+      items: [{ title: 'Implement the route', status: 'in_progress' }],
+      decisions: ['Keep the existing router to preserve deep links.'],
+      acceptanceCriteria: ['The route still works after reload.'],
+    }], mode: 'compact', surface: 'sidebar' }));
+    expect(markup).toContain('Recorded decisions');
+    expect(markup).toContain('Keep the existing router to preserve deep links.');
+    expect(markup).toContain('Acceptance criteria');
+    expect(markup).toContain('The route still works after reload.');
+  });
+
   it('shows exactly which checkpoint history categories were summarized', () => {
     const markup = renderToStaticMarkup(createElement(ActivityFeed, { entries: [{
       id: 'context-1', turnId: 'turn-1', sessionId: 'session-1', kind: 'context', status: 'compacted',
