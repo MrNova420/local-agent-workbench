@@ -1160,7 +1160,8 @@ def test_engine_failure_is_saved_with_the_session(service, tmp_path, monkeypatch
 
         def run(self, prompt, messages):
             messages.append({"role": "user", "content": prompt})
-            self.event({"type": "error", "error": "Synthetic provider stream failure"})
+            self.event({"type": "error", "error": "Synthetic provider stream failure",
+                        "workflowOutcome": "response_missing"})
             return messages
 
         def cancel(self):
@@ -1183,6 +1184,7 @@ def test_engine_failure_is_saved_with_the_session(service, tmp_path, monkeypatch
     saved = service.sessions.load(session_id)
     assert saved["last_error"]["message"] == "Synthetic provider stream failure"
     assert saved["run_state"]["status"] == "failed"
+    assert saved["run_state"]["workflow_outcome"] == "response_missing"
 
 
 def test_worker_exception_is_added_to_persisted_activity(service, tmp_path, monkeypatch):

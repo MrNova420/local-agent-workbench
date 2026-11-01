@@ -352,6 +352,8 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
         run["active_operations"] = {}
         if kind in {"complete", "generation_complete"}:
             run["verification"] = copy.deepcopy(event.get("verification", {"status": "unknown", "steps": []}))
+        elif isinstance(event.get("verification"), dict):
+            run["verification"] = copy.deepcopy(event["verification"])
         partial = {key: run.get(field, "") for key, field in (("content", "partial_content"), ("thinking", "partial_thinking"))
                    if isinstance(run.get(field), str) and run.get(field)}
         if partial:
@@ -381,6 +383,8 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
                     task["verification"] = copy.deepcopy(run["verification"])
                     task["next_action"] = ""
                 elif kind == "error":
+                    if isinstance(event.get("verification"), dict):
+                        task["verification"] = copy.deepcopy(event["verification"])
                     blocker = str(event.get("error", "Run failed."))
                     blockers = task.setdefault("blockers", [])
                     if blocker not in blockers:

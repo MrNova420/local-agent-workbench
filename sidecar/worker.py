@@ -271,8 +271,11 @@ class AgentService:
                     run_state["verification"] = copy.deepcopy(event.get("verification", {"status": "unknown", "steps": []}))
                     run_state["workflow_outcome"] = str(event.get("workflowOutcome", "discussion"))
                 elif event.get("type") in {"error", "cancelled", "stopped_after_operation"}:
-                    run_state["workflow_outcome"] = {"error": "failed", "cancelled": "cancelled",
-                                                     "stopped_after_operation": "stopped"}[str(event.get("type"))]
+                    run_state["workflow_outcome"] = str(event.get("workflowOutcome") or
+                        {"error": "failed", "cancelled": "cancelled",
+                         "stopped_after_operation": "stopped"}[str(event.get("type"))])
+                    if isinstance(event.get("verification"), dict):
+                        run_state["verification"] = copy.deepcopy(event["verification"])
 
             kind = event.get("type")
             activity: dict[str, Any] | None = None
@@ -441,7 +444,9 @@ class AgentService:
                 })
             elif kind == "error":
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
-                            "workspace": str(turn.workspace), "kind": "error", "name": "Run failed", "status": "failed",
+                            "workspace": str(turn.workspace), "kind": "error",
+                            "name": "Final response missing" if event.get("workflowOutcome") == "response_missing" else "Run failed",
+                            "status": "failed",
                             "result": str(event.get("error", "The run failed.")), "timestamp": time.time()}
                 rows.append(activity)
             if kind in {"tool_batch", "request_error"}:
@@ -1648,7 +1653,8 @@ class AgentService:
                     else "completed" if has_success_event else "failed"
                 )
                 run_state["workflow_outcome"] = (
-                    {"error": "failed", "cancelled": "cancelled", "stopped_after_operation": "stopped"}.get(str(terminal.get("type")), "failed")
+                    str(terminal.get("workflowOutcome") or
+                        {"error": "failed", "cancelled": "cancelled", "stopped_after_operation": "stopped"}.get(str(terminal.get("type")), "failed"))
                     if terminal else str(successful_completion.get("workflowOutcome", "discussion")) if successful_completion else "failed"
                 )
                 run_state["active_operation"] = None
