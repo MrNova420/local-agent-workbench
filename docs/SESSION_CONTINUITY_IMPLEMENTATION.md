@@ -34,6 +34,7 @@
 - Long chat/trace activity histories now render progressively: the latest 100 records appear first, with explicit loading of earlier records in batches. All records stay in persisted state; this is not a retention cap. Regression and visible scroll/restore acceptance are queued.
 - Resource display now distinguishes Agent Workbench sidecar metrics, Ollama/llama.cpp worker CPU/RAM, NVIDIA worker-process VRAM when available, and device-wide GPU utilization/power. This does not claim selected-model utilization. Mocked coverage and live hardware acceptance are queued.
 - Approved command tools no longer default to 120 seconds or cap explicit timeouts at one hour. The model is instructed to omit `timeout_seconds` for long builds/checks, leaving user cancellation available; explicit positive task-specific timeouts remain possible. Regression and visible long-command acceptance are queued.
+- The retained CLI approval dialog now presents exact argv/PowerShell text and truthful timeout semantics. CLI approval and cancellation acceptance remain queued.
 
 ## Verification queue (not run in this implementation phase)
 

@@ -472,3 +472,4 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 
 - Approved commands no longer receive a hidden 120-second timeout or a fixed one-hour ceiling. Omit `timeout_seconds` for an unbounded command wait controlled by completion or the user Cancel action; explicit positive timeouts remain supported with no silent cap.
 - Added queued engine coverage. App pin advanced to `f540259cfe195e6e076e848a516cebb2aebbe47f`; tests, typecheck, package, and long-command UI acceptance remain queued. No command was run.
+- The retained CLI command approval preview now shows the actual command plus whether there is no deadline or an explicit timeout. App pin advanced to `1b5d5ccdd33f8d0069ac6b4f61687e1955357eac`; source checks and CLI acceptance remain queued.
