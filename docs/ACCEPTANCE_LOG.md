@@ -1,5 +1,14 @@
 # Visible Acceptance Log
 
+## 2026-11-01 beta.3 release candidate
+
+- Candidate version: `0.1.0-beta.3`; `package.json` and `package-lock.json` match. The paired app source pins engine `e5158359cca2e780ca506cfd98e8b8015c63852a`.
+- Verification passed locally: 140 shared-engine pytest; 53 renderer/Vitest; 45 sidecar pytest; TypeScript typecheck; production dependency audit (0 findings); Windows x64 `npm run make`; bundled worker ready/ping/shutdown (exit 0, isolated temporary app data, no Ollama request); Squirrel `.nupkg` and portable ZIP integrity checks.
+- The marker-order test initially had stale expected ordering; its assertion was corrected to match deterministic ID sorting and then the full app/sidecar suite passed. An initial app suite attempt without `LOCAL_AGENT_CORE_PATH` could not collect engine-backed tests; the release-workflow environment was then applied and all tests passed.
+- **Visible app acceptance is not complete:** inspection found the existing beta.2 Workbench window actively generating a long task. To preserve that work and avoid duplicate app instances, the beta.3 candidate was not launched. No model request was started, canceled, loaded, or unloaded for this candidate.
+- GitHub Actions historically failed before runner startup due to the account-level billing lock. This release is based on local verification; hosted CI must be rechecked after source promotion and is not represented as passed.
+- Installer is unsigned. Current packaged Home/chat screenshots and the installed beta.2-to-beta.3 updater cycle are not verified yet. The user requested a quick public release while development continues; keep these limitations visible and schedule the update canary when the current app task is idle.
+
 ## 2026-10-31 roadmap and release-policy reconciliation
 
 - Added `docs/MASTER_ROADMAP.md` as the cross-repository source for current branch state, ordered source/package/visible/live-model/release gates, remaining core work, deferred backlog, evidence tiers, and documentation ownership.

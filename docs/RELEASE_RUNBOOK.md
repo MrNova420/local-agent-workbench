@@ -11,8 +11,8 @@ The current distributable is a **Windows 10/11 x64** Squirrel.Windows installer 
 3. Run the app typecheck, app/sidecar tests, engine tests, Windows package build, bundled-worker protocol smoke, and the visible install/update workflow. A successful source test run alone is not a packaged release gate.
 4. Inspect `out/make/squirrel.windows/x64/`: keep `RELEASES`, Setup `.exe`, and `*-full.nupkg` together. Keep the ZIP and `SHA256SUMS.txt` in the release assets too.
 5. Publish a GitHub Release from the matching `v<version>` tag and write user-facing notes from `CHANGELOG.md`. The Windows auto-update service consumes public, non-draft GitHub Releases and requires the Squirrel manifest and package assets. The release workflow therefore leaves GitHub's prerelease checkbox off while the SemVer version/title still says **Public beta**. Do not publish a draft or use GitHub's prerelease flag: the public Electron update service does not discover those releases.
-6. Install the previous release in a clean Windows x64 environment. Verify update discovery, background download, visible ready state, no restart during a task, explicit restart/install, and recovery of workspace/session data afterward.
-7. Verify the downloaded artifacts against `SHA256SUMS.txt`; verify the release page, setup instructions, screenshots, changelog, and platform limitations before announcing it.
+6. Verify the downloaded artifacts against `SHA256SUMS.txt`; verify the release page, setup instructions, screenshots, changelog, and platform limitations before announcing it.
+7. After publication, perform the installed-update canary from the previous release: verify discovery, background download, visible ready state, no restart during a task, explicit restart/install, and workspace/session recovery. If the canary fails, document the affected users and publish a corrected patch rather than moving the tag.
 
 ## Version and release policy
 
@@ -34,7 +34,7 @@ Before creating a public tag, complete and record each gate in `MASTER_ROADMAP.m
 3. Build the Windows package; inspect installer, `RELEASES`, `.nupkg`, ZIP, checksum manifest, and bundled worker startup/ping/shutdown.
 4. Exercise the packaged app visibly in a disposable workspace, including the real updater path from the previous installed version. Preserve any model already loaded before an approved inference check.
 5. Review release notes, setup/recovery instructions, screenshots for current-build accuracy and privacy, known limitations, license, and security reporting path.
-6. Only after all required gates pass, choose and commit the next SemVer version, then tag that exact commit and confirm the public release has all required assets and updater-compatible flags.
+6. After source tests pass and before packaging, choose the next SemVer version and commit matching package manifests and release notes. Build and visibly inspect that exact version. Create its immutable tag only after those pre-publication gates pass; then confirm the public release has all required assets and updater-compatible flags. The installed-update canary is a post-publication gate because the update feed cannot serve a release that does not exist yet.
 
 Never force-move a published tag to repair an artifact. If an artifact is wrong, publish a new patch after documenting the issue and recovery path. Do not promise automatic rollback: users control installation/restart, and recovery instructions must explain reinstalling the previous known-good version while preserving user data.
 
