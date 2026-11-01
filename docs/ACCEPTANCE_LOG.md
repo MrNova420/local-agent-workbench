@@ -474,3 +474,7 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Added queued engine coverage. App pin advanced to `f540259cfe195e6e076e848a516cebb2aebbe47f`; tests, typecheck, package, and long-command UI acceptance remain queued. No command was run.
 - The retained CLI command approval preview now shows the actual command plus whether there is no deadline or an explicit timeout. App pin advanced to `1b5d5ccdd33f8d0069ac6b4f61687e1955357eac`; source checks and CLI acceptance remain queued.
 - The mocked runtime-resource regression now lives with the engine telemetry it exercises. The app pin advances to `51cd9e4a6fc3c414d56b454d0e1c365ac3abf37e`; it remains unrun.
+
+## 2026-11-01 cancel chooser acknowledgment (verification queued)
+
+- Cancel now remains visible until the sidecar acknowledges the action; IPC failure leaves the required decision available for retry. The sidecar reports when there is no active run, and the UI reports that state instead of implying a cancel succeeded. Finish-current-operation also waits for the host's accepted/not-active result. Added mocked worker coverage; no tests or UI checks were run.

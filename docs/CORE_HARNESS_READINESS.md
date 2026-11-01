@@ -10,6 +10,7 @@ Deliver **1:1 user-facing feature and workflow parity with Codex and OpenCode** 
 
 - Unpublished app source pins engine commit `51cd9e4a6fc3c414d56b454d0e1c365ac3abf37e` in `core-revision.txt`. These commits are isolated in worktrees and have not been pushed or packaged.
 - New source changes add progressive rendering for long activity timelines, separate Ollama/llama.cpp worker CPU/RAM and NVIDIA worker-process VRAM from device-wide GPU readings, and remove the approved-command default of 120 seconds and one-hour ceiling. Standalone operation-result retrieval now works from engine memory when no app session store is available.
+- The cancel chooser now waits for a positive sidecar acknowledgment and stays open on transport failure; a stale click after a run ended is reported as no active run rather than success.
 - Regression coverage has been added but **not run** for these changes. The earlier verification numbers below describe their historical commits only, not this active source pair. Final engine/app tests, typecheck, package, visible workflow, installer/update, and live-model/hardware acceptance remain queued.
 - No model, inference setting, OpenCode configuration, or loaded runtime was changed during this source work.
 

@@ -36,6 +36,7 @@
 - Approved command tools no longer default to 120 seconds or cap explicit timeouts at one hour. The model is instructed to omit `timeout_seconds` for long builds/checks, leaving user cancellation available; explicit positive task-specific timeouts remain possible. Regression and visible long-command acceptance are queued.
 - The retained CLI approval dialog now presents exact argv/PowerShell text and truthful timeout semantics. CLI approval and cancellation acceptance remain queued.
 - Mocked resource-attribution coverage is owned by the engine repository alongside `telemetry.py`; it remains queued and unrun.
+- The required cancel chooser now waits for explicit sidecar acknowledgment; a failed IPC call leaves it open, and a no-longer-active run is reported instead of silently looking canceled. Finish-after-current-operation receives the same acceptance check. Mocked and visible chooser tests remain queued.
 
 ## Verification queue (not run in this implementation phase)
 

@@ -176,6 +176,7 @@ export default function App() {
   const [sessionConflict, setSessionConflict] = useState<{ id: string; workspace: string; versions: Array<{ source: 'app' | 'project'; updated_at?: number }> } | null>(null);
   const [recoverySession, setRecoverySession] = useState<Session | null>(null);
   const [cancelChoiceOpen, setCancelChoiceOpen] = useState(false);
+  const [cancelChoicePending, setCancelChoicePending] = useState<'cancel' | 'finish' | null>(null);
   const [closeChoiceOpen, setCloseChoiceOpen] = useState(false);
   const [trace, setTrace] = useState<TraceRow[]>([]);
   const [plan, setPlan] = useState<PlanItem[]>([]);
@@ -791,12 +792,21 @@ export default function App() {
   async function cancelRun() { setCancelChoiceOpen(true); }
 
   async function chooseCancelAction(action: 'continue' | 'cancel' | 'finish') {
-    setCancelChoiceOpen(false);
-    if (action === 'continue') return;
+    if (action === 'continue') { setCancelChoiceOpen(false); return; }
+    setCancelChoicePending(action);
     try {
-      if (action === 'cancel') { await request({ command: 'run_cancel' }); setPhase('Cancelling request'); }
-      else { await request({ command: 'run_stop_after_operation' }); setPhase('Finishing active operation'); }
+      if (action === 'cancel') {
+        const result = await request<{ cancelled: boolean }>({ command: 'run_cancel' });
+        if (result.cancelled) setPhase('Cancelling request');
+        else notify('The run had already ended; there was nothing left to cancel.', 'warn');
+      } else {
+        const result = await request<{ requested: boolean }>({ command: 'run_stop_after_operation' });
+        if (result.requested) setPhase('Finishing active operation');
+        else notify('The run had already ended; there is no active operation to finish.', 'warn');
+      }
+      setCancelChoiceOpen(false);
     } catch (error) { notify(`Could not update the run: ${(error as Error).message}`, 'bad'); }
+    finally { setCancelChoicePending(null); }
   }
 
   async function answerApproval(approved: boolean) {
@@ -994,7 +1004,7 @@ export default function App() {
     </Modal>}
     {cancelChoiceOpen && <Modal title="What should happen to this run?" eyebrow="RUN IS ACTIVE" dismissible={false} onClose={() => undefined}>
       <p className="modal-copy">Choose how to stop. Received text and completed tool results are saved before the run ends.</p>
-      <div className="activity-mode-choices"><button className="activity-mode-choice" onClick={() => void chooseCancelAction('continue')}><b>Keep it running</b><small>Close this prompt and let the current task continue.</small></button><button className="activity-mode-choice danger-choice" onClick={() => void chooseCancelAction('cancel')}><b>Cancel now</b><small>Interrupt the current request and save output already received.</small></button><button className="activity-mode-choice recommended" onClick={() => void chooseCancelAction('finish')}><b>Finish the active operation, then stop</b><small>Save the current tool result and stop before the next model or tool call.</small></button></div>
+      <div className="activity-mode-choices"><button className="activity-mode-choice" disabled={cancelChoicePending !== null} onClick={() => void chooseCancelAction('continue')}><b>Keep it running</b><small>Close this prompt and let the current task continue.</small></button><button className="activity-mode-choice danger-choice" disabled={cancelChoicePending !== null} onClick={() => void chooseCancelAction('cancel')}><b>{cancelChoicePending === 'cancel' ? 'Sending cancel…' : 'Cancel now'}</b><small>Interrupt the current request and save output already received.</small></button><button className="activity-mode-choice recommended" disabled={cancelChoicePending !== null} onClick={() => void chooseCancelAction('finish')}><b>{cancelChoicePending === 'finish' ? 'Finishing active operation…' : 'Finish the active operation, then stop'}</b><small>Save the current tool result and stop before the next model or tool call.</small></button></div>
     </Modal>}
     {closeChoiceOpen && <Modal title="A task is still running" eyebrow="CLOSE WORKBENCH" dismissible={false} onClose={() => undefined}>
       <p className="modal-copy">The task is still active. Choose whether to keep the window open, hide it while work continues, or cancel and close.</p>
