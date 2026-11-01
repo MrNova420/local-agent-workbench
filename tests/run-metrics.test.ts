@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { addGenerationUsage, beginGeneration, emptyRunMetrics, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensPerSecond, recordStreamedText, recordFirstToken } from '../src/shared/run-metrics';
+import { addGenerationUsage, beginGeneration, emptyRunMetrics, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensPerSecond, recordStreamedText, recordFirstToken, restoreRunMetrics } from '../src/shared/run-metrics';
 
 describe('per-run Ollama measurements', () => {
+  it('restores exact prompt/output/cache usage and the last request estimate from saved events', () => {
+    const restored = restoreRunMetrics([
+      { first_token_seconds: 12, estimated_input_tokens: 4100, usage: { prompt_eval_count: 4000, prompt_eval_cached_count: 2500, eval_count: 30, eval_duration: 10_000_000_000 } },
+      { first_token_seconds: 9, estimated_input_tokens: 4300, usage: { prompt_eval_count: 4200, prompt_eval_cached_count: 3000, eval_count: 20, eval_duration: 10_000_000_000 } },
+    ]);
+
+    expect(restored.firstTokenMs).toBe(12_000);
+    expect(restored.promptTokens).toBe(8200);
+    expect(restored.lastRequestPromptTokens).toBe(4200);
+    expect(restored.estimatedInputTokens).toBe(4300);
+    expect(restored.outputTokens).toBe(50);
+    expect(restored.cachedPromptTokens).toBe(5500);
+  });
   it('keeps the first model-token delay for the whole task', () => {
     const first = recordFirstToken(emptyRunMetrics(), 38.5);
     const later = recordFirstToken(first, 12);

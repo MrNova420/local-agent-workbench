@@ -98,6 +98,8 @@ export type ActivityRecord = {
   configuredContext?: number;
   inputBudget?: number;
   reason?: string;
+  checkpointIncluded?: boolean;
+  checkpointEstimate?: number;
 };
 
 export type ActivityEventEnvelope = {

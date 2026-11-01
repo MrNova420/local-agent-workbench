@@ -7,12 +7,13 @@ This is the cross-repository execution order. It preserves the full approved pro
 
 ## Current state
 
-- The public desktop app is `v0.1.0-beta.3`, released from app commit `7a698c3d8b704ad38003c9b9d4959209afa79fd4`; it is marked Latest on GitHub. The paired engine main branch now includes commit `742ddb55a0fcdd7d0d205b29c04228cef5b9c0ff`, including the exact `e5158359cca2e780ca506cfd98e8b8015c63852a` SHA pinned by the app.
+- The public desktop app is `v0.1.0-beta.3`, released from app commit `7a698c3d8b704ad38003c9b9d4959209afa79fd4`; it is marked Latest on GitHub. The paired engine main branch includes commit `742ddb55a0fcdd7d0d205b29c04228cef5b9c0ff`; the active unpublished app worktree now pins engine commit `a3396bace5b8255fb6a915a3cf9aa25e14bf0105` for continuity development. The public beta still uses its earlier immutable source pin.
 - The app release contains Windows x64 Setup, Squirrel package/manifest, portable ZIP, and checksums. GitHub's beta.2 updater feed returned HTTP 200 with the beta.3 Setup URL; actual installed update/restart/data recovery is still unverified.
 - Recent changes include compact inline tool activity attached to its originating turn, persisted turn-to-activity mapping, live model-catalog refresh/deduplication and stale GGUF path filtering, hover-revealed window controls, an approval-safe prose-to-structured-command continuation, more accurate verification outcomes, and cancellation-before-worker-start state handling.
 - Local verification for beta.3 passed: 140 engine tests, 53 renderer tests, 45 sidecar tests, TypeScript typecheck, Windows package build, bundled worker ready/ping/shutdown, and Squirrel/ZIP integrity. Production dependency audit found zero vulnerabilities; 18 moderate findings remain in development dependencies.
 - The beta.3 package was not launched because the only existing Workbench window was actively generating a user task. That run was preserved, no duplicate app was opened, and no candidate model request was made. Visible acceptance is still pending.
 - The source implementation preserves the user's chosen context/output and model-default reasoning. No token/reasoning/model settings were altered in this planning checkpoint.
+- **Active unpublished continuity work:** engine checkpoint/cache changes are committed locally at `a3396bace5b8255fb6a915a3cf9aa25e14bf0105`; the paired app worktree pins that SHA and contains session event-journal replay, Windows replace retries, persisted usage events, and the live Plan event binding. Tests, typecheck, package build, and visible acceptance for this source batch are intentionally queued until implementation is finished. See [SESSION_CONTINUITY_IMPLEMENTATION.md](SESSION_CONTINUITY_IMPLEMENTATION.md). These changes are not pushed or packaged.
 - GitHub Actions for both promoted main commits and the beta.3 tag failed before any steps started because a hosted runner was not allocated. Local checks are not reported as hosted CI passes; recheck runner availability on the next update.
 - User-reported evidence: one disposable website task eventually completed after about 2–3 hours and produced a functioning project, though visual quality was modest. This is a positive single-run report, not a speed, quality, or release guarantee.
 
@@ -58,6 +59,7 @@ For the next source change, run engine pytest; app sidecar pytest; renderer/Vite
 - Cancellation before worker start, during model streaming, and between tools; save/checkpoint ordering; approval continuation; no prose interpreted as authorization.
 - Restored transcript turn mapping, full operation details, session migration, crash recovery, mirror conflict, project switching, and workspace boundaries.
 - Recent live-catalog, stale GGUF, approval state, window-control bridge, and canceled-turn renderer regressions.
+- Task checkpoint continuation/legacy migration, compaction disclosure, journal replay and Unicode, interrupted model/tool operations, one/both mirror failures and Windows sharing violations, final-response replay, Plan event propagation after resume, and durable exact-vs-estimated usage telemetry.
 
 **Beta.3 local source checks passed.** Hosted CI remains blocked before runner startup; never count that as a pass. Recheck the hosted runner on the next update.
 
@@ -94,6 +96,8 @@ Only after source, package, and visible workflow gates pass, perform the previou
 Follow [RELEASE_RUNBOOK.md](RELEASE_RUNBOOK.md). Beta.3 was published at the user's request before visible acceptance and installed-update canary; its release notes state these limitations. For subsequent releases, reconcile source, version manifests, engine SHA, changelog, screenshots, licensing, security reporting, installer, update assets, and checksums. Run visible app acceptance before tagging; the actual update canary runs immediately after publication. The GitHub Release prerelease flag remains off under the current updater policy. A docs-only commit never creates a release tag.
 
 ## Core harness work after the current batch
+
+**Current 2026-11-01 source batch:** task checkpoints now reach the inference engine, compaction includes an explicit continuity checkpoint, app/project event journals retry per mirror, and usage/cache/input estimates are persisted for session restoration. Source changes and regression cases are still unverified; tests, typecheck, package, visible UI, and live-model gates remain queued until implementation is complete. The configured model context/output/reasoning settings and runtime placement remain unchanged.
 
 These remain required for the intended capable local coding-agent platform; they are not dropped because the immediate release gate is narrow.
 

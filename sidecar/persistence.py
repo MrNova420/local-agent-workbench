@@ -30,14 +30,211 @@ def _atomic_json(path: Path, value: Any) -> None:
             json.dump(value, handle, indent=2, ensure_ascii=False)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        delay = 0.05
+        for attempt in range(7):
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError:
+                if attempt == 6:
+                    raise
+                time.sleep(delay)
+                delay = min(delay * 2, 0.4)
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
 
 
+def _append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    if not rows:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = "".join(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n" for row in rows)
+    delay = 0.05
+    for attempt in range(7):
+        try:
+            with path.open("a", encoding="utf-8", newline="\n") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            return
+        except PermissionError:
+            if attempt == 6:
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 0.4)
+
+
 def _normalize_path(value: str | Path) -> str:
     return os.path.normcase(str(Path(value).resolve()))
+
+
+def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
+    """Rebuild run progress after the last full snapshot from the append-only event journal."""
+    kind = event.get("type")
+    run = state.get("run_state")
+    if not isinstance(run, dict):
+        return
+    if kind == "phase" and event.get("phase") == "waiting":
+        safe_messages = run.get("safe_messages")
+        if not isinstance(safe_messages, list):
+            safe_messages = copy.deepcopy(state.get("messages", []))
+        prompt = str(run.get("prompt", ""))
+        if prompt and not run.get("safe_prompt_included"):
+            safe_messages.append({"role": "user", "content": prompt})
+            run["safe_prompt_included"] = True
+        partial = {key: run.get(field, "") for key, field in (("content", "partial_content"), ("thinking", "partial_thinking"))
+                   if isinstance(run.get(field), str) and run.get(field)}
+        if partial:
+            last = safe_messages[-1] if safe_messages and isinstance(safe_messages[-1], dict) else {}
+            if last.get("role") != "assistant" or any(last.get(key, "") != value for key, value in partial.items()):
+                safe_messages.append({"role": "assistant", **partial})
+        run["safe_messages"] = safe_messages
+        run.update(tool_batch=None, completed_tool_results={}, partial_content="", partial_thinking="")
+    elif kind == "text":
+        run["partial_content"] = str(run.get("partial_content", "")) + str(event.get("text", ""))
+    elif kind == "thinking":
+        run["partial_thinking"] = str(run.get("partial_thinking", "")) + str(event.get("text", ""))
+    elif kind == "inference_settings":
+        run["estimated_input_tokens"] = event.get("estimated_input_tokens")
+    elif kind == "tool_batch":
+        run["tool_batch"] = {"assistant_message": copy.deepcopy(event.get("assistantMessage")),
+                             "calls": copy.deepcopy(event.get("calls", [])),
+                             "base_messages": copy.deepcopy(run.get("safe_messages", []))}
+        run["completed_tool_results"] = {}
+    elif kind == "tool_start":
+        run["active_operation"] = {key: event.get(key) for key in ("operationId", "toolCallId", "name", "arguments", "startedAt")}
+        run["active_operation"]["status"] = "running"
+        activity = {"id": event.get("operationId"), "operationId": event.get("operationId"),
+                    "turnId": event.get("turnId", run.get("turn_id")), "sessionId": state["session_id"],
+                    "workspace": event.get("workspace", state.get("workspace")), "kind": "operation",
+                    "name": event.get("name", "tool"), "arguments": copy.deepcopy(event.get("arguments", {})),
+                    "status": "running", "startedAt": event.get("startedAt", time.time()), "output": {},
+                    "result": "", "affectedFiles": []}
+        state.setdefault("activity_events", []).append(activity)
+    elif kind == "operation_output":
+        row = next((item for item in state.setdefault("activity_events", [])
+                    if item.get("operationId") == event.get("operationId")), None)
+        if row:
+            stream = str(event.get("stream", "stdout"))
+            output = row.setdefault("output", {})
+            output[stream] = str(output.get(stream, "")) + str(event.get("text", ""))
+    elif kind == "tool_done":
+        row = next((item for item in state.setdefault("activity_events", [])
+                    if item.get("operationId") == event.get("operationId")), None)
+        if row:
+            row.update(status=event.get("status", "completed"), result=event.get("result", ""),
+                       affectedFiles=copy.deepcopy(event.get("affectedFiles", [])),
+                       completedAt=event.get("completedAt", time.time()))
+        run["active_operation"] = None
+        batch = run.get("tool_batch")
+        if isinstance(batch, dict):
+            results = run.setdefault("completed_tool_results", {})
+            results[str(event.get("toolCallId", ""))] = str(event.get("result", ""))
+            assistant, calls = batch.get("assistant_message"), batch.get("calls", [])
+            if isinstance(assistant, dict) and isinstance(calls, list):
+                safe = copy.deepcopy(batch.get("base_messages", run.get("safe_messages", [])))
+                safe.append(assistant)
+                for call in calls:
+                    call_id = str(call.get("id", ""))
+                    result = results.get(call_id, "Not executed: the process was interrupted before this operation started.")
+                    safe.append({"role": "tool", "tool_name": str(call.get("name", "unknown_tool")), "content": result})
+                run["safe_messages"] = safe
+        checkpoint = state.get("task_checkpoint")
+        if isinstance(checkpoint, dict):
+            task = checkpoint.get("current", checkpoint)
+            if isinstance(task, dict):
+                operation_id = str(event.get("operationId", ""))
+                operations = task.setdefault("operations", [])
+                record = next((item for item in operations if item.get("operation_id") == operation_id), None)
+                if record is None:
+                    record = {"operation_id": operation_id}
+                    operations.append(record)
+                affected = copy.deepcopy(event.get("affectedFiles", record.get("affected_files", [])))
+                record.update(name=str(event.get("name", "tool")), status=str(event.get("status", "unknown")),
+                              affected_files=affected, result_ref=operation_id,
+                              result_characters=len(str(event.get("result", ""))),
+                              updated_at=event.get("completedAt", time.time()))
+                changed = task.setdefault("changed_files", [])
+                for path in affected:
+                    if path and path not in changed and record["name"] in {"write_file", "edit_file", "apply_patch"} and record["status"] == "completed":
+                        changed.append(path)
+    elif kind == "plan":
+        state["plan"] = copy.deepcopy(event.get("items", []))
+        checkpoint = state.get("task_checkpoint")
+        if isinstance(checkpoint, dict):
+            task = checkpoint.get("current", checkpoint)
+            if isinstance(task, dict) and isinstance(event.get("items"), list):
+                task["plan"] = copy.deepcopy(event["items"])
+        state.setdefault("activity_events", []).append({
+            "id": event.get("actionId") or uuid.uuid4().hex, "turnId": event.get("turnId", run.get("turn_id")),
+            "sessionId": state["session_id"], "workspace": event.get("workspace", state.get("workspace")),
+            "kind": "plan", "status": "updated", "items": copy.deepcopy(event.get("items", [])),
+            "timestamp": event.get("timestamp", time.time()),
+        })
+    elif kind == "context_compacted":
+        state.setdefault("activity_events", []).append({
+            "id": event.get("actionId") or uuid.uuid4().hex, "turnId": event.get("turnId", run.get("turn_id")),
+            "sessionId": state["session_id"], "workspace": event.get("workspace", state.get("workspace")),
+            "kind": "context", "status": "compacted", "omittedTurns": event.get("omittedTurns", 0),
+            "retainedTurns": event.get("retainedTurns", 0), "configuredContext": event.get("configuredContext", state.get("context")),
+            "inputBudget": event.get("inputBudget", 0), "reason": event.get("reason", ""),
+            "checkpointIncluded": event.get("checkpointIncluded", False),
+            "checkpointEstimate": event.get("checkpointEstimate", 0), "timestamp": event.get("timestamp", time.time()),
+        })
+    elif kind == "generation_usage":
+        state.setdefault("usage_events", []).append({"turn_id": event.get("turnId", run.get("turn_id")),
+                                                     "session_id": state["session_id"],
+                                                     "model": state.get("model"), "provider_id": state.get("provider_id"),
+                                                     "settings": copy.deepcopy(run.get("settings", {})),
+                                                     "usage": copy.deepcopy(event.get("usage", {})),
+                                                     "first_token_seconds": event.get("first_token_seconds"),
+                                                     "estimated_input_tokens": event.get("estimated_input_tokens"),
+                                                     "timestamp": event.get("timestamp", time.time())})
+    elif kind in {"complete", "generation_complete", "cancelled", "error", "stopped_after_operation"}:
+        run["status"] = {"complete": "completed", "generation_complete": "completed",
+                         "cancelled": "cancelled", "error": "failed", "stopped_after_operation": "stopped"}[kind]
+        run["active_operation"] = None
+        if kind in {"complete", "generation_complete"}:
+            run["verification"] = copy.deepcopy(event.get("verification", {"status": "unknown", "steps": []}))
+        partial = {key: run.get(field, "") for key, field in (("content", "partial_content"), ("thinking", "partial_thinking"))
+                   if isinstance(run.get(field), str) and run.get(field)}
+        if partial:
+            safe = copy.deepcopy(run.get("safe_messages", state.get("messages", [])))
+            last = safe[-1] if safe and isinstance(safe[-1], dict) else {}
+            if last.get("role") != "assistant" or any(last.get(key, "") != value for key, value in partial.items()):
+                safe.append({"role": "assistant", **partial})
+            run["safe_messages"] = safe
+            state["messages"] = safe
+        run["partial_content"] = ""
+        run["partial_thinking"] = ""
+        turn_id = run.get("turn_id")
+        for turn in reversed(state.get("turns", [])):
+            if isinstance(turn, dict) and turn.get("turn_id") == turn_id:
+                turn["status"] = run["status"]
+                turn["finished_at"] = event.get("timestamp", time.time())
+                turn["transcript_saved"] = True
+                break
+        checkpoint = state.get("task_checkpoint")
+        if isinstance(checkpoint, dict):
+            task = checkpoint.get("current", checkpoint)
+            if isinstance(task, dict):
+                task["status"] = run["status"]
+                task["updated_at"] = event.get("timestamp", time.time())
+                if kind in {"complete", "generation_complete"}:
+                    task["verification"] = copy.deepcopy(run["verification"])
+                    task["next_action"] = ""
+                elif kind == "error":
+                    blocker = str(event.get("error", "Run failed."))
+                    blockers = task.setdefault("blockers", [])
+                    if blocker not in blockers:
+                        blockers.append(blocker)
+                    task["next_action"] = "Review the saved checkpoint and determine the next safe action."
+                else:
+                    task["next_action"] = "Review the saved checkpoint and determine the next safe action."
+        if kind == "error":
+            state["last_error"] = {"message": str(event.get("error", "Run failed.")),
+                                   "occurred_at": event.get("timestamp", time.time())}
 
 
 class ProjectIdentity:
@@ -125,7 +322,8 @@ class MirroredSessionStore:
         root = Path(workspace).resolve(strict=True)
         metadata = self.identity.read(root, create=True) or {}
         state = self.app.create(str(root), model, context, options)
-        state.update(workspace_id=metadata["workspace_id"], activity_events=[], plan=[], run_state=None)
+        state.update(workspace_id=metadata["workspace_id"], activity_events=[], plan=[], run_state=None,
+                     task_checkpoint={}, usage_events=[], journal_cursor_ns=0)
         self._set_git_exclude(root, not bool(metadata.get("track_sessions", False)))
         return state
 
@@ -141,19 +339,110 @@ class MirroredSessionStore:
             except (OSError, ValueError, KeyError) as exc:
                 setup_error = f"{type(exc).__name__}: {exc}"
             state["updated_at"] = time.time()
-            app_path = self.app.root / (SessionStore._safe(state["session_id"]) + ".json")
-            _atomic_json(app_path, state)
-            result = {"app_saved": True, "project_saved": False, "git_ignored": None, "error": setup_error}
+            app_error = None
+            try:
+                self.app.save(state)
+            except (OSError, ValueError, TypeError) as exc:
+                app_error = f"{type(exc).__name__}: {exc}"
+            result = {"app_saved": app_error is None, "project_saved": False, "git_ignored": None,
+                      "error": app_error or setup_error}
             if root is None or metadata is None:
+                if app_error and setup_error:
+                    result["error"] = f"{app_error}; {setup_error}"
                 return result
             try:
                 store = self._project_store(root, create=True)
                 _atomic_json(store.root / (SessionStore._safe(state["session_id"]) + ".json"), state)
                 result["project_saved"] = True
                 result["git_ignored"] = not bool(metadata.get("track_sessions", False))
-            except (OSError, ValueError, KeyError) as exc:
-                result["error"] = f"{type(exc).__name__}: {exc}"
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                project_error = f"{type(exc).__name__}: {exc}"
+                result["error"] = "; ".join(part for part in (app_error, project_error) if part)
             return result
+
+    def append_events(self, session_id: str, workspace: str, events: list[dict[str, Any]]) -> dict[str, Any]:
+        """Durably append compact run deltas to both mirrors before the next JSON snapshot."""
+        safe_id = SessionStore._safe(session_id)
+        rows = []
+        app_rows = []
+        project_rows = []
+        cursor = 0
+        for event in events:
+            recorded_at_ns = int(event.get("_journal_recorded_at_ns", time.time_ns()))
+            cursor = max(cursor, recorded_at_ns)
+            event_id = str(event.get("_journal_event_id") or uuid.uuid4().hex)
+            body = {key: copy.deepcopy(value) for key, value in event.items() if not key.startswith("_journal_")}
+            row = {"event_id": event_id, "recorded_at_ns": recorded_at_ns, "event": body}
+            rows.append(row)
+            saved_to = event.get("_journal_saved_to", [])
+            if "app" not in saved_to:
+                app_rows.append(row)
+            if "project" not in saved_to:
+                project_rows.append(row)
+        app_error = None
+        project_error = None
+        with self._lock:
+            if app_rows:
+                try:
+                    _append_jsonl(self.app.root / (safe_id + ".events.jsonl"), app_rows)
+                except (OSError, ValueError, TypeError) as exc:
+                    app_error = f"{type(exc).__name__}: {exc}"
+            if project_rows:
+                try:
+                    store = self._project_store(workspace, create=True)
+                    _append_jsonl(store.root / (safe_id + ".events.jsonl"), project_rows)
+                except (OSError, ValueError, KeyError, TypeError) as exc:
+                    project_error = f"{type(exc).__name__}: {exc}"
+        return {"app_saved": app_error is None, "project_saved": project_error is None,
+                "cursor_ns": cursor, "error": "; ".join(part for part in (app_error, project_error) if part)}
+
+    def _read_events(self, session_id: str, workspace: str | None, sources: set[str]) -> tuple[list[dict[str, Any]], list[str]]:
+        paths = []
+        if "app" in sources:
+            paths.append(self.app.root / (SessionStore._safe(session_id) + ".events.jsonl"))
+        if "project" in sources and workspace:
+            try:
+                paths.append(self._project_store(workspace).root / (SessionStore._safe(session_id) + ".events.jsonl"))
+            except (OSError, ValueError, KeyError):
+                pass
+        found: dict[str, dict[str, Any]] = {}
+        issues: list[str] = []
+        for path in paths:
+            try:
+                with path.open("r", encoding="utf-8") as handle:
+                    for line_number, line in enumerate(handle, start=1):
+                        try:
+                            row = json.loads(line)
+                        except json.JSONDecodeError:
+                            issues.append(f"{path.name}: unreadable journal record at line {line_number}; raw data was preserved.")
+                            continue
+                        if isinstance(row, dict) and isinstance(row.get("event_id"), str) and isinstance(row.get("event"), dict):
+                            found.setdefault(row["event_id"], row)
+                        else:
+                            issues.append(f"{path.name}: invalid journal record at line {line_number}; raw data was preserved.")
+            except FileNotFoundError:
+                continue
+            except OSError as exc:
+                issues.append(f"{path.name}: could not read journal ({type(exc).__name__}); snapshot data was preserved.")
+        return sorted(found.values(), key=lambda row: int(row.get("recorded_at_ns", 0))), issues
+
+    def _replay_events(self, state: dict[str, Any], workspace: str | None, sources: set[str]) -> dict[str, Any]:
+        cursor = int(state.get("journal_cursor_ns", 0) or 0)
+        journal_rows, issues = self._read_events(state["session_id"], workspace, sources)
+        if issues:
+            existing = state.setdefault("recovery_issues", [])
+            for issue in issues:
+                if issue not in existing:
+                    existing.append(issue)
+        rows = [row for row in journal_rows
+                if int(row.get("recorded_at_ns", 0)) > cursor]
+        for row in rows:
+            _replay_run_event(state, row["event"])
+            cursor = max(cursor, int(row.get("recorded_at_ns", 0)))
+        if rows:
+            state["journal_cursor_ns"] = cursor
+            state["updated_at"] = max(float(state.get("updated_at", 0) or 0), time.time())
+        return state
 
     @staticmethod
     def _fingerprint(state: dict[str, Any]) -> str:
@@ -179,8 +468,10 @@ class MirroredSessionStore:
         versions = self._versions(session_id, workspace)
         if not versions:
             raise FileNotFoundError(f"Session not found in the app library or selected project: {session_id}")
+        divergent = False
         if len(versions) == 2:
             same = self._fingerprint(versions[0]["state"]) == self._fingerprint(versions[1]["state"])
+            divergent = not same
             recommended = max(versions, key=lambda row: row["state"].get("updated_at", 0))["source"]
             if not same and source is None:
                 if workspace is None:
@@ -195,7 +486,8 @@ class MirroredSessionStore:
             selected = max(versions, key=lambda row: row["state"].get("updated_at", 0))
         state = selected["state"]
         if workspace is None:
-            return state
+            selected_sources = {selected["source"]} if divergent else {row["source"] for row in versions}
+            return self._replay_events(state, state.get("workspace"), selected_sources)
         if workspace:
             root = Path(workspace).resolve(strict=True)
             metadata = self.identity.read(root, create=True) or {}
@@ -203,6 +495,8 @@ class MirroredSessionStore:
                 raise ValueError("This session belongs to a different project identity.")
             state["workspace"] = str(root)
             state["workspace_id"] = metadata["workspace_id"]
+        selected_sources = {selected["source"]} if divergent else {row["source"] for row in versions}
+        state = self._replay_events(state, str(root), selected_sources)
         return {"conflict": False, "source": selected["source"], "state": state}
 
     def list(self, workspace: str | None = None) -> list[dict[str, Any]]:
@@ -236,9 +530,16 @@ class MirroredSessionStore:
         for sid, versions in candidates.items():
             state = max(versions, key=lambda row: row["state"].get("updated_at", 0))["state"]
             conflict = len(versions) > 1 and self._fingerprint(versions[0]["state"]) != self._fingerprint(versions[1]["state"])
+            if conflict:
+                source = max(versions, key=lambda row: row["state"].get("updated_at", 0))["source"]
+                state = self._replay_events(state, str(root) if root else state.get("workspace"), {source})
+            else:
+                sources = {row["source"] for row in versions}
+                state = self._replay_events(state, str(root) if root else state.get("workspace"), sources)
             rows.append({key: state.get(key) for key in ("session_id", "workspace", "workspace_id", "model", "provider_id", "model_id", "updated_at")}
                         | {"sync_conflict": conflict, "recommended_source": "project" if conflict else ("project" if any(row["source"] == "project" for row in versions) else "app"), "sources": [row["source"] for row in versions],
-                           "recovery_status": (state.get("run_state") or {}).get("status"), "uncertain_operation": ((state.get("run_state") or {}).get("active_operation") or {}).get("name")})
+                           "recovery_status": (state.get("run_state") or {}).get("status"), "uncertain_operation": ((state.get("run_state") or {}).get("active_operation") or {}).get("name"),
+                           "recovery_issue_count": len(state.get("recovery_issues", []))})
         return sorted(rows, key=lambda row: row.get("updated_at") or 0, reverse=True)
 
 

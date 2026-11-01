@@ -28,6 +28,7 @@ if CORE_PATH.is_dir():
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from desktop_engine import AgentEngine, OllamaRuntime, RequestCancelled, ToolRegistry, Workspace  # noqa: E402
+from task_checkpoint import begin_task, finish_task, record_plan  # noqa: E402
 from disposable_workspace import (  # noqa: E402
     apply_reviewed_changes,
     capture_manifest,
@@ -120,15 +121,34 @@ class AgentService:
         run_state = state.get("run_state")
         enriched = {**event, "sessionId": state["session_id"], "turnId": controller["turn_id"],
                     "workspace": str(turn.workspace), "timestamp": event.get("at", time.time())}
-        force_save = event.get("type") in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "approval_request", "error", "cancelled", "stopped_after_operation"}
+        force_save = event.get("type") in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "approval_request", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete"}
         with controller["checkpoint_lock"]:
             if isinstance(run_state, dict):
                 if event.get("type") == "phase" and event.get("phase") == "waiting":
-                    run_state["safe_messages"] = copy.deepcopy(state.get("messages", []))
+                    safe_messages = run_state.get("safe_messages")
+                    if not isinstance(safe_messages, list):
+                        safe_messages = copy.deepcopy(state.get("messages", []))
+                    prompt = str(run_state.get("prompt", ""))
+                    if prompt and not run_state.get("safe_prompt_included"):
+                        safe_messages.append({"role": "user", "content": prompt})
+                        run_state["safe_prompt_included"] = True
+                    partial = {key: run_state.get(field, "") for key, field in (("content", "partial_content"), ("thinking", "partial_thinking"))
+                               if isinstance(run_state.get(field), str) and run_state.get(field)}
+                    if partial:
+                        last = safe_messages[-1] if safe_messages and isinstance(safe_messages[-1], dict) else {}
+                        if last.get("role") != "assistant" or any(last.get(key, "") != value for key, value in partial.items()):
+                            safe_messages.append({"role": "assistant", **partial})
+                    run_state["safe_messages"] = safe_messages
                     run_state["tool_batch"] = None
                     run_state["completed_tool_results"] = {}
                     run_state["partial_content"] = ""
                     run_state["partial_thinking"] = ""
+                    run_state["request_first_token_seconds"] = None
+                elif event.get("type") == "phase" and event.get("phase") in {"reasoning", "generating"}:
+                    if run_state.get("request_first_token_seconds") is None:
+                        run_state["request_first_token_seconds"] = event.get("elapsed")
+                elif event.get("type") == "inference_settings":
+                    run_state["estimated_input_tokens"] = event.get("estimated_input_tokens")
                 elif event.get("type") == "text":
                     run_state["partial_content"] = str(run_state.get("partial_content", "")) + str(event.get("text", ""))
                 elif event.get("type") == "thinking":
@@ -198,6 +218,9 @@ class AgentService:
                                     affectedFiles=event.get("affectedFiles", []), completedAt=event.get("completedAt", time.time()))
             elif kind == "plan":
                 state["plan"] = copy.deepcopy(event.get("items", []))
+                checkpoint = state.get("task_checkpoint")
+                if isinstance(checkpoint, dict):
+                    record_plan(checkpoint, event.get("items", []))
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
                             "workspace": str(turn.workspace), "kind": "plan", "status": "updated", "items": copy.deepcopy(event.get("items", [])), "timestamp": time.time()}
                 rows.append(activity)
@@ -206,13 +229,27 @@ class AgentService:
                             "workspace": str(turn.workspace), "kind": "context", "status": "compacted",
                             "omittedTurns": int(event.get("omittedTurns", 0)), "retainedTurns": int(event.get("retainedTurns", 0)),
                             "configuredContext": int(event.get("configuredContext", turn.context)),
-                            "inputBudget": int(event.get("inputBudget", 0)), "reason": event.get("reason", ""), "timestamp": time.time()}
+                            "inputBudget": int(event.get("inputBudget", 0)), "reason": event.get("reason", ""),
+                            "checkpointIncluded": bool(event.get("checkpointIncluded", False)),
+                            "checkpointEstimate": int(event.get("checkpointEstimate", 0)), "timestamp": time.time()}
                 rows.append(activity)
+            elif kind == "generation_usage":
+                state.setdefault("usage_events", []).append({
+                    "turn_id": controller["turn_id"], "session_id": state["session_id"],
+                    "model": state.get("model"), "provider_id": state.get("provider_id"),
+                    "settings": copy.deepcopy(run_state.get("settings", {}) if isinstance(run_state, dict) else {}),
+                    "usage": copy.deepcopy(event.get("usage", {})),
+                    "first_token_seconds": run_state.get("request_first_token_seconds") if isinstance(run_state, dict) else None,
+                    "estimated_input_tokens": run_state.get("estimated_input_tokens") if isinstance(run_state, dict) else None,
+                    "timestamp": event.get("timestamp", time.time()),
+                })
             elif kind == "error":
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
                             "workspace": str(turn.workspace), "kind": "error", "name": "Run failed", "status": "failed",
                             "result": str(event.get("error", "The run failed.")), "timestamp": time.time()}
                 rows.append(activity)
+            if kind == "generation_usage":
+                enriched["first_token_seconds"] = run_state.get("request_first_token_seconds") if isinstance(run_state, dict) else None
             if activity:
                 enriched["type"] = "activity_event"
                 enriched["activity"] = copy.deepcopy(activity) if kind != "operation_output" else None
@@ -220,12 +257,60 @@ class AgentService:
             else:
                 self.emit(enriched)
 
+            pending = controller.setdefault("journal_pending", [])
+            journal_event = {**event, "sessionId": state["session_id"], "turnId": controller["turn_id"],
+                             "workspace": str(turn.workspace), "timestamp": event.get("at", time.time()),
+                             "_journal_event_id": uuid.uuid4().hex, "_journal_recorded_at_ns": time.time_ns()}
+            if event.get("type") == "generation_usage" and isinstance(run_state, dict):
+                journal_event["first_token_seconds"] = run_state.get("request_first_token_seconds")
+            if (pending and pending[-1].get("type") == journal_event.get("type")
+                    and journal_event.get("type") in {"text", "thinking"}
+                    and pending[-1].get("turnId") == journal_event.get("turnId")
+                    and not pending[-1].get("_journal_saved_to")):
+                pending[-1]["text"] = str(pending[-1].get("text", "")) + str(journal_event.get("text", ""))
+                pending[-1]["timestamp"] = journal_event["timestamp"]
+            elif (pending and pending[-1].get("type") == "operation_output"
+                    and journal_event.get("type") == "operation_output"
+                    and pending[-1].get("operationId") == journal_event.get("operationId")
+                    and pending[-1].get("stream") == journal_event.get("stream")
+                    and not pending[-1].get("_journal_saved_to")):
+                pending[-1]["text"] = str(pending[-1].get("text", "")) + str(journal_event.get("text", ""))
+                pending[-1]["timestamp"] = journal_event["timestamp"]
+            else:
+                pending.append(journal_event)
+
             now = time.monotonic()
-            if force_save or now - controller["last_checkpoint"] >= 1.0:
+            flush_journal = force_save or now - controller["last_journal_flush"] >= 0.5
+            if flush_journal and pending:
+                journal_rows = pending[:]
+                journal_result = self.sessions.append_events(state["session_id"], str(state["workspace"]), journal_rows)
+                controller["last_journal_flush"] = now
+                for row in pending:
+                    saved_to = set(row.get("_journal_saved_to", []))
+                    if journal_result["app_saved"]:
+                        saved_to.add("app")
+                    if journal_result["project_saved"]:
+                        saved_to.add("project")
+                    row["_journal_saved_to"] = sorted(saved_to)
+                fully_mirrored = [row for row in pending if {"app", "project"}.issubset(set(row.get("_journal_saved_to", [])))]
+                pending[:] = [row for row in pending if row not in fully_mirrored]
+                if fully_mirrored:
+                    state["journal_cursor_ns"] = max(int(state.get("journal_cursor_ns", 0)),
+                                                      max(int(row.get("_journal_recorded_at_ns", 0)) for row in fully_mirrored))
+                if not (journal_result["app_saved"] and journal_result["project_saved"]):
+                    if not controller.get("journal_error_reported"):
+                        controller["journal_error_reported"] = True
+                        self.emit({"type": "checkpoint_journal_error", "sessionId": state["session_id"],
+                                   "appSaved": journal_result["app_saved"], "projectSaved": journal_result["project_saved"],
+                                   "error": journal_result["error"] or "Run progress journal is unavailable."})
+                else:
+                    controller["journal_error_reported"] = False
+
+            if force_save or now - controller["last_checkpoint"] >= 8.0:
                 controller["last_checkpoint"] = now
                 saved = self.sessions.save(state)
-                if not saved["project_saved"]:
-                    self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "error": saved["error"] or "Project session mirror is unavailable."})
+                if not (saved["app_saved"] and saved["project_saved"]):
+                    self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"], "error": saved["error"] or "Session storage is unavailable."})
 
     def emit(self, event: dict[str, Any]) -> None:
         with self.emit_lock:
@@ -532,6 +617,9 @@ class AgentService:
             state["workspace"] = str(source)
             state["activity_events"] = state.get("activity_events", []) if isinstance(state.get("activity_events", []), list) else []
             state["plan"] = state.get("plan", []) if isinstance(state.get("plan", []), list) else []
+            if state.get("recovery_issues"):
+                state["recovery_review_required"] = True
+                state["persistence"] = self.sessions.save(state)
             run_state = state.get("run_state")
             if isinstance(run_state, dict) and run_state.get("status") == "running":
                 run_state["status"] = "interrupted"
@@ -890,6 +978,21 @@ class AgentService:
         turn_started_at = time.time()
         state.setdefault("activity_events", [])
         state.setdefault("plan", [])
+        state["task_checkpoint"] = begin_task(
+            state.get("task_checkpoint"),
+            prompt=prompt,
+            turn_id=turn_id,
+            workspace=str(working),
+            settings={
+                "model": model, "provider_id": provider.provider_id,
+                "context": state["context"], "max_tokens": state["max_tokens"],
+                "reasoning": reasoning, "temperature": state["temperature"],
+                "runtime_options": copy.deepcopy(state.get("runtime_options", {})),
+                "harness_profile": harness_profile, "access": access,
+                "approval_mode": approval_mode,
+            },
+            plan=copy.deepcopy(state.get("plan", [])),
+        )
         turn_records = state.setdefault("turns", [])
         if not isinstance(turn_records, list):
             turn_records = state["turns"] = []
@@ -899,7 +1002,8 @@ class AgentService:
                              "transcript_saved": False, "prior_user_messages": prior_user_messages})
         state["run_state"] = {
             "status": "running", "turn_id": turn_id, "prompt": prompt, "started_at": turn_started_at,
-            "safe_messages": copy.deepcopy(state.get("messages", [])), "partial_content": "",
+            "safe_messages": [*copy.deepcopy(state.get("messages", [])), {"role": "user", "content": prompt}],
+            "safe_prompt_included": True, "partial_content": "", "request_first_token_seconds": None,
             "partial_thinking": "", "active_operation": None, "tool_batch": None,
             "completed_tool_results": {}, "settings": {"model": model, "provider_id": provider.provider_id,
                 "context": state["context"], "max_tokens": state["max_tokens"], "reasoning": reasoning,
@@ -913,13 +1017,14 @@ class AgentService:
             prompt=prompt, session=state, mcp_tools=list(self.mcp_tools),
         )
         controller = {"cancel": threading.Event(), "engine": None, "pending": {}, "session": turn.session, "source": source, "working": working,
-                     "turn_id": turn_id, "checkpoint_lock": threading.RLock(), "last_checkpoint": time.monotonic(), "current_operation_id": None,
+                     "turn_id": turn_id, "checkpoint_lock": threading.RLock(), "last_checkpoint": time.monotonic(),
+                     "last_journal_flush": time.monotonic(), "journal_pending": [], "current_operation_id": None,
                      "stop_after_operation": False}
         with self.active_lock:
             self.active = controller
         saved = self.sessions.save(controller["session"])
-        if not saved["project_saved"]:
-            self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "error": saved["error"] or "Project session mirror is unavailable."})
+        if not (saved["app_saved"] and saved["project_saved"]):
+            self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"], "error": saved["error"] or "Session storage is unavailable."})
         self.emit({"type": "run_started", "sessionId": state["session_id"], "turnId": turn_id})
         thread = threading.Thread(target=self._run_turn, args=(controller, turn), name="agent-run", daemon=True)
         controller["thread"] = thread
@@ -944,6 +1049,7 @@ class AgentService:
         try:
             if controller["cancel"].is_set():
                 update_turn_record("cancelled")
+                finish_task(state.get("task_checkpoint", {}), "cancelled")
                 run_state = state.get("run_state")
                 if isinstance(run_state, dict):
                     run_state["status"] = "cancelled"
@@ -952,8 +1058,8 @@ class AgentService:
                     run_state["partial_content"] = ""
                     run_state["partial_thinking"] = ""
                 saved = self.sessions.save(state)
-                if not saved["project_saved"]:
-                    self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "error": saved["error"] or "Project session mirror is unavailable."})
+                if not (saved["app_saved"] and saved["project_saved"]):
+                    self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"], "error": saved["error"] or "Session storage is unavailable."})
                 self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
                 self.emit({"type": "cancelled", "elapsed": 0, "sessionId": state["session_id"]})
                 return
@@ -982,7 +1088,11 @@ class AgentService:
                                     "name": name, "arguments": copy.deepcopy(args), "status": "running", "timestamp": time.time(), "output": {}, "result": "", "affectedFiles": []}
                         rows.append(activity)
                     activity.update(approvalStatus="waiting", approvalMode=turn.approval_mode)
-                    self.sessions.save(state)
+                    saved = self.sessions.save(state)
+                    if not (saved["app_saved"] and saved["project_saved"]):
+                        self.emit({"type": "session_mirror_error", "sessionId": state["session_id"],
+                                   "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"],
+                                   "error": saved["error"] or "Approval state could not be mirrored."})
                 self.emit({"type": "activity_event", "activity": copy.deepcopy(activity), "activityPhase": "start", "sessionId": state["session_id"], "turnId": controller["turn_id"]})
                 self.emit({"type": "approval_request", "actionId": action_id, "operationId": operation_id, "turnId": controller["turn_id"], "name": name,
                            "arguments": args, "workspace": str(turn.workspace),
@@ -996,7 +1106,11 @@ class AgentService:
                 with controller["checkpoint_lock"]:
                     activity["approvalStatus"] = approval_status
                     activity["completedAt"] = time.time()
-                    self.sessions.save(state)
+                    saved = self.sessions.save(state)
+                    if not (saved["app_saved"] and saved["project_saved"]):
+                        self.emit({"type": "session_mirror_error", "sessionId": state["session_id"],
+                                   "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"],
+                                   "error": saved["error"] or "Approval decision could not be mirrored."})
                 self.emit({"type": "activity_event", "activity": copy.deepcopy(activity), "sessionId": state["session_id"], "turnId": controller["turn_id"]})
                 return bool(result["approved"])
 
@@ -1007,6 +1121,7 @@ class AgentService:
                 project_instructions=knowledge.instructions(), mcp_tools=mcp_tools,
                 harness_profile=turn.harness_profile,
                 mcp_call=lambda name, args: self.mcp.run(self.mcp.call(name, args), cancel_event=controller["cancel"]),
+                task_checkpoint=state["task_checkpoint"],
             )
             chosen_runtime = self.providers.runtime_for(turn.model, engine.runtime, state.get("provider_id"))
             engine.runtime = RequestScopedOllama(chosen_runtime)
@@ -1026,6 +1141,14 @@ class AgentService:
             terminal = relay.terminal_event
             run_state = state.get("run_state")
             if isinstance(run_state, dict):
+                if terminal and terminal.get("type") in {"error", "cancelled", "stopped_after_operation"}:
+                    partial = {key: run_state.get(field, "") for key, field in (("content", "partial_content"), ("thinking", "partial_thinking"))
+                               if isinstance(run_state.get(field), str) and run_state.get(field)}
+                    if partial:
+                        last = messages[-1] if messages and isinstance(messages[-1], dict) else {}
+                        if last.get("role") != "assistant" or any(last.get(key, "") != value for key, value in partial.items()):
+                            messages = [*messages, {"role": "assistant", **partial}]
+                            state["messages"] = messages
                 run_state["status"] = (
                     "failed" if terminal and terminal.get("type") == "error"
                     else "cancelled" if terminal and terminal.get("type") == "cancelled"
@@ -1045,11 +1168,12 @@ class AgentService:
             if turn.access == "copy":
                 state["copy_manifest"] = state.get("copy_manifest") or capture_manifest(turn.workspace)
             saved = self.sessions.save(state)
-            if not saved["project_saved"]:
-                self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "error": saved["error"] or "Project session mirror is unavailable."})
+            if not (saved["app_saved"] and saved["project_saved"]):
+                self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"], "error": saved["error"] or "Session storage is unavailable."})
             self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
             relay.emit_terminal_after_persist()
         except Exception as exc:
+            finish_task(state.get("task_checkpoint", {}), "failed", blocker=f"{type(exc).__name__}: {exc}")
             state["messages"] = state.get("messages", [])
             update_turn_record("failed")
             if isinstance(state.get("run_state"), dict):

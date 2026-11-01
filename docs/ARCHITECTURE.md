@@ -67,9 +67,12 @@ sequenceDiagram
 ### Event and persistence lifecycle
 
 - Provider text/reasoning and phase/usage events update the transcript and live metrics. Tool start, streamed output, final result, affected files, plan changes, approvals, and run failures share the session's ordered `activity_events` collection; the chat cards and Activity Trace render that same collection. Full tool output/results are stored; the UI reveals large output progressively rather than truncating it.
-- A running session saves its run settings, prompt, partial text/reasoning, completed tool results, and a safe message checkpoint. Important operation boundaries are saved immediately, with streaming checkpoints at intervals. The app-wide session file and `.agent-workbench/sessions` project mirror are written atomically. A mirror failure is surfaced while retaining the app copy.
+- A running session saves its run settings, prompt, partial text/reasoning, completed tool results, and a safe message checkpoint. Ordered run-event deltas are coalesced and fsynced to per-session JSONL journals in both stores; atomic JSON snapshots are written at operation boundaries and periodically. On resume, events newer than the snapshot cursor are replayed. App and project save health is reported independently.
 - On reopening a session with an interrupted run, the app marks any in-flight operation uncertain and asks the user to continue, retry with a duplicate-action warning, or restore history only. It never replays a tool automatically. A partial token stream is retained as visibly interrupted text; in-flight model generation itself cannot be resumed.
+- When context compaction omits older complete turns, a factual task checkpoint carries the goal, follow-up instructions, captured settings, current plan, completed operation references, changed files, verification, and latest assistant update. The complete transcript and tool results remain saved separately. The activity trace shows omitted/retained turn counts and whether the checkpoint was included in that request.
 - App close during active work requires a choice: keep open, hide in the tray while work continues, or cancel and close after request shutdown/save. Cancel offers continue, cancel now, or finish the active operation and stop before another model call. These decision dialogs do not close on backdrop click or Escape.
+
+See [Session Continuity Implementation](SESSION_CONTINUITY_IMPLEMENTATION.md) for current source status, queued fault-injection cases, and known verification gaps.
 
 ### Boundaries and known limits
 

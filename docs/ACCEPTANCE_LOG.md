@@ -352,6 +352,13 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Published the locally built artifacts as public GitHub release [`v0.1.0-beta.2`](https://github.com/MrNova420/local-agent-workbench/releases/tag/v0.1.0-beta.2): Setup.exe, ZIP, Squirrel `.nupkg`, `RELEASES`, and `SHA256SUMS.txt`. Verified GitHub's published SHA-256 digests against the local artifacts. After upload, corrected the manifest filenames to match GitHub's dot-normalized asset names and replaced the manifest; the listed artifact hashes remain unchanged.
 - Tag-triggered Windows source-check and package workflows also failed before starting a runner (runner ID 0, zero steps). The release assets came from the locally verified isolated build; remote workflow execution remains unverified.
 
+## 2026-11-01 continuity source batch (verification queued)
+
+- The isolated app worktree now pins shared engine `39366c7fcf5efee502e96f00690436e42590c86e`; CI and Windows release workflows use the same pin. Engine commit is local source only and has not been packaged or released.
+- Added run journals with per-mirror retry state, replayed session-list status, corrupt-journal recovery notices, terminal checkpoint status, and recovery of streamed text/reasoning across provider errors and follow-up model calls. The renderer surfaces journal recovery issues in the Activity Trace.
+- Added regression cases for one-mirror journal retry, malformed journal preservation/reporting, partial response retention, and follow-up request checkpointing. These tests, all broader suites, typecheck, packaging, and visible acceptance remain queued; none were run for this batch.
+- No app was opened, no model request was sent, and no context/output/reasoning or runtime placement setting was changed.
+
 ## 2026-10-31 next core-workbench iteration
 
 - Created isolated worktree `core-workbench-next` from the published app commit `2dc2442` for post-beta core development.

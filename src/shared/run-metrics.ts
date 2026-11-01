@@ -2,6 +2,8 @@ export type RunMetrics = {
   firstTokenMs: number | null;
   outputTokens: number;
   promptTokens: number;
+  lastRequestPromptTokens: number | null;
+  estimatedInputTokens: number | null;
   cachedPromptTokens: number;
   promptEvalNanoseconds: number;
   modelLoadNanoseconds: number;
@@ -17,6 +19,8 @@ export function emptyRunMetrics(): RunMetrics {
     firstTokenMs: null,
     outputTokens: 0,
     promptTokens: 0,
+    lastRequestPromptTokens: null,
+    estimatedInputTokens: null,
     cachedPromptTokens: 0,
     promptEvalNanoseconds: 0,
     modelLoadNanoseconds: 0,
@@ -26,6 +30,27 @@ export function emptyRunMetrics(): RunMetrics {
     generationStartedAtMs: null,
     isGenerating: false,
   };
+}
+
+export function restoreRunMetrics(events: unknown): RunMetrics {
+  if (!Array.isArray(events)) return emptyRunMetrics();
+  return events.reduce<RunMetrics>((metrics, item) => {
+    if (!item || typeof item !== 'object') return metrics;
+    const row = item as Record<string, unknown>;
+    const delay = row.first_token_seconds;
+    const withInputEstimate = recordInputEstimate(metrics, row.estimated_input_tokens);
+    const withFirstToken = typeof delay === 'number' && Number.isFinite(delay) && delay >= 0
+      ? recordFirstToken(withInputEstimate, delay)
+      : withInputEstimate;
+    return addGenerationUsage(withFirstToken, row.usage);
+  }, emptyRunMetrics());
+}
+
+export function recordInputEstimate(metrics: RunMetrics, value: unknown): RunMetrics {
+  const estimate = typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : null;
+  return { ...metrics, estimatedInputTokens: estimate, lastRequestPromptTokens: null };
 }
 
 export function recordFirstToken(metrics: RunMetrics, elapsedSeconds: unknown): RunMetrics {
@@ -62,7 +87,7 @@ export function addGenerationUsage(metrics: RunMetrics, usage: unknown): RunMetr
   const modelLoadNanoseconds = typeof row.load_duration === 'number' && Number.isFinite(row.load_duration) ? Math.max(0, row.load_duration) : 0;
   const hasCount = typeof row.eval_count === 'number' && Number.isFinite(row.eval_count);
   const hasDuration = typeof row.eval_duration === 'number' && Number.isFinite(row.eval_duration);
-  if (!hasCount || !hasDuration) return { ...endGeneration(metrics), promptTokens: metrics.promptTokens + promptTokens, cachedPromptTokens: metrics.cachedPromptTokens + cachedPromptTokens, promptEvalNanoseconds: metrics.promptEvalNanoseconds + promptEvalNanoseconds, modelLoadNanoseconds: metrics.modelLoadNanoseconds + modelLoadNanoseconds };
+  if (!hasCount || !hasDuration) return { ...endGeneration(metrics), promptTokens: metrics.promptTokens + promptTokens, lastRequestPromptTokens: typeof row.prompt_eval_count === 'number' && Number.isFinite(row.prompt_eval_count) ? promptTokens : metrics.lastRequestPromptTokens, cachedPromptTokens: metrics.cachedPromptTokens + cachedPromptTokens, promptEvalNanoseconds: metrics.promptEvalNanoseconds + promptEvalNanoseconds, modelLoadNanoseconds: metrics.modelLoadNanoseconds + modelLoadNanoseconds };
 
   const tokens = Math.max(0, Math.floor(row.eval_count as number));
   const duration = Math.max(0, row.eval_duration as number);
@@ -70,6 +95,7 @@ export function addGenerationUsage(metrics: RunMetrics, usage: unknown): RunMetr
     ...metrics,
     outputTokens: metrics.outputTokens + tokens,
     promptTokens: metrics.promptTokens + promptTokens,
+    lastRequestPromptTokens: typeof row.prompt_eval_count === 'number' && Number.isFinite(row.prompt_eval_count) ? promptTokens : metrics.lastRequestPromptTokens,
     cachedPromptTokens: metrics.cachedPromptTokens + cachedPromptTokens,
     promptEvalNanoseconds: metrics.promptEvalNanoseconds + promptEvalNanoseconds,
     modelLoadNanoseconds: metrics.modelLoadNanoseconds + modelLoadNanoseconds,
