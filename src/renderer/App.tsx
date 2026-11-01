@@ -174,6 +174,7 @@ export default function App() {
   const [workspace, setWorkspace] = useState(localStorage.getItem('agent-workspace') || '');
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [projectSessionHistoryStatus, setProjectSessionHistoryStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [homeSessions, setHomeSessions] = useState<SessionSummary[]>([]);
   const [sessionHistoryStatus, setSessionHistoryStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [workspaces, setWorkspaces] = useState<WorkspaceHistoryEntry[]>([]);
@@ -241,6 +242,7 @@ export default function App() {
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const assistantSegmentBreakRef = useRef(false);
   const workspaceHistoryRequestId = useRef(0);
+  const projectSessionRequestId = useRef(0);
   const modelCatalogLoaded = useRef(false);
   const modelCatalogRequestId = useRef(0);
 
@@ -274,14 +276,28 @@ export default function App() {
     }
   }, [notify, request]);
 
-  const refreshWorkspace = useCallback(async (root: string) => {
-    const [fileRows, sessionRows] = await Promise.all([
-      request<ProjectFile[]>({ command: 'workspace_files', workspace: root }),
-      request<SessionSummary[]>({ command: 'sessions_list', workspace: root }),
-    ]);
-    setFiles(fileRows);
-    setSessions(sessionRows);
+  const refreshProjectSessions = useCallback(async (root: string) => {
+    const requestId = ++projectSessionRequestId.current;
+    setProjectSessionHistoryStatus('loading');
+    try {
+      const rows = await request<SessionSummary[]>({ command: 'sessions_list', workspace: root });
+      if (requestId !== projectSessionRequestId.current) return;
+      setSessions(rows);
+      setProjectSessionHistoryStatus('ready');
+    } catch (error) {
+      if (requestId !== projectSessionRequestId.current) return;
+      setProjectSessionHistoryStatus('error');
+      throw error;
+    }
   }, [request]);
+
+  const refreshWorkspace = useCallback(async (root: string) => {
+    // File access is the essential project operation. A session-index failure
+    // must not make the workspace look unavailable or discard refreshed files.
+    const fileRows = await request<ProjectFile[]>({ command: 'workspace_files', workspace: root });
+    setFiles(fileRows);
+    void refreshProjectSessions(root).catch((error) => notify(`Project files loaded, but saved sessions could not be refreshed: ${(error as Error).message}`, 'warn'));
+  }, [notify, refreshProjectSessions, request]);
 
   const refreshWorkspaceHistory = useCallback(async (query = '') => {
     const requestId = ++workspaceHistoryRequestId.current;
@@ -316,17 +332,27 @@ export default function App() {
   const showProject = useCallback(async (root: string) => {
     try {
       const filesResult = await request<ProjectFile[]>({ command: 'workspace_files', workspace: root });
-      const sessionRows = await request<SessionSummary[]>({ command: 'sessions_list', workspace: root });
       setWorkspace(root);
       localStorage.setItem('agent-workspace', root);
       setFiles(filesResult);
-      setSessions(sessionRows);
+      setSessions([]);
+      setProjectSessionHistoryStatus('loading');
+      const sessionRequestId = ++projectSessionRequestId.current;
       setSession(null);
       setMessages([]);
       setWorkflowOutcome(null);
       setVerificationEvidence(null);
       setView('project');
       setProjectTab('overview');
+      void request<SessionSummary[]>({ command: 'sessions_list', workspace: root }).then((rows) => {
+        if (sessionRequestId !== projectSessionRequestId.current) return;
+        setSessions(rows);
+        setProjectSessionHistoryStatus('ready');
+      }).catch((error) => {
+        if (sessionRequestId !== projectSessionRequestId.current) return;
+        setProjectSessionHistoryStatus('error');
+        notify(`Project opened, but saved sessions could not be loaded: ${(error as Error).message}`, 'warn');
+      });
       try {
         await request({ command: 'workspace_record', workspace: root });
         await refreshWorkspaceHistory('');
@@ -350,6 +376,7 @@ export default function App() {
       setWorkflowOutcome(typeof loaded.run_state?.workflow_outcome === 'string' ? loaded.run_state.workflow_outcome : loaded.run_state?.status === 'interrupted' ? 'interrupted' : null);
       setVerificationEvidence(readVerificationEvidence(loaded.run_state?.verification));
       const root = loaded.workspace;
+      const sessionRequestId = ++projectSessionRequestId.current;
       setModel(loaded.model);
       const rows: ChatMessage[] = restoreTranscriptMessages(loaded.messages, loaded.turns);
       setWorkspace(root);
@@ -399,7 +426,16 @@ export default function App() {
       });
       setView('session');
       setRecoverySession(loaded.run_state?.status === 'interrupted' ? loaded : null);
-      setSessions(await request<SessionSummary[]>({ command: 'sessions_list', workspace: root }));
+      setProjectSessionHistoryStatus('loading');
+      void request<SessionSummary[]>({ command: 'sessions_list', workspace: root }).then((rows) => {
+        if (sessionRequestId !== projectSessionRequestId.current) return;
+        setSessions(rows);
+        setProjectSessionHistoryStatus('ready');
+      }).catch((error) => {
+        if (sessionRequestId !== projectSessionRequestId.current) return;
+        setProjectSessionHistoryStatus('error');
+        notify(`Session restored, but the project session list could not be refreshed: ${(error as Error).message}`, 'warn');
+      });
       await refreshWorkspaceHistory('');
     } catch (error) { notify(`Could not resume session: ${(error as Error).message}`, 'bad'); }
   }, [modelInfo?.context, notify, refreshWorkspaceHistory, request, workspace]);
@@ -618,7 +654,9 @@ export default function App() {
       }
       if (event.type === 'session_saved') {
         const root = String(event.workspace || workspace);
-        if (root) void request<SessionSummary[]>({ command: 'sessions_list', workspace: root }).then(setSessions).catch(() => undefined);
+        // A late save event from a previous workspace must not replace the
+        // currently displayed project's session list.
+        if (root && root === workspace) void refreshProjectSessions(root).catch(() => undefined);
         void refreshWorkspaceHistory('').catch(() => undefined);
       }
       if (event.type === 'generation_complete') {
@@ -698,7 +736,7 @@ export default function App() {
     });
     const unsubscribeClose = window.agent.onCloseDecision(() => setCloseChoiceOpen(true));
     return () => { unsubscribe(); unsubscribeClose(); unsubscribeUpdate(); };
-  }, [notify, refreshHome, refreshModels, refreshWorkspaceHistory, request, workspace]);
+  }, [notify, refreshHome, refreshModels, refreshProjectSessions, refreshWorkspaceHistory, request, workspace]);
 
   useEffect(() => {
     if (view !== 'landing') return;
@@ -1121,8 +1159,9 @@ export default function App() {
         onInstallOllama={() => void window.agent.openOllamaDownload().catch((error) => notify(`Could not open Ollama setup: ${(error as Error).message}`, 'bad'))}
       />}
       {view === 'project' && <ProjectHome
-        root={workspace} tab={projectTab} setTab={setProjectTab} files={availableFiles} sessions={currentSessions}
+        root={workspace} tab={projectTab} setTab={setProjectTab} files={availableFiles} sessions={currentSessions} sessionHistoryStatus={projectSessionHistoryStatus}
         onNew={() => void newSession()} onOpenSession={(id) => void loadSession(id, workspace)} onFiles={() => void refreshWorkspace(workspace)}
+        onRefreshSessions={() => void refreshProjectSessions(workspace).catch((error) => notify(`Saved sessions could not be refreshed: ${(error as Error).message}`, 'warn'))}
         onDiff={showDiff} onMcp={openMcp} onTools={openTools} running={running}
         onHome={() => { setView('landing'); void refreshHome().catch((error) => notify(`Could not refresh saved workspace history: ${(error as Error).message}`, 'warn')); }}
       />}
@@ -1279,10 +1318,10 @@ function Landing({ workspaces, workspaceSearch, workspaceHistoryStatus, sessions
   </section>;
 }
 
-function ProjectHome({ root, tab, setTab, files, sessions, onNew, onOpenSession, onFiles, onDiff, onMcp, onTools, onHome, running }: {
+function ProjectHome({ root, tab, setTab, files, sessions, sessionHistoryStatus, onNew, onOpenSession, onFiles, onRefreshSessions, onDiff, onMcp, onTools, onHome, running }: {
   root: string; tab: 'overview' | 'files' | 'sessions'; setTab: (value: 'overview' | 'files' | 'sessions') => void;
-  files: ProjectFile[]; sessions: SessionSummary[]; onNew: () => void; onOpenSession: (id: string) => void;
-  onFiles: () => void; onDiff: () => void; onMcp: () => void; onTools: () => void; onHome: () => void; running: boolean;
+  files: ProjectFile[]; sessions: SessionSummary[]; sessionHistoryStatus: 'loading' | 'ready' | 'error'; onNew: () => void; onOpenSession: (id: string) => void;
+  onFiles: () => void; onRefreshSessions: () => void; onDiff: () => void; onMcp: () => void; onTools: () => void; onHome: () => void; running: boolean;
 }) {
   const textFiles = files.filter((row) => row.text).length;
   return <section className="project-view">
@@ -1299,12 +1338,12 @@ function ProjectHome({ root, tab, setTab, files, sessions, onNew, onOpenSession,
       </div>
       <div className="recent-session-card"><div className="section-heading"><div><span className="section-number">03</span><h2>Recent sessions</h2></div><button onClick={() => setTab('sessions')}>All sessions <Icon name="arrow"/></button></div>
         {sessions.slice(0, 5).map((row, index) => <button className="session-tile" key={row.session_id} onClick={() => onOpenSession(row.session_id)}><span className="session-index">{String(index + 1).padStart(2, '0')}</span><span><strong>Session {row.session_id.slice(-8)}</strong><small>{row.model}</small>{row.sync_conflict && <small className="session-conflict-note">Copies differ · project version recommended</small>}</span><time>{new Date(row.updated_at * 1000).toLocaleDateString()}</time><Icon name="arrow"/></button>)}
-        {!sessions.length && <div className="empty-inline compact"><span><b>No sessions for this folder yet.</b><small>Your first task will create a resumable session.</small></span></div>}
+        {!sessions.length && <div className="empty-inline compact" role={sessionHistoryStatus === 'error' ? 'alert' : sessionHistoryStatus === 'loading' ? 'status' : undefined}><span><b>{sessionHistoryStatus === 'loading' ? 'Loading saved sessions…' : sessionHistoryStatus === 'error' ? 'Saved sessions could not be loaded.' : 'No sessions for this folder yet.'}</b><small>{sessionHistoryStatus === 'error' ? 'Your project is open and its files remain available. Session history was not cleared.' : sessionHistoryStatus === 'loading' ? 'The project is open while its session history syncs.' : 'Your first task will create a resumable session.'}</small></span>{sessionHistoryStatus === 'error' && <button onClick={onRefreshSessions}>Retry</button>}</div>}
       </div>
       <div className="project-capabilities"><div><Icon name="branch"/><span><b>File boundary</b><small>Built-in file tools stay under this root.</small></span></div><div><Icon name="terminal"/><span><b>Host command access</b><small>Approval is consent, not OS containment.</small></span></div><div><Icon name="clock"/><span><b>Local history</b><small>Sessions can be resumed at any time.</small></span></div></div>
     </div>}
     {tab === 'files' && <div className="project-file-list"><div className="section-heading"><div><span className="section-number">04</span><h2>Indexed project files</h2></div><span>{files.length} entries</span></div>{files.map((file) => <div className="file-row" key={file.path}><span className={`file-glyph ${file.text ? 'text-file' : ''}`}>{file.text ? 'Aa' : '▧'}</span><code>{file.path}</code><small>{file.size > 1024 ? `${(file.size / 1024).toFixed(1)} KB` : `${file.size} B`}</small></div>)}</div>}
-    {tab === 'sessions' && <div className="project-file-list"><div className="section-heading"><div><span className="section-number">05</span><h2>Saved sessions</h2></div><span>{sessions.length} sessions</span></div>{sessions.map((row) => <button className="session-tile full-session" key={row.session_id} onClick={() => onOpenSession(row.session_id)}><span className="session-index"><Icon name="clock"/></span><span><strong>Session {row.session_id}</strong><small>{row.model}</small>{row.sync_conflict && <small className="session-conflict-note">Copies differ · project version recommended</small>}</span><time>{new Date(row.updated_at * 1000).toLocaleString()}</time><Icon name="arrow"/></button>)}</div>}
+    {tab === 'sessions' && <div className="project-file-list"><div className="section-heading"><div><span className="section-number">05</span><h2>Saved sessions</h2></div><span>{sessionHistoryStatus === 'loading' ? 'Syncing…' : sessionHistoryStatus === 'error' ? 'History unavailable' : `${sessions.length} sessions`}</span></div>{sessions.map((row) => <button className="session-tile full-session" key={row.session_id} onClick={() => onOpenSession(row.session_id)}><span className="session-index"><Icon name="clock"/></span><span><strong>Session {row.session_id}</strong><small>{row.model}</small>{row.sync_conflict && <small className="session-conflict-note">Copies differ · project version recommended</small>}</span><time>{new Date(row.updated_at * 1000).toLocaleString()}</time><Icon name="arrow"/></button>)}{sessionHistoryStatus !== 'ready' || !sessions.length ? <div className="empty-inline" role={sessionHistoryStatus === 'error' ? 'alert' : sessionHistoryStatus === 'loading' ? 'status' : undefined}><span><b>{sessionHistoryStatus === 'loading' ? 'Loading saved sessions…' : sessionHistoryStatus === 'error' ? 'Saved sessions could not be loaded.' : 'No saved sessions yet.'}</b><small>{sessionHistoryStatus === 'error' ? 'History remains preserved. Retry the session list without leaving this project.' : sessionHistoryStatus === 'loading' ? 'Session history is syncing independently of project files.' : 'Start a task to create the first session.'}</small></span>{sessionHistoryStatus === 'error' && <button onClick={onRefreshSessions}>Retry</button>}</div> : null}</div>}
   </section>;
 }
 

@@ -40,6 +40,12 @@
 - Approved command tools no longer default to 120 seconds or cap explicit timeouts at one hour. The model is instructed to omit `timeout_seconds` for long builds/checks, leaving user cancellation available; explicit positive task-specific timeouts remain possible. Regression and visible long-command acceptance are queued.
 - The retained CLI approval dialog now presents exact argv/PowerShell text and truthful timeout semantics. CLI approval and cancellation acceptance remain queued.
 - Mocked resource-attribution coverage is owned by the engine repository alongside `telemetry.py`; it remains queued and unrun.
+
+## 2026-11-01 Project/session read isolation follow-up
+
+- Project opening and file refresh depend on project file access only. Session enumeration runs independently with loading/error/retry state, so a session-index failure does not make a valid folder appear unavailable.
+- Session restoration completes independently from refreshing the project session list. Project session responses are sequenced, and a late save event from a previously active workspace cannot replace the current project's list.
+- Renderer regression and packaged workspace-switch acceptance remain queued; no verification was run for this follow-up.
 - The required cancel chooser now waits for explicit sidecar acknowledgment; a failed IPC call leaves it open, and a no-longer-active run is reported instead of silently looking canceled. Finish-after-current-operation receives the same acceptance check. Mocked and visible chooser tests remain queued.
 - App-close choices also wait for host acknowledgment. Cancel-and-close validates cancellation acceptance and waits for run-idle before shutdown; failures keep the modal available instead of silently closing.
 - The active chat supports a durable follow-up queue: prompts can be drafted during inference without changing the active request, are saved in both session mirrors, remain project-bound, and start only after explicit user selection. Queue removal is persisted with the selected prompt's new run snapshot to avoid automatic replay. No queue-size or prompt-length cap is added.

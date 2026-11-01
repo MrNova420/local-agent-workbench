@@ -679,3 +679,9 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - Home workspace and session history refresh independently from the active project session list. All app-wide sessions are visible with conflict/recovery/workspace status; available moved projects can be matched by saved identity. Corrupt/unreadable workspace history produces an error without overwriting the file, and does not prevent opening a valid project.
 - Window controls now use a 20×14 top-right idle hit target, expanding on hover or keyboard focus. Packaged behavior remains unverified.
 - Engine and app/sidecar tests are authored but intentionally unrun. No typecheck, package build, app launch, visual acceptance, or live model request was performed.
+
+# 2026-11-01 — Project access independent of session indexing (source only)
+
+- Project opening now waits for file access only; session enumeration loads independently, reports loading/failure, and provides retry without making the project appear unavailable. File refresh updates usable files even if session history cannot be queried.
+- Project session reads are request-sequenced. A late save event for a previous workspace cannot replace the current project's session list. Restoring a session completes independently from its background project-session-list refresh.
+- No tests, typecheck, package build, UI acceptance, or model request was run. Verification remains queued for the final phase.
