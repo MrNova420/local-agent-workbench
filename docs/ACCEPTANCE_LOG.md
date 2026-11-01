@@ -717,10 +717,11 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 # 2026-11-01 — Automatic plans continue into implementation (source only)
 
 - The engine now treats a pending agent-authored plan in Automatic mode as active work even when its current task mode is `plan`; it continues into implementation and inspection rather than reporting plan-only success. A plan with no pending items can still finish as plan-only, while explicit Workbench Plan-only/Discuss remain read-only.
-- The settings copy now explains that distinction. Added a queued regression covering plan → write → inspect → close plan → final response. Source-only; no tests, typecheck, UI, package, or model acceptance has run. Current app pin is engine `b12e018be218ec06ff60893f5b1d2476d1e1b76d`.
+- The settings copy now explains that distinction. Added a queued regression covering plan → write → inspect → close plan → final response. Source-only; no tests, typecheck, UI, package, or model acceptance has run. Current app pin is engine `280c9d0bb9f7e0dedbc005e8f59eb406da7a3ed5`.
 
 # 2026-11-01 — Resume preserves agent plan ownership (source only)
 
 - Task checkpoints persist plan ownership (`agent` or `workbench`), and compaction carries that provenance. Restoring a session with an open agent-owned plan restores the implementation obligation before the next inference call, so a resumed Auto task continues instead of finishing as an ordinary chat response. Explicit Discuss/Plan intents override this behavior.
-- Added queued checkpoint and engine regressions. Current paired engine revision: `b12e018be218ec06ff60893f5b1d2476d1e1b76d`. No tests, typecheck, UI, package, or live model check ran.
-- Plan continuation treats only explicit terminal statuses as closed. Unknown statuses such as `planned` remain open and actionable; `deferred` is treated as closed. A regression for unknown statuses is queued, not run. Current paired engine revision: `b12e018be218ec06ff60893f5b1d2476d1e1b76d`.
+- Added queued checkpoint and engine regressions. Current paired engine revision: `280c9d0bb9f7e0dedbc005e8f59eb406da7a3ed5`. No tests, typecheck, UI, package, or live model check ran.
+- Plan continuation treats only explicit terminal statuses as closed. Unknown statuses such as `planned` remain open and actionable; `deferred` is treated as closed. A regression for unknown statuses is queued, not run. Current paired engine revision: `280c9d0bb9f7e0dedbc005e8f59eb406da7a3ed5`.
+- Resume recovery now also keeps open Workbench implementation checklists active when their saved task mode is `implement`, in addition to agent-owned plans. The regression is queued. Current paired engine revision: `280c9d0bb9f7e0dedbc005e8f59eb406da7a3ed5`.
