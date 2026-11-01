@@ -1,7 +1,7 @@
 import type { ActivityRecord } from './protocol';
 
 /** Prefer an explicit snapshot, including an intentional empty plan. Older sessions can recover from their latest turn's journal event. */
-export function restorePlanItems(snapshot: unknown, events: unknown, latestTurnId?: string): Array<{ title?: string; text?: string; status?: string; source?: 'workbench' | 'agent' }> {
+export function restorePlanItems(snapshot: unknown, events: unknown, latestTurnId?: string): Array<{ title?: string; text?: string; status?: string; source?: 'workbench' | 'agent'; group?: string }> {
   if (Array.isArray(snapshot)) return snapshot;
   if (!Array.isArray(events)) return [];
   for (let index = events.length - 1; index >= 0; index -= 1) {

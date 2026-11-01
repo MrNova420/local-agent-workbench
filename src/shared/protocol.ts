@@ -101,7 +101,7 @@ export type ActivityRecord = {
   output?: Record<string, string>;
   result?: string;
   affectedFiles?: string[];
-  items?: Array<{ title?: string; text?: string; status?: string; source?: 'workbench' | 'agent' }>;
+  items?: Array<{ title?: string; text?: string; status?: string; source?: 'workbench' | 'agent'; group?: string }>;
   /** Concise task decisions, not private chain-of-thought. */
   decisions?: string[];
   acceptanceCriteria?: string[];

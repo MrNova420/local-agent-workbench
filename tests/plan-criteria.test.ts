@@ -23,6 +23,11 @@ describe('plan acceptance criteria restoration', () => {
     ])).toEqual(['Current criterion', 'Another current criterion']);
   });
 
+  it('preserves independent plan workstream labels when restoring activity', () => {
+    const plan = [{ title: 'API route', group: 'Backend' }, { title: 'Page layout', group: 'Frontend' }];
+    expect(restorePlanItems(undefined, [{ kind: 'plan', turnId: 'turn', items: plan }], 'turn')).toEqual(plan);
+  });
+
   it('honors an explicit empty starter snapshot so criteria do not leak from an older task', () => {
     expect(readPlanAcceptanceCriteria([
       { kind: 'plan', acceptanceCriteria: ['Prior task criterion'] },

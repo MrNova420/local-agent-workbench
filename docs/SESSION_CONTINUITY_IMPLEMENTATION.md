@@ -4,7 +4,7 @@
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
-**Current paired engine source:** `515d2c34837b2cc915a979bc1aed39b70cc2e369` (unpublished; regressions intentionally queued).
+**Current paired engine source:** `0f05d7824c16d51ac491c3b48027ef9b9df57b25` (unpublished; regressions intentionally queued).
 
 ## Implemented in this source batch
 
@@ -75,8 +75,16 @@ No live model, app process, OpenCode setting, selected token value, model reason
 
 - Engine-managed read_file calls now use an excerpt budget derived from the run's selected context and output values. Oversized files and long single lines stream in bounded UTF-8 chunks; the tool reports the exact next line/column, and the dynamic budget is disclosed in the tool schema. No context/output setting is changed, and the remainder is never silently discarded. Regression coverage is queued.
 
-- File discovery now shares the same per-run context-derived response budget: listing pages stop at a continuation offset, search pages report large matching lines with a read_file cursor, and both disclose page/scan limits. This reduces oversized tool exchanges without changing selected model context/output. Regression cases are queued.
+- Historical implementation note: file discovery shares the per-run context-derived response budget; the former default scan ceilings described below have since been removed. Explicit scan limits remain supported and disclosed.
 
-- Bounded list/search scans now probe one extra candidate before reporting incompleteness, eliminating false cap warnings when a project has exactly the configured scan limit. Boundary regressions are queued.
+- Historical configured-scan behavior: list/search scan one extra candidate before reporting an explicitly configured limit as incomplete. Current default behavior is unbounded by file/byte count.
 
 - Every oversized tool result now keeps its complete value in the operation journal but sends the model a bounded UTF-8-safe beginning/end excerpt and an exact operation ID/offset/length for omitted text. The app's Activity Trace still receives the complete result. Regression coverage is queued.
+
+## 2026-11-01 expandable plans, context allocation, and safe read batches (verification queued)
+
+- Engine commit `0f05d7824c16d51ac491c3b48027ef9b9df57b25` allows repeated plan revision and append-only workstream additions without discarding existing work; checkpoint and prompt wording preserve completed items and decisions. Plan items can carry optional group labels, rendered in the worksheet and durable activity card.
+- Removed implicit default file/byte ceilings from project retrieval, listing, and search. Explicitly configured scan budgets remain supported and visibly report partial results. Progress/cancellation for very large scans remains open.
+- Tool output allocation now estimates the current request plus schemas, complete assistant tool-call, and prior results in the batch; each result receives a share of the remaining input budget, with complete output retained in operation history and a recovery pointer for oversized output. This replaces the earlier fixed one-eighth allocation.
+- Fully schema-validated batches made solely of independent read-only project/Git calls execute concurrently. Starts and completions are emitted and checkpointed per operation as work proceeds. Mixed or permission-sensitive batches and all writes, commands, and MCP calls remain ordered.
+- Added mocked regressions for plan append, independent read concurrency, unlimited defaults, and dynamic budget behavior. They are queued and have not been run; this is source implementation, not verified readiness.

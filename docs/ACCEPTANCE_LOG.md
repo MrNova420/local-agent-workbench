@@ -541,7 +541,7 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 
 ## 2026-11-01 small-model continuity guidance (verification queued)
 
-- Engine commit `3b22665286de0636591f7469850c3e5fa50f2710` adds small-model-only guidance to plan once, continue the next unfinished action, avoid repeating completed planning, and resume from the saved checkpoint after compaction. It adds no fixed action count, time limit, or inference setting change.
+- Historical engine commit `3b22665286de0636591f7469850c3e5fa50f2710` added small-model-only guidance that included “plan once.” That wording was removed in engine commit `0f05d7824c16d51ac491c3b48027ef9b9df57b25`; plans can now be repeatedly expanded and revised. No fixed action count, time limit, or inference setting is added.
 - Added prompt regression coverage; it remains unrun. The app pin is synchronized to this engine revision; packaging and user-flow verification remain queued.
 
 ## 2026-11-01 checkpoint follows visible plan progress (verification queued)
@@ -604,9 +604,9 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - Engine commit 53f067c6c6190db0f23afa5065abd191599243f2 bounds each read_file result using the selected run context/output budget. Large files, including long single-line files, can be read as UTF-8-safe chunks with a precise continuation cursor. The operation clearly marks excerpts and reports its budget in the tool schema; it does not change either selected inference setting.
 - Added continuation coverage for Unicode line columns; full engine and live context/output acceptance remain queued.
 
-## 2026-11-01 selected-context read budget assertion (verification queued)
+## 2026-11-01 selected-context read budget assertion (historical; superseded by dynamic allocation)
 
-- Added a source regression that checks a 65,536 context / 8,192 output run derives a 14,080-byte per-read budget while retaining both selected settings unchanged. This assertion is queued with the complete suite and has not been executed.
+- The earlier source regression checked a fixed one-eighth allocation for a 65,536 context / 8,192 output run. That allocation was too restrictive and has been replaced; the selected settings themselves were never changed.
 
 ## 2026-11-01 context-aware file discovery pages (verification queued)
 
@@ -621,3 +621,11 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 
 - Engine commit 515d2c34837b2cc915a979bc1aed39b70cc2e369 keeps the full operation result in engine/session history and bounds only the next model-facing tool message to the per-run context budget. The excerpt preserves both ends of logs, remains UTF-8-safe, and includes exact read_operation_result coordinates for the omitted middle.
 - Added range/cursor and short-result regressions; engine, sidecar, and UI tests remain queued.
+
+## 2026-11-01 expandable plans, concurrent reads, and scan defaults (verification queued)
+
+- Engine commit `0f05d7824c16d51ac491c3b48027ef9b9df57b25` supports repeated plan revision and append-only independent workstreams, while retaining existing plan items and task decisions. The worksheet and restored activity cards now render optional workstream labels.
+- Default project retrieval, file listing, and search no longer stop at implicit file/byte ceilings. Explicit scan budgets remain supported and report partial results; large-scan cancellation/progress remains open.
+- Read-only batches are concurrent only when every call is schema-valid, independently readable, and free of permission rules. Writes, commands, MCP, and mixed or permission-sensitive batches retain ordered execution. Completion events/checkpoints are persisted as each read finishes.
+- Tool output budgets account for current prompt, schemas, assistant tool-call, and prior batch results. Full results remain saved and oversized model-facing output carries a recovery pointer. This supersedes the earlier fixed one-eighth allocation; selected context/output/reasoning remain unchanged.
+- Regression coverage was added for concurrency/order, plan expansion, scan defaults, workstream restoration, and selected-context accounting. No tests, typecheck, build, package, UI acceptance, or live model check was run.
