@@ -86,7 +86,7 @@ export type ActivityRecord = {
   turnId: string;
   sessionId: string;
   workspace?: string;
-  kind: 'operation' | 'approval' | 'plan' | 'context' | 'prompt' | 'error';
+  kind: 'operation' | 'tool_preparation' | 'approval' | 'plan' | 'context' | 'prompt' | 'error';
   name?: string;
   status: string;
   source?: 'workbench' | 'agent';
@@ -114,6 +114,11 @@ export type ActivityRecord = {
   providerRequest?: Record<string, unknown>;
   /** Provider-returned token and timing counters for this specific request. */
   providerUsage?: Record<string, unknown>;
+  /** Safe streaming metadata; partial model arguments are deliberately never stored. */
+  provider?: string;
+  requestIndex?: number;
+  callIndex?: number;
+  argumentCharacters?: number;
 };
 
 export type ActivityEventEnvelope = {

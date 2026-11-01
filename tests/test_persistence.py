@@ -7,6 +7,18 @@ from sidecar.persistence import MirroredSessionStore, WorkspaceHistory, _replay_
 
 
 class MirroredSessionStoreTests(unittest.TestCase):
+    def test_tool_preparation_progress_replays_as_safe_session_activity(self):
+        state = {"session_id": "s-progress", "workspace": "C:/project",
+                 "run_state": {"turn_id": "turn-progress"}, "activity_events": []}
+        _replay_run_event(state, {"type": "tool_call_progress", "activityId": "tool-call:turn-progress:0:1",
+                                  "turnId": "turn-progress", "workspace": "C:/project", "provider": "ollama",
+                                  "request_index": 0, "call_index": 1, "tool_name": "write_file",
+                                  "argument_characters": 768, "timestamp": 12})
+        row = state["activity_events"][0]
+        self.assertEqual((row["kind"], row["name"], row["status"]), ("tool_preparation", "write_file", "preparing"))
+        self.assertEqual(row["argumentCharacters"], 768)
+        self.assertNotIn("arguments", row)
+
     def test_journal_recovery_preserves_uncertain_remote_tool_effects(self):
         state = {
             "session_id": "s-mcp", "workspace": "C:/project",

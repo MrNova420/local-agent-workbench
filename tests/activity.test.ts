@@ -5,6 +5,16 @@ import { applyActivityEvent, shouldRefreshWorkspaceForActivity, type ActivityRec
 import { ActivityFeed } from '../src/renderer/ActivityFeed';
 
 describe('durable live activity state', () => {
+  it('renders resumable tool preparation without exposing partial arguments', () => {
+    const markup = renderToStaticMarkup(createElement(ActivityFeed, { entries: [{
+      id: 'tool-call:turn-1:0:0', turnId: 'turn-1', sessionId: 'session-1', kind: 'tool_preparation',
+      name: 'write_file', status: 'preparing', provider: 'ollama', requestIndex: 0, callIndex: 0,
+      argumentCharacters: 512,
+    }], mode: 'compact', surface: 'chat' }));
+    expect(markup).toContain('Model is preparing a structured tool call');
+    expect(markup).toContain('512 argument characters');
+    expect(markup).not.toContain('arguments-preview');
+  });
   it('progressively renders long activity histories without discarding older records', () => {
     const entries: ActivityRecord[] = Array.from({ length: 245 }, (_, index) => ({
       id: `activity-${index}`, sessionId: 'session-long', turnId: 'turn-long', kind: 'operation',

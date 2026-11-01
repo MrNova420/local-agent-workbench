@@ -479,6 +479,11 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 
 - Cancel now remains visible until the sidecar acknowledges the action; IPC failure leaves the required decision available for retry. The sidecar reports when there is no active run, and the UI reports that state instead of implying a cancel succeeded. Finish-current-operation also waits for the host's accepted/not-active result. Added mocked worker coverage; no tests or UI checks were run.
 - App-close choices now remain pending until Electron acknowledges keep/hide/cancel; cancellation must be accepted and the run must become idle before shutdown. IPC or tray failures leave the choice available and report the error. Packaged close-flow acceptance remains queued.
+
+## 2026-11-01 durable model tool-preparation activity (verification queued)
+
+- Ollama streamed tool-call progress now updates a compact activity card in chat and the Live Work Sheet. The same row is journaled and restored after session recovery. Persisted fields are limited to provider, tool name, request/call identity, and argument character count; partial arguments are not saved or shown.
+- Added worker, journal-replay, and renderer regressions, including repeated progress updates coalescing to one call row. They remain unrun with the broader verification pass.
 ## 2026-11-01 selected Ollama settings authority (verification queued)
 
 - Fixed a request-construction precedence bug where generic runtime options could overwrite the selected context, output-token cap, and temperature. The selected controls now win; unrelated supported runtime options still pass through. Conflicts are included in provider request provenance and surfaced in the activity detail.

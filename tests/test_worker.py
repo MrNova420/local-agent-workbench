@@ -453,7 +453,7 @@ def test_activity_events_checkpoint_complete_results_and_unstarted_calls(service
     assert any(event["type"] == "activity_event" for event in emitted)
 
 
-def test_tool_call_progress_is_live_but_not_journaled_or_saved(service, tmp_path, monkeypatch):
+def test_tool_call_progress_is_live_safe_and_durable(service, tmp_path, monkeypatch):
     project = tmp_path / "tool-progress-project"
     project.mkdir()
     state = service.sessions.create(str(project), "model-a:latest", 4096)
@@ -470,11 +470,26 @@ def test_tool_call_progress_is_live_but_not_journaled_or_saved(service, tmp_path
         "type": "tool_call_progress", "provider": "ollama", "request_index": 0,
         "call_index": 0, "tool_name": "write_file", "argument_characters": 512,
     })
+    service._publish_run_event(controller, SimpleNamespace(workspace=project), {
+        "type": "tool_call_progress", "provider": "ollama", "request_index": 0,
+        "call_index": 0, "tool_name": "write_file", "argument_characters": 1024,
+    })
+    assert len(controller["journal_pending"]) == 1
+    controller["last_journal_flush"] = 0
+    service._publish_run_event(controller, SimpleNamespace(workspace=project), {
+        "type": "tool_call_progress", "provider": "ollama", "request_index": 0,
+        "call_index": 0, "tool_name": "write_file", "argument_characters": 1024,
+    })
 
     assert any(event.get("type") == "tool_call_progress" for event in emitted)
+    assert any(event.get("type") == "activity_event" and event.get("activity", {}).get("kind") == "tool_preparation" for event in emitted)
     assert controller["journal_pending"] == []
     saved = service.sessions.load(state["session_id"], str(project))
-    assert not any(event.get("type") == "tool_call_progress" for event in saved.get("activity_events", []))
+    progress = next(event for event in saved.get("activity_events", []) if event.get("kind") == "tool_preparation")
+    assert progress["name"] == "write_file"
+    assert progress["argumentCharacters"] == 1024
+    assert sum(event.get("kind") == "tool_preparation" for event in saved.get("activity_events", [])) == 1
+    assert "arguments" not in progress
     assert not any(event.get("type") == "tool_call_progress" for event in saved.get("run_state", {}).get("events", []))
 
 

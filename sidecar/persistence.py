@@ -139,6 +139,21 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
                 prompt["status"] = "cancelled_during_request" if event.get("cancelled") else "request_failed"
                 provider_request.update(dispatch_status=prompt["status"], failure_phase=event.get("phase"),
                                         request_error=event.get("error"))
+    elif kind == "tool_call_progress":
+        activity_id = str(event.get("activityId") or
+                          f"tool-call:{event.get('turnId', run.get('turn_id'))}:{int(event.get('request_index', 0))}:{int(event.get('call_index', 0))}")
+        row = next((item for item in state.setdefault("activity_events", []) if item.get("id") == activity_id), None)
+        progress = {"id": activity_id, "turnId": event.get("turnId", run.get("turn_id")),
+                    "sessionId": state["session_id"], "workspace": event.get("workspace", state.get("workspace")),
+                    "kind": "tool_preparation", "name": str(event.get("tool_name") or "model tool call"),
+                    "status": "preparing", "provider": str(event.get("provider") or "unknown"),
+                    "requestIndex": int(event.get("request_index", 0)), "callIndex": int(event.get("call_index", 0)),
+                    "argumentCharacters": max(0, int(event.get("argument_characters", 0))),
+                    "timestamp": event.get("timestamp", event.get("at", time.time()))}
+        if row is None:
+            state.setdefault("activity_events", []).append(progress)
+        else:
+            row.update(progress)
     elif kind == "tool_batch":
         run["tool_batch"] = {"assistant_message": copy.deepcopy(event.get("assistantMessage")),
                              "calls": copy.deepcopy(event.get("calls", [])),

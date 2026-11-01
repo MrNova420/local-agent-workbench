@@ -220,8 +220,27 @@ class AgentService:
             kind = event.get("type")
             activity: dict[str, Any] | None = None
             activity_id = str(event.get("operationId") or event.get("actionId") or event.get("activityId") or uuid.uuid4().hex)
+            if kind == "tool_call_progress":
+                activity_id = f"tool-call:{controller['turn_id']}:{int(event.get('request_index', 0))}:{int(event.get('call_index', 0))}"
+                event["activityId"] = activity_id
             rows = state.setdefault("activity_events", [])
-            if kind == "tool_start":
+            if kind == "tool_call_progress":
+                activity = next((item for item in rows if item.get("id") == activity_id), None)
+                progress = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
+                            "workspace": str(turn.workspace), "kind": "tool_preparation",
+                            "name": str(event.get("tool_name") or "model tool call"), "status": "preparing",
+                            "provider": str(event.get("provider") or "unknown"),
+                            "requestIndex": int(event.get("request_index", 0)),
+                            "callIndex": int(event.get("call_index", 0)),
+                            "argumentCharacters": max(0, int(event.get("argument_characters", 0))),
+                            "timestamp": event.get("at", time.time())}
+                if activity is None:
+                    activity = progress
+                    rows.append(activity)
+                else:
+                    activity.update(progress)
+                enriched["activityId"] = activity_id
+            elif kind == "tool_start":
                 activity = {"id": activity_id, "operationId": activity_id, "turnId": controller["turn_id"],
                             "sessionId": state["session_id"], "workspace": str(turn.workspace), "kind": "operation",
                             "name": event.get("name", "tool"), "arguments": copy.deepcopy(event.get("arguments", {})),
@@ -346,7 +365,12 @@ class AgentService:
                 rows.append(activity)
             if kind == "generation_usage":
                 enriched["first_token_seconds"] = run_state.get("request_first_token_seconds") if isinstance(run_state, dict) else None
-            if activity:
+            if activity and kind == "tool_call_progress":
+                # Keep transient token-level progress and the same resumable activity row.
+                self.emit(enriched)
+                self.emit({"type": "activity_event", "activity": copy.deepcopy(activity),
+                           "sessionId": state["session_id"], "turnId": controller["turn_id"]})
+            elif activity:
                 if kind in {"inference_settings", "generation_usage", "request_dispatched", "request_headers", "request_complete", "request_error"}:
                     # Keep live settings/metrics/phase events and publish the same
                     # durable prompt row update to the activity feed.
@@ -359,24 +383,34 @@ class AgentService:
             else:
                 self.emit(enriched)
 
-            # Partial model tool arguments are a transient, non-executable progress cue.
-            # The complete call and its arguments are durably recorded only after the
-            # provider finishes the call and the engine emits the normal tool events.
-            if kind == "tool_call_progress":
-                return
-
             pending = controller.setdefault("journal_pending", [])
             journal_event = {**event, "sessionId": state["session_id"], "turnId": controller["turn_id"],
                              "workspace": str(turn.workspace), "timestamp": event.get("at", time.time()),
                              "_journal_event_id": uuid.uuid4().hex, "_journal_recorded_at_ns": time.time_ns()}
+            if kind == "tool_call_progress":
+                # The provider event intentionally contains only tool identity and size,
+                # never partial arguments. Keep this safe summary through recovery.
+                journal_event = {key: value for key, value in journal_event.items()
+                                 if key in {"type", "provider", "request_index", "call_index", "tool_name",
+                                            "argument_characters", "at", "activityId", "sessionId", "turnId",
+                                            "workspace", "timestamp", "_journal_event_id", "_journal_recorded_at_ns"}}
             if event.get("type") == "generation_usage" and isinstance(run_state, dict):
                 journal_event["first_token_seconds"] = run_state.get("request_first_token_seconds")
             if (pending and pending[-1].get("type") == journal_event.get("type")
-                    and journal_event.get("type") in {"text", "thinking"}
+                    and journal_event.get("type") in {"text", "thinking", "tool_call_progress"}
                     and pending[-1].get("turnId") == journal_event.get("turnId")
+                    and (journal_event.get("type") != "tool_call_progress" or
+                         (pending[-1].get("request_index") == journal_event.get("request_index") and
+                          pending[-1].get("call_index") == journal_event.get("call_index")))
                     and not pending[-1].get("_journal_saved_to")):
-                pending[-1]["text"] = str(pending[-1].get("text", "")) + str(journal_event.get("text", ""))
-                pending[-1]["timestamp"] = journal_event["timestamp"]
+                if journal_event.get("type") == "tool_call_progress":
+                    pending[-1].update({key: value for key, value in journal_event.items()
+                                        if key not in {"_journal_event_id", "_journal_recorded_at_ns"}})
+                    pending[-1]["_journal_event_id"] = journal_event["_journal_event_id"]
+                    pending[-1]["_journal_recorded_at_ns"] = journal_event["_journal_recorded_at_ns"]
+                else:
+                    pending[-1]["text"] = str(pending[-1].get("text", "")) + str(journal_event.get("text", ""))
+                    pending[-1]["timestamp"] = journal_event["timestamp"]
             elif (pending and pending[-1].get("type") == "operation_output"
                     and journal_event.get("type") == "operation_output"
                     and pending[-1].get("operationId") == journal_event.get("operationId")
