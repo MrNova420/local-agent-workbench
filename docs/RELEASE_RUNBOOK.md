@@ -59,4 +59,3 @@ Public app release `v0.1.0-beta.3` is now the latest version. Its local source/p
 ## Beta update visibility
 
 The Windows Squirrel feed uses Electron's public `update.electronjs.org` service. The service ignores GitHub Releases marked `prerelease: true`, so the workflow must publish beta SemVer tags such as `0.1.0-beta.4` with GitHub's `prerelease: false` field. The tag still communicates beta stability; the release metadata makes it discoverable to the updater. Keep the auto-updater check serialized: a second call can start a duplicate download, and a periodic check must not replace the `downloaded` state before the user chooses to restart. This contract is source-covered; installed old-to-new upgrade and recovery remain a separate acceptance gate.
-
