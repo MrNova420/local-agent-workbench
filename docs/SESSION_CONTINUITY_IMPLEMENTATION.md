@@ -4,7 +4,7 @@
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
-**Current paired engine source:** `ea7f9930f46a84f5308836ba29064b3ad7e59ee6` (unpublished; regressions intentionally queued).
+**Current paired engine source:** `a9360935fd1bb733d23ce35273bfe50798e23cce` (unpublished; regressions intentionally queued).
 
 ## Implemented in this source batch
 
@@ -72,7 +72,7 @@
 
 ## Remaining reliability work
 
-- The paired app currently pins engine `ea7f9930f46a84f5308836ba29064b3ad7e59ee6` in `core-revision.txt`; CI and the Windows release workflow read that pin. The engine records provider-specific request data, uncertain MCP effects, safe tool-preparation metadata, MCP schema capability gaps, within-task compaction and result lookup, and separate local runtime worker CPU/RAM/NVIDIA process VRAM measurements where available. JSON Schema `format` remains an annotation without value validation; GPU load remains device-wide. Reconcile and build the packaged app only after implementation is complete.
+- The paired app currently pins engine `a9360935fd1bb733d23ce35273bfe50798e23cce` in `core-revision.txt`; CI and the Windows release workflow read that pin. The engine records provider-specific request data, uncertain MCP effects, safe tool-preparation metadata, MCP schema capability gaps, within-task compaction and result lookup, and separate local runtime worker CPU/RAM/NVIDIA process VRAM measurements where available. JSON Schema `format` remains an annotation without value validation; GPU load remains device-wide. Reconcile and build the packaged app only after implementation is complete.
 - Finish-after-operation drains every independent read that was already launched as part of a validated concurrent batch before stopping ahead of the next model request. Writes, commands, and MCP actions remain sequential; they are not silently parallelized.
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.
@@ -115,3 +115,9 @@ No live model, app process, OpenCode setting, selected token value, model reason
 - Engine commit `6bcf9c7f0099b54c49c96ae391d035478ddf6e12` adds `read_conversation_history`, a read-only paged reader over canonical user/assistant/tool history. It excludes the system prompt and can filter by message role; emitted assistant reasoning remains available if it was saved as visible transcript content.
 - The agent instructions direct the model to consult transcript/checkpoint/result readers when compaction reports omitted context. Nothing is inserted into every prompt by default, so token budget remains available for the active task while omitted history remains recoverable on demand.
 - Tests for role filtering, system-prompt exclusion, reasoning recovery, and schema availability are queued and unrun. The new reader has not been exercised through the packaged UI or live model.
+
+## 2026-11-01 progress-based implementation continuation (verification queued)
+
+- Engine commit `a9360935fd1bb733d23ce35273bfe50798e23cce` replaces the fixed one-shot implementation continuation with progress-state comparison over the agent-owned plan, completed operation fingerprints, changed files, and verification steps. Open plan items prompt further implementation; no elapsed-time or total-iteration cap was introduced.
+- Repeating the same tool arguments/results and plan without new evidence does not count as progress. The engine ends that unchanged loop with a saved `stopped` checkpoint and `implementation_incomplete` outcome, which the UI explains as resumable work instead of successful completion.
+- Regressions for continuing through planning into a write/inspection and detecting repeated identical planning are queued and unrun. No typecheck, package, UI, or model acceptance has occurred.
