@@ -492,6 +492,13 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - The engine now records cancelled, partial, uncertain, and otherwise incomplete command results as `command_incomplete`; that state takes precedence over a generic “changed” outcome when the task also modified files. Failed commands remain `command_failed`, and completed command execution still does not imply a test passed.
 - Added helper regressions for partial and cancelled command results. No tests or command execution were run.
 - The app pin advances to engine `a846152c539daa235abb6b2d6fa1beb07a1ee851`.
+
+## 2026-11-01 budgeted checkpoint continuity (verification queued)
+
+- Large checkpoints now receive an inference-only budgeted summary when needed to leave input room for the active conversation. The canonical on-disk checkpoint is not modified. The summary preserves the active goal, plan, settings, latest operation references and latest instructions; it reports counts for summarized history.
+- The compaction/activity event carries the checkpoint summary state and omission counts through session save/recovery, and the Activity Trace renders those counts.
+- Added checkpoint, context-budget, and renderer regressions; they remain queued. No context/output/reasoning value changed, and no model request ran.
+- The app pin now advances to `bb87dc5f6fdee5f0ef8ca89f0312044ad4ee3ecc`; app, sidecar, and engine source are paired at this revision.
 - Added worker, journal-replay, and renderer regressions, including repeated progress updates coalescing to one call row. They remain unrun with the broader verification pass.
 ## 2026-11-01 selected Ollama settings authority (verification queued)
 

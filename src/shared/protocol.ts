@@ -109,6 +109,8 @@ export type ActivityRecord = {
   reason?: string;
   checkpointIncluded?: boolean;
   checkpointEstimate?: number;
+  checkpointCompacted?: boolean;
+  checkpointOmissions?: Record<string, number>;
   promptManifest?: Record<string, unknown>;
   /** Exact provider request fields captured immediately before dispatch. */
   providerRequest?: Record<string, unknown>;

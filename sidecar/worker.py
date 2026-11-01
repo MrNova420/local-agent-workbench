@@ -288,7 +288,10 @@ class AgentService:
                             "inputBudget": int(event.get("inputBudget", 0)), "reason": event.get("reason", ""),
                             "omittedOperationGroups": int(event.get("omittedOperationGroups", 0)),
                             "checkpointIncluded": bool(event.get("checkpointIncluded", False)),
-                            "checkpointEstimate": int(event.get("checkpointEstimate", 0)), "timestamp": time.time()}
+                            "checkpointEstimate": int(event.get("checkpointEstimate", 0)),
+                            "checkpointCompacted": bool(event.get("checkpointCompacted", False)),
+                            "checkpointOmissions": copy.deepcopy(event.get("checkpointOmissions", {})),
+                            "timestamp": time.time()}
                 rows.append(activity)
             elif kind == "prompt_manifest":
                 manifest = {key: copy.deepcopy(value) for key, value in event.items()

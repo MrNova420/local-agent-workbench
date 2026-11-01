@@ -267,7 +267,10 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
             "retainedTurns": event.get("retainedTurns", 0), "configuredContext": event.get("configuredContext", state.get("context")),
             "inputBudget": event.get("inputBudget", 0), "reason": event.get("reason", ""),
             "checkpointIncluded": event.get("checkpointIncluded", False),
-            "checkpointEstimate": event.get("checkpointEstimate", 0), "timestamp": event.get("timestamp", time.time()),
+            "checkpointEstimate": event.get("checkpointEstimate", 0),
+            "checkpointCompacted": event.get("checkpointCompacted", False),
+            "checkpointOmissions": copy.deepcopy(event.get("checkpointOmissions", {})),
+            "timestamp": event.get("timestamp", time.time()),
         })
     elif kind == "prompt_manifest":
         manifest = {key: copy.deepcopy(value) for key, value in event.items()

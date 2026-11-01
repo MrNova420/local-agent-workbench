@@ -4,7 +4,7 @@
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
-**Current paired engine source:** `a846152c539daa235abb6b2d6fa1beb07a1ee851` (unpublished; regressions intentionally queued).
+**Current paired engine source:** `bb87dc5f6fdee5f0ef8ca89f0312044ad4ee3ecc` (unpublished; regressions intentionally queued).
 
 ## Implemented in this source batch
 
@@ -31,6 +31,7 @@
 - An active task that grows beyond the inference input budget can now compact at complete assistant/tool exchange boundaries inside that same user turn. It keeps the task prompt and newest complete exchanges that fit, persists the omitted-group count, and points the model to saved operation IDs. The new read-only `read_operation_result` tool retrieves full saved output or requested character ranges from the captured session; its lookup cannot cross into another session. This preserves the configured context/output settings and canonical history. Regression and visible continuation checks remain queued.
 - ToolRegistry now initializes its plan state before the first inference request; review found the engine accessed the field before the first model `update_plan` call could create it. A queued regression covers the initial empty state.
 - Streamed tool-call preparation now creates a durable activity row using only provider/tool identity and argument size. Repeated token fragments update the same turn/request/call row; complete batches transition it to assembled and provider errors transition it to interrupted. Journal recovery upserts the row, while partial arguments remain absent. Worker, persistence, and renderer regressions are queued.
+- When the saved checkpoint itself becomes large, compaction now creates a separate budgeted inference view. It retains the full disk checkpoint, active goal/plan/settings, recent follow-ups and operation references; every summarized category is counted and exposed through the same persisted context activity row. Context/output/reasoning selections are not adjusted. Regressions are queued.
 - Approved commands stopped after launch or terminated by timeout are now marked `uncertain` because partial file effects may already exist. Their possible effects trigger workspace inspection; the renderer warns before the user treats the result as a clean cancel or definite failure. A queued regression distinguishes these from cancellation before launch.
 - The active-task checkpoint explicitly instructs the model to inspect the saved operation result and workspace before requesting or repeating an uncertain operation; uncertain operations are never automatically replayed. The continuity regression is queued.
 - `read_operation_result` now falls back to the engine's in-memory completed-operation map when running without the desktop's durable session callback, so standalone CLI use does not advertise an unavailable lookup. In the desktop, the captured session store remains authoritative, with engine memory as same-run fallback. Regression queued, not run.

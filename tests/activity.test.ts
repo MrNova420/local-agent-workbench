@@ -5,6 +5,16 @@ import { applyActivityEvent, shouldRefreshWorkspaceForActivity, type ActivityRec
 import { ActivityFeed } from '../src/renderer/ActivityFeed';
 
 describe('durable live activity state', () => {
+  it('shows exactly which checkpoint history categories were summarized', () => {
+    const markup = renderToStaticMarkup(createElement(ActivityFeed, { entries: [{
+      id: 'context-1', turnId: 'turn-1', sessionId: 'session-1', kind: 'context', status: 'compacted',
+      checkpointIncluded: true, checkpointEstimate: 380, checkpointCompacted: true,
+      checkpointOmissions: { operations: 18, user_updates: 7 },
+    }], mode: 'sidebar', surface: 'sidebar' }));
+    expect(markup).toContain('checkpoint history summarized');
+    expect(markup).toContain('operations 18');
+    expect(markup).toContain('user updates 7');
+  });
   it('renders resumable tool preparation without exposing partial arguments', () => {
     const markup = renderToStaticMarkup(createElement(ActivityFeed, { entries: [{
       id: 'tool-call:turn-1:0:0', turnId: 'turn-1', sessionId: 'session-1', kind: 'tool_preparation',
