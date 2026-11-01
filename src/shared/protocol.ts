@@ -2,6 +2,7 @@ export type AccessMode = 'copy' | 'plan' | 'ask' | 'edit';
 export type ApprovalMode = 'per-action' | 'per-task' | 'auto';
 export type ReasoningChoice = boolean | string | null;
 export type HarnessProfile = 'standard' | 'small-model';
+export type SkillSource = 'project' | 'user';
 export type ReasoningCapability = {
   support: 'toggle' | 'levels' | 'unknown' | 'none';
   default: boolean | string | null;
@@ -22,6 +23,8 @@ export type RunOptions = {
   keepAlive: string;
   reasoning: ReasoningChoice;
   harnessProfile: HarnessProfile;
+  skillsEnabled: boolean;
+  skillSources: SkillSource[];
 };
 
 export type WorkerCommand =
@@ -54,6 +57,7 @@ export type WorkerCommand =
   | { command: 'sessions_list'; workspace?: string }
   | { command: 'session_new'; workspace: string; model: string; context: number; activityMode?: ActivityMode }
   | { command: 'session_activity_mode'; sessionId: string; activityMode: ActivityMode }
+  | { command: 'session_run_settings'; sessionId: string; settings: { model: string; context: number; maxTokens: number; temperature: number; access: AccessMode; approvalMode: ApprovalMode; keepAlive: string; reasoning: ReasoningChoice; harnessProfile: HarnessProfile; skillsEnabled: boolean; skillSources: SkillSource[] } }
   | { command: 'session_harness_profile'; sessionId: string; harnessProfile: HarnessProfile }
   | { command: 'session_recover'; sessionId: string; action: 'resume' | 'retry' | 'restore' }
   | { command: 'session_resume'; sessionId: string; workspace?: string; source?: 'app' | 'project' }

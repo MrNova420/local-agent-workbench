@@ -50,6 +50,38 @@ def test_dynamic_models_and_full_advertised_context(service):
     }
 
 
+def test_session_run_settings_persist_skill_controls_and_inference_values(service, tmp_path):
+    workspace = tmp_path / "skill-settings-project"
+    workspace.mkdir()
+    session = service.sessions.create(str(workspace), "model-a:latest", 65536)
+
+    saved = service.handle("session_run_settings", {
+        "sessionId": session["session_id"],
+        "settings": {
+            "model": "model-a:latest", "context": 65536, "maxTokens": 8192,
+            "temperature": 0.2, "access": "ask", "approvalMode": "per-action",
+            "keepAlive": "30m", "reasoning": None, "harnessProfile": "small-model",
+            "skillsEnabled": False, "skillSources": ["project"],
+        },
+    })
+
+    assert saved["skills_enabled"] is False
+    assert saved["skill_sources"] == ["project"]
+    assert saved["context"] == 65536
+    assert saved["max_tokens"] == 8192
+    assert service.sessions.load(session["session_id"], str(workspace))["state"]["skills_enabled"] is False
+
+
+def test_session_run_settings_cannot_change_during_active_run(service, tmp_path):
+    workspace = tmp_path / "busy-project"
+    workspace.mkdir()
+    session = service.sessions.create(str(workspace), "model-a:latest", 65536)
+    service.active = {"session": session}
+
+    with pytest.raises(RuntimeError, match="active"):
+        service.handle("session_run_settings", {"sessionId": session["session_id"], "settings": {}})
+
+
 def test_ollama_preload_uses_requested_context_and_keep_alive_without_starting_inference(service):
     events = []
     service.emit = events.append

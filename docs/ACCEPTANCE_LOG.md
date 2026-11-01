@@ -354,9 +354,11 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 
 ## 2026-11-01 continuity source batch (verification queued)
 
-- The isolated app worktree now pins shared engine `39366c7fcf5efee502e96f00690436e42590c86e`; CI and Windows release workflows use the same pin. Engine commit is local source only and has not been packaged or released.
+- The isolated app worktree now pins shared engine `a0aa798c200c2cbd866428072ffdf74d93997bf7`; CI and Windows release workflows use the same pin. Engine commit is local source only and has not been packaged or released.
 - Added run journals with per-mirror retry state, replayed session-list status, corrupt-journal recovery notices, terminal checkpoint status, and recovery of streamed text/reasoning across provider errors and follow-up model calls. The renderer surfaces journal recovery issues in the Activity Trace.
 - Added regression cases for one-mirror journal retry, malformed journal preservation/reporting, partial response retention, and follow-up request checkpointing. These tests, all broader suites, typecheck, packaging, and visible acceptance remain queued; none were run for this batch.
+- Added Workbench-owned skill enablement/source selection, captured it per run, excluded the skill tool when disabled, and added a sidecar command that persists session run settings. Added queued regressions for source filtering, disabled-skill exclusion, captured turn settings, and session persistence; they have not been run.
+- Run Configuration now writes selected model and settings to both session mirrors rather than relying on the next run to persist them; changes are refused while a task is active. Switching model selection resets reasoning to that model's default before the user chooses an override.
 - No app was opened, no model request was sent, and no context/output/reasoning or runtime placement setting was changed.
 
 ## 2026-10-31 next core-workbench iteration

@@ -124,3 +124,4 @@
 .window-control-buttons button.window-close{font-size:20px}
 .window-control-buttons button.window-close:hover{background:#b83e50;color:white}
 @media(max-width:1220px){.topbar>.top-settings:nth-last-child(2){display:none}.model-control{min-width:170px}.workspace-chip{min-width:125px}}
+.skill-source-choices{display:grid;grid-template-columns:1fr 1fr;gap:8px}.skill-source-choices label{display:flex;align-items:center;gap:7px;min-height:34px;padding:7px 9px;border:1px solid rgba(130,158,184,.14);border-radius:5px;background:rgba(17,25,36,.45);color:#aebdca;font-size:9px}.skill-source-choices input{accent-color:var(--mint)}.skill-source-choices label:has(input:disabled){opacity:.55}

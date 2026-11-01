@@ -97,7 +97,7 @@ Follow [RELEASE_RUNBOOK.md](RELEASE_RUNBOOK.md). Beta.3 was published at the use
 
 ## Core harness work after the current batch
 
-**Current 2026-11-01 source batch:** task checkpoints now reach the inference engine, compaction includes an explicit continuity checkpoint, app/project event journals retry per mirror, and usage/cache/input estimates are persisted for session restoration. Source changes and regression cases are still unverified; tests, typecheck, package, visible UI, and live-model gates remain queued until implementation is complete. The configured model context/output/reasoning settings and runtime placement remain unchanged.
+**Current 2026-11-01 source batch:** task checkpoints now reach the inference engine, compaction includes an explicit continuity checkpoint, app/project event journals retry per mirror, and usage/cache/input estimates are persisted for session restoration. Workbench skill enable/source controls and persistent session run-settings save are now added; disabled skills are excluded from the captured model toolset. Source changes and regression cases are still unverified; tests, typecheck, package, visible UI, and live-model gates remain queued until implementation is complete. The configured model context/output/reasoning settings and runtime placement remain unchanged.
 
 These remain required for the intended capable local coding-agent platform; they are not dropped because the immediate release gate is narrow.
 

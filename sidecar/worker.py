@@ -591,6 +591,52 @@ class AgentService:
             state = self.sessions.load(str(message["sessionId"]))
             state["activity_mode"] = mode
             return self.sessions.save(state)
+        if command == "session_run_settings":
+            if self.active:
+                raise RuntimeError("Run settings cannot be saved while a task is active.")
+            settings = message.get("settings")
+            if not isinstance(settings, dict):
+                raise ValueError("Session run settings must be an object.")
+            context = settings.get("context")
+            max_tokens = settings.get("maxTokens")
+            temperature = settings.get("temperature")
+            if not isinstance(context, int) or isinstance(context, bool) or context < 1024:
+                raise ValueError("Context must be at least 1,024 tokens.")
+            if not isinstance(max_tokens, int) or isinstance(max_tokens, bool) or max_tokens < 1:
+                raise ValueError("Maximum output tokens must be positive.")
+            if not isinstance(temperature, (int, float)) or isinstance(temperature, bool) or not 0 <= float(temperature) <= 2:
+                raise ValueError("Temperature must be between 0 and 2.")
+            model = str(settings.get("model", "")).strip()
+            provider = self.providers.resolve(model)
+            if not any(item.model_id == model for item in provider.models()):
+                raise ValueError("The selected model is no longer installed or registered.")
+            access = str(settings.get("access", ""))
+            approval_mode = str(settings.get("approvalMode", ""))
+            harness_profile = str(settings.get("harnessProfile", ""))
+            skills_enabled = settings.get("skillsEnabled")
+            skill_sources = settings.get("skillSources")
+            if access not in {"copy", "plan", "ask", "edit"} or approval_mode not in {"per-action", "per-task", "auto"}:
+                raise ValueError("Invalid access or approval setting.")
+            if harness_profile not in {"standard", "small-model"} or not isinstance(skills_enabled, bool):
+                raise ValueError("Invalid workflow or skill setting.")
+            if not isinstance(skill_sources, list) or not skill_sources or any(source not in {"project", "user"} for source in skill_sources):
+                raise ValueError("Select at least one valid skill source.")
+            reasoning = settings.get("reasoning")
+            if reasoning is not None:
+                if not isinstance(reasoning, (str, bool)):
+                    raise ValueError("Invalid reasoning choice.")
+                capabilities = self.handle("model_info", {"model": model}).get("reasoning", {})
+                if reasoning not in capabilities.get("values", []):
+                    raise ValueError("The selected model does not advertise that reasoning choice.")
+            state = self.sessions.load(str(message["sessionId"]))
+            state.update(model=model, model_id=model, provider_id=provider.provider_id, provider=provider.provider_id,
+                         context=context, max_tokens=max_tokens, temperature=float(temperature), access=access,
+                         approval_mode="per-action" if approval_mode == "auto" else approval_mode,
+                         keep_alive=str(settings.get("keepAlive", "30m")), reasoning=reasoning,
+                         harness_profile=harness_profile, skills_enabled=skills_enabled,
+                         skill_sources=list(dict.fromkeys(skill_sources)))
+            state["persistence"] = self.sessions.save(state)
+            return state
         if command == "session_harness_profile":
             profile = str(message.get("harnessProfile", "standard"))
             if profile not in {"standard", "small-model"}:
@@ -938,6 +984,13 @@ class AgentService:
         harness_profile = str(options.get("harnessProfile", "standard"))
         if harness_profile not in {"standard", "small-model"}:
             raise ValueError("Invalid harness workflow profile.")
+        skills_enabled = options.get("skillsEnabled", True)
+        skill_sources = options.get("skillSources", ["project", "user"])
+        if not isinstance(skills_enabled, bool):
+            raise ValueError("Skills enabled must be a boolean.")
+        if not isinstance(skill_sources, list) or not skill_sources or any(source not in {"project", "user"} for source in skill_sources):
+            raise ValueError("Select project skills, user skills, or both as skill sources.")
+        skill_sources = list(dict.fromkeys(skill_sources))
         if reasoning is not None:
             if not isinstance(reasoning, (str, bool)):
                 raise ValueError("Invalid reasoning choice.")
@@ -955,6 +1008,7 @@ class AgentService:
             temperature=float(options["temperature"]), keep_alive=str(options.get("keepAlive", "30m")),
             reasoning=reasoning,
             harness_profile=harness_profile,
+            skills_enabled=skills_enabled, skill_sources=skill_sources,
         )
         if state["context"] < 1024 or state["max_tokens"] < 1 or not 0 <= state["temperature"] <= 2:
             raise ValueError("Context, output token, or temperature setting is outside the supported range.")
@@ -989,7 +1043,8 @@ class AgentService:
                 "reasoning": reasoning, "temperature": state["temperature"],
                 "runtime_options": copy.deepcopy(state.get("runtime_options", {})),
                 "harness_profile": harness_profile, "access": access,
-                "approval_mode": approval_mode,
+                "approval_mode": approval_mode, "skills_enabled": skills_enabled,
+                "skill_sources": skill_sources,
             },
             plan=copy.deepcopy(state.get("plan", [])),
         )
@@ -1007,12 +1062,14 @@ class AgentService:
             "partial_thinking": "", "active_operation": None, "tool_batch": None,
             "completed_tool_results": {}, "settings": {"model": model, "provider_id": provider.provider_id,
                 "context": state["context"], "max_tokens": state["max_tokens"], "reasoning": reasoning,
-                "harness_profile": harness_profile},
+                "harness_profile": harness_profile, "skills_enabled": skills_enabled,
+                "skill_sources": skill_sources},
         }
         turn = TurnContext.capture(
             workspace=working, model=model, context=state["context"], access=access,
             approval_mode=approval_mode, max_tokens=state["max_tokens"],
             harness_profile=harness_profile,
+            skills_enabled=skills_enabled, skill_sources=skill_sources,
             temperature=state["temperature"], runtime_options=state.get("runtime_options", {}),
             prompt=prompt, session=state, mcp_tools=list(self.mcp_tools),
         )
@@ -1122,6 +1179,7 @@ class AgentService:
                 harness_profile=turn.harness_profile,
                 mcp_call=lambda name, args: self.mcp.run(self.mcp.call(name, args), cancel_event=controller["cancel"]),
                 task_checkpoint=state["task_checkpoint"],
+                skills_enabled=turn.skills_enabled, skill_sources=turn.skill_sources,
             )
             chosen_runtime = self.providers.runtime_for(turn.model, engine.runtime, state.get("provider_id"))
             engine.runtime = RequestScopedOllama(chosen_runtime)

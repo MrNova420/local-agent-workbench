@@ -35,6 +35,6 @@
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.
 - Add persisted context/input usage presentation and distinguish actual runtime allocation from selected context where the provider exposes it.
-- Continue the approved core harness plan: prompt/skill controls, provider capability reporting, permissions and process containment, developer tooling parity, workflow state, transcript rendering after reopen, and remaining product backlog. See MASTER_ROADMAP.md, CORE_HARNESS_READINESS.md, and PRODUCT_BACKLOG.md.
+- Continue the approved core harness plan: assembled-prompt/source preview and exact skill-inclusion evidence, provider capability reporting, permissions and process containment, developer tooling parity, workflow state, transcript rendering after reopen, and remaining product backlog. Workbench-owned skill enable/source controls are implemented but unverified. See MASTER_ROADMAP.md, CORE_HARNESS_READINESS.md, and PRODUCT_BACKLOG.md.
 
 No live model, app process, OpenCode setting, selected token value, model reasoning default, or runtime placement was changed for this work.

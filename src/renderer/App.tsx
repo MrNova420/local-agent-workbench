@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
-import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
+import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, SkillSource, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
 import { nextRunPhase, restoredRunPhase, runStepProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordInputEstimate, recordStreamedText, restoreRunMetrics, type RunMetrics } from '../shared/run-metrics';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice, readRunTokenPreferences } from '../shared/model-controls';
@@ -38,6 +38,8 @@ type Session = {
   plan?: Array<{ title?: string; text?: string; status?: string }>;
   usage_events?: Array<{ turn_id?: string; first_token_seconds?: number; estimated_input_tokens?: number; usage?: Record<string, unknown> }>;
   recovery_issues?: string[];
+  skills_enabled?: boolean;
+  skill_sources?: SkillSource[];
   run_state?: Record<string, unknown> | null;
 };
 type TraceRow = { id: string; title: string; description?: string; kind: 'tool' | 'status' | 'plan' | 'error'; time: number };
@@ -59,6 +61,13 @@ const initialOptions = {
   approvalMode: 'per-action' as ApprovalMode,
   reasoning: null as boolean | string | null,
   harnessProfile: 'standard' as HarnessProfile,
+  skillsEnabled: localStorage.getItem('agent-skills-enabled') !== 'false',
+  skillSources: (() => {
+    try {
+      const value = JSON.parse(localStorage.getItem('agent-skill-sources') || '["project","user"]');
+      return Array.isArray(value) && value.length && value.every((source) => source === 'project' || source === 'user') ? value as SkillSource[] : ['project', 'user'] as SkillSource[];
+    } catch { return ['project', 'user'] as SkillSource[]; }
+  })(),
 };
 
 function shortPath(value?: string) {
@@ -309,6 +318,8 @@ export default function App() {
         approvalMode: loaded.approval_mode === 'per-task' ? 'per-task' : 'per-action',
         reasoning: loaded.reasoning ?? null,
         harnessProfile: loaded.harness_profile === 'small-model' ? 'small-model' : (localStorage.getItem('agent-harness-profile') === 'small-model' ? 'small-model' : 'standard'),
+        skillsEnabled: loaded.skills_enabled ?? initialOptions.skillsEnabled,
+        skillSources: Array.isArray(loaded.skill_sources) && loaded.skill_sources.every((source) => source === 'project' || source === 'user') ? loaded.skill_sources : initialOptions.skillSources,
       });
       setView('session');
       setRecoverySession(loaded.run_state?.status === 'interrupted' ? loaded : null);
@@ -342,6 +353,8 @@ export default function App() {
       keepAlive: recovered.state.keep_alive || '30m',
       reasoning: (settings.reasoning ?? recovered.state.reasoning ?? null) as boolean | string | null,
       harnessProfile: settings.harness_profile === 'small-model' || recovered.state.harness_profile === 'small-model' ? 'small-model' : 'standard',
+      skillsEnabled: typeof settings.skills_enabled === 'boolean' ? settings.skills_enabled : (recovered.state.skills_enabled ?? initialOptions.skillsEnabled),
+      skillSources: Array.isArray(settings.skill_sources) && settings.skill_sources.every((source) => source === 'project' || source === 'user') ? settings.skill_sources as SkillSource[] : (recovered.state.skill_sources || initialOptions.skillSources),
     };
     setPrompt(''); setRunning(true); setPhase('Recovering interrupted task'); setStartedAt(Date.now()); setElapsed(0);
     try { await request({ command: 'run_start', options: run }); }
@@ -645,6 +658,7 @@ export default function App() {
 
   function selectModel(selectedModel: string) {
     setModel(selectedModel);
+    setOptions((old) => old.reasoning === null ? old : { ...old, reasoning: null });
     if (selectedModel && !selectedModel.startsWith('gguf::')) void preloadSelectedModel(selectedModel);
   }
 
@@ -688,6 +702,7 @@ export default function App() {
       access: options.access, approvalMode: options.approvalMode, keepAlive: options.keepAlive,
       reasoning: normalizeReasoningChoice(options.reasoning, modelInfo?.reasoning ?? null),
       harnessProfile: options.harnessProfile,
+      skillsEnabled: options.skillsEnabled, skillSources: options.skillSources,
     };
     if (options.approvalMode === 'auto') setOptions((current) => ({ ...current, approvalMode: 'per-action' }));
     setMessages((current) => [...current, { role: 'user', content: task }]);
@@ -784,19 +799,30 @@ export default function App() {
   }
 
   async function saveSettings() {
+    if (running) { notify('Run settings cannot be applied to the saved session while its task is active.', 'warn'); return; }
     if (!Number.isInteger(options.context) || options.context < 1024 || !Number.isInteger(options.maxTokens) || options.maxTokens < 1 || options.temperature < 0 || options.temperature > 2) {
       notify('Check the context, output-token, and temperature values.', 'bad'); return;
     }
     localStorage.setItem('agent-activity-default', activityDefault);
     localStorage.setItem('agent-ask-activity', String(askActivityChoice));
     localStorage.setItem('agent-harness-profile', options.harnessProfile);
+    localStorage.setItem('agent-skills-enabled', String(options.skillsEnabled));
+    localStorage.setItem('agent-skill-sources', JSON.stringify(options.skillSources));
     localStorage.setItem('agent-run-token-preferences', JSON.stringify({ context: options.context, maxTokens: options.maxTokens }));
     sessionStorage.setItem('agent-activity-mode', activityMode);
     setSettingsOpen(false);
     if (session) {
-      try { await request({ command: 'session_activity_mode', sessionId: session.session_id, activityMode }); }
-      catch (error) { notify(`Run settings saved, but activity display could not be saved to this session: ${(error as Error).message}`, 'warn'); }
-      setSession({ ...session, activity_mode: activityMode, model, model_id: model, provider_id: model.startsWith('gguf::') ? 'llama.cpp' : 'ollama', context: options.context, access: options.access, approval_mode: options.approvalMode === 'auto' ? 'per-action' : options.approvalMode, reasoning: options.reasoning, max_tokens: options.maxTokens, temperature: options.temperature, keep_alive: options.keepAlive, harness_profile: options.harnessProfile });
+      try {
+        const saved = await request<Session>({ command: 'session_run_settings', sessionId: session.session_id, settings: {
+          model, context: options.context, maxTokens: options.maxTokens, temperature: options.temperature,
+          access: options.access, approvalMode: options.approvalMode, keepAlive: options.keepAlive,
+          reasoning: options.reasoning, harnessProfile: options.harnessProfile,
+          skillsEnabled: options.skillsEnabled, skillSources: options.skillSources,
+        } });
+        const activitySaved = await request<{ app_saved: boolean; project_saved: boolean }>({ command: 'session_activity_mode', sessionId: session.session_id, activityMode });
+        setSession({ ...saved, activity_mode: activityMode });
+        if (!activitySaved.app_saved || !activitySaved.project_saved) notify('Run settings were saved, but one activity-view mirror did not save.', 'warn');
+      } catch (error) { notify(`App defaults were saved, but the selected session settings were not: ${(error as Error).message}`, 'warn'); }
     }
   }
 
@@ -1258,11 +1284,13 @@ function SettingsModal({ model, modelLabel, modelInfo, options, setOptions, acti
     <label className="settings-field"><span>Keep model warm after a request</span><select value={options.keepAlive} onChange={(e) => setOptions((old) => ({ ...old, keepAlive: e.target.value }))}><option value="30m">30 minutes</option><option value="10m">10 minutes</option><option value="5m">5 minutes</option><option value="0">Unload when idle (Ollama setting)</option></select></label>
     <div className="settings-fields select-fields"><label className="settings-field"><span>File access</span><select value={options.access} onChange={(e) => setOptions((old) => ({ ...old, access: e.target.value as AccessMode }))}><option value="copy">Copy workspace</option><option value="plan">Plan only</option><option value="ask">Ask before writes</option><option value="edit">Edit project</option></select></label><label className="settings-field"><span>Approval</span><select value={options.approvalMode} onChange={(e) => setOptions((old) => ({ ...old, approvalMode: e.target.value as ApprovalMode }))}><option value="per-action">Approve each action</option><option value="per-task">Approve for this task</option><option value="auto">Auto-approve actions · this run</option></select>{options.approvalMode === 'auto' && <small className="auto-approve-warning">Skips action prompts for this run. Commands and MCP still run with your Windows account permissions; this setting does not sandbox them to the selected project.</small>}</label></div>
     <label className="settings-field"><span>Harness workflow</span><select value={options.harnessProfile} onChange={(e) => setOptions((old) => ({ ...old, harnessProfile: e.target.value as HarnessProfile }))}><option value="standard">Standard</option><option value="small-model">Small-model workflow</option></select><small>Small-model workflow asks the agent to take shorter, sequential tool steps and inspect each result. It does not change model, context, output tokens, reasoning, temperature, access, or approvals.</small></label>
+    <label className="activity-choice-toggle"><input type="checkbox" checked={options.skillsEnabled} onChange={(event) => setOptions((old) => ({ ...old, skillsEnabled: event.target.checked }))}/><span><b>Allow reusable skills for this app and session</b><small>When enabled, the model may load a relevant skill through its tool. Skill text is untrusted guidance and does not grant permissions.</small></span></label>
+    <div className="settings-field"><span>Skill sources</span><div className="skill-source-choices"><label><input type="checkbox" checked={options.skillSources.includes('project')} disabled={options.skillSources.length === 1 && options.skillSources.includes('project')} onChange={(event) => setOptions((old) => ({ ...old, skillSources: event.target.checked ? [...new Set([...old.skillSources, 'project' as SkillSource])] : old.skillSources.filter((source) => source !== 'project') }))}/><span>Selected project and Git ancestors</span></label><label><input type="checkbox" checked={options.skillSources.includes('user')} disabled={options.skillSources.length === 1 && options.skillSources.includes('user')} onChange={(event) => setOptions((old) => ({ ...old, skillSources: event.target.checked ? [...new Set([...old.skillSources, 'user' as SkillSource])] : old.skillSources.filter((source) => source !== 'user') }))}/><span>User skill folders</span></label></div><small>The selected sources are captured per run. Workbench does not read or change Codex/OpenCode skill settings.</small></div>
     <section className="update-settings" aria-label="Application updates"><div><span className="eyebrow-line">APPLICATION / {updateState.currentVersion}</span><b>{updateState.status === 'downloaded' ? `${updateState.releaseName || 'Update'} is ready` : updateState.status === 'downloading' || updateState.status === 'available' ? 'Downloading update' : updateState.status === 'checking' ? 'Checking GitHub releases…' : updateState.status === 'not-available' ? 'You’re up to date' : updateState.status === 'error' ? 'Update check failed' : updateState.supported ? 'Automatic updates enabled' : 'Updates unavailable in this build'}</b><small>{updateState.error || (updateState.status === 'downloaded' ? 'Restart to apply it. Updates are never installed during an active task.' : updateState.supported ? 'Checks public GitHub releases and downloads in the background. Install is always user-controlled.' : 'Automatic updates are configured for installed Windows x64 builds.')}</small></div><div>{updateState.status === 'downloaded' ? <Button kind="bright" disabled={running} onClick={onInstallUpdate}>{running ? 'Finish active task to update' : 'Restart and update'}</Button> : <Button kind="outline" disabled={!updateState.supported || running || updateState.status === 'checking' || updateState.status === 'downloading'} onClick={onCheckUpdate}>{running ? 'Available when task ends' : updateState.status === 'checking' ? 'Checking…' : 'Check for updates'}</Button>}</div></section>
     <div className="settings-fields select-fields"><label className="settings-field"><span>App-wide activity default</span><select value={activityDefault} onChange={(event) => setActivityDefault(event.target.value as ActivityMode)}><option value="compact">Compact cards · expandable</option><option value="sidebar">Activity sidebar only</option><option value="inline">Full inline output</option></select></label>{hasSession && <label className="settings-field"><span>This session activity view</span><select value={activityMode} onChange={(event) => setActivityMode(event.target.value as ActivityMode)}><option value="compact">Compact cards · expandable</option><option value="sidebar">Activity sidebar only</option><option value="inline">Full inline output</option></select></label>}</div>
     <label className="activity-choice-toggle"><input type="checkbox" checked={askActivityChoice} onChange={(event) => setAskActivityChoice(event.target.checked)}/><span><b>Choose an activity view for each new session</b><small>When off, new sessions use the app-wide default.</small></span></label>
     <div className="settings-bottom"><Button kind="outline" onClick={onMcp}>Configure local MCP</Button><span>Context is never silently reduced.</span></div>
-    <div className="modal-actions"><Button kind="quiet" onClick={onClose}>Cancel</Button><Button kind="bright" onClick={onSave}>Apply to this session</Button></div>
+    <div className="modal-actions"><Button kind="quiet" onClick={onClose}>Cancel</Button><Button kind="bright" disabled={running} onClick={onSave}>{hasSession ? 'Apply to this session' : 'Save app defaults'}</Button></div>
   </Modal>;
 }
 
