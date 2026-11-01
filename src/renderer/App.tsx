@@ -911,9 +911,10 @@ export default function App() {
     };
     if (options.approvalMode === 'auto') setOptions((current) => ({ ...current, approvalMode: 'per-action' }));
     setMessages((current) => [...current, { role: 'user', content: task }]);
-    // Keep the current checklist visible until the sidecar publishes the captured
-    // task's authoritative plan. Same-task continuations do not emit a new seed plan.
-    setTrace([]); setAcceptanceCriteria([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setRunning(true); setPhase('Connecting to Ollama');
+    // Keep the current checklist and criteria visible until the sidecar publishes
+    // the captured task's authoritative plan. Same-task continuations do not emit
+    // a new seed plan.
+    setTrace([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setRunning(true); setPhase('Connecting to Ollama');
     setStartedAt(Date.now()); setElapsed(0); setRunMetrics(emptyRunMetrics());
     try { await request({ command: 'run_start', options: run }); }
     catch (error) {
