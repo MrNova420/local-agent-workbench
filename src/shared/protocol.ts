@@ -121,6 +121,9 @@ export type WorkerResponse = {
 
 export type DesktopApi = {
   request: <T = unknown>(command: WorkerCommand) => Promise<T>;
+  windowControl: (action: 'minimize' | 'maximize' | 'close') => Promise<void>;
+  windowState: () => Promise<boolean>;
+  onWindowState: (listener: (maximized: boolean) => void) => () => void;
   onEvent: (listener: (event: WorkerEvent) => void) => () => void;
   onCloseDecision: (listener: () => void) => () => void;
   resolveCloseChoice: (choice: 'keep' | 'hide' | 'cancel-close') => Promise<void>;

@@ -4,10 +4,13 @@ export type PersistedTranscriptRow = {
   thinking?: unknown;
 };
 
+export type PersistedTranscriptTurn = { turn_id?: string };
+
 export type TranscriptMessage = {
   role: 'user' | 'assistant';
   content: string;
   thinking?: string;
+  turnId?: string;
 };
 
 export function appendTranscriptSegment(previous: string, chunk: string, separatedByTool: boolean): string {
@@ -16,12 +19,18 @@ export function appendTranscriptSegment(previous: string, chunk: string, separat
   return previous + separator + chunk;
 }
 
-export function restoreTranscriptMessages(rows: PersistedTranscriptRow[]): TranscriptMessage[] {
-  return rows
-    .filter((row) => (row.role === 'user' || row.role === 'assistant') && typeof row.content === 'string' && row.content.length > 0)
-    .map((row) => ({
-      role: row.role as TranscriptMessage['role'],
-      content: row.content!,
+export function restoreTranscriptMessages(rows: PersistedTranscriptRow[], turns: PersistedTranscriptTurn[] = []): TranscriptMessage[] {
+  let userTurnIndex = 0;
+  const restored: TranscriptMessage[] = [];
+  for (const row of rows) {
+    if ((row.role !== 'user' && row.role !== 'assistant') || typeof row.content !== 'string' || row.content.length === 0) continue;
+    const turnId = row.role === 'user' ? turns[userTurnIndex++]?.turn_id : undefined;
+    restored.push({
+      role: row.role,
+      content: row.content,
       thinking: typeof row.thinking === 'string' ? row.thinking : undefined,
-    }));
+      turnId,
+    });
+  }
+  return restored;
 }

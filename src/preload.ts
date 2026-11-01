@@ -3,6 +3,13 @@ import type { AppUpdateState, DesktopApi, WorkerCommand, WorkerEvent } from './s
 
 const api: DesktopApi = {
   request: <T>(command: WorkerCommand) => ipcRenderer.invoke('agent:request', command) as Promise<T>,
+  windowControl: (action) => ipcRenderer.invoke('app:window-control', action) as Promise<void>,
+  windowState: () => ipcRenderer.invoke('app:window-state') as Promise<boolean>,
+  onWindowState: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, maximized: boolean) => listener(maximized);
+    ipcRenderer.on('app:window-state', handler);
+    return () => ipcRenderer.removeListener('app:window-state', handler);
+  },
   onEvent: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: WorkerEvent) => listener(payload);
     ipcRenderer.on('agent:event', handler);

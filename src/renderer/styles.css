@@ -111,3 +111,16 @@
 @media(max-width:900px){.first-run-guide{grid-template-columns:1fr}.first-run-steps{grid-template-columns:1fr}.first-run-steps>span,.first-run-steps>button{min-height:auto}.update-settings{grid-template-columns:1fr}}
 .activity-approval{border:1px solid rgba(225,184,119,.24);border-radius:3px;padding:2px 5px;color:#d8b777;font:7px var(--mono);letter-spacing:.03em}.activity-approval-approved{border-color:rgba(125,232,192,.23);color:#91d8b5}.activity-approval-denied,.activity-approval-cancelled{border-color:rgba(231,126,143,.25);color:#e29aa5}
 .model-preload-button{flex:none;padding:6px 7px;border:1px solid rgba(125,232,192,.24);border-radius:5px;background:rgba(48,91,78,.16);color:#a8e1ca;font:7px var(--mono);letter-spacing:.06em;cursor:pointer}.model-preload-button:hover:not(:disabled){border-color:rgba(125,232,192,.5);background:rgba(48,91,78,.3)}.model-preload-button:disabled{opacity:.5;cursor:default}
+
+/* Native titlebar controls stay out of the way until the top-right edge is reached. */
+.topbar{padding-right:158px}
+.window-control-hotspot{position:fixed;z-index:30;top:0;right:0;width:148px;height:42px;padding:5px 8px 5px 18px;display:flex;justify-content:flex-end;align-items:flex-start;-webkit-app-region:no-drag}
+.window-control-buttons{display:flex;gap:3px;opacity:0;visibility:hidden;transform:translateY(-3px);transition:opacity .12s ease,transform .12s ease,visibility .12s;pointer-events:none}
+.window-control-hotspot.is-revealed .window-control-buttons{opacity:1;visibility:visible;transform:translateY(0);pointer-events:auto}
+.window-control-buttons button{display:grid;place-items:center;width:34px;height:29px;border:0;border-radius:5px;background:rgba(21,31,43,.94);color:#c4d0dc;font:16px/1 'Segoe UI',sans-serif;cursor:pointer}
+.window-control-buttons button:hover{background:rgba(94,119,140,.34)}
+.window-control-buttons button>span{width:10px;height:10px;border:1px solid currentColor}
+.window-control-buttons button>span.restore-glyph{width:10px;height:9px;border:1px solid currentColor;box-shadow:2px -2px 0 -1px #131d29,2px -2px 0 0 currentColor}
+.window-control-buttons button.window-close{font-size:20px}
+.window-control-buttons button.window-close:hover{background:#b83e50;color:white}
+@media(max-width:1220px){.topbar>.top-settings:nth-last-child(2){display:none}.model-control{min-width:170px}.workspace-chip{min-width:125px}}

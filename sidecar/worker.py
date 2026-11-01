@@ -880,10 +880,16 @@ class AgentService:
             state["working_workspace"] = str(source)
             state.pop("copy_manifest", None)
         turn_id = uuid.uuid4().hex
+        turn_started_at = time.time()
         state.setdefault("activity_events", [])
         state.setdefault("plan", [])
+        turn_records = state.setdefault("turns", [])
+        if not isinstance(turn_records, list):
+            turn_records = state["turns"] = []
+        turn_records.append({"turn_id": turn_id, "prompt": prompt, "started_at": turn_started_at,
+                             "workspace": str(working), "approval_mode": approval_mode, "status": "running"})
         state["run_state"] = {
-            "status": "running", "turn_id": turn_id, "prompt": prompt, "started_at": time.time(),
+            "status": "running", "turn_id": turn_id, "prompt": prompt, "started_at": turn_started_at,
             "safe_messages": copy.deepcopy(state.get("messages", [])), "partial_content": "",
             "partial_thinking": "", "active_operation": None, "tool_batch": None,
             "completed_tool_results": {}, "settings": {"model": model, "provider_id": provider.provider_id,
@@ -905,6 +911,7 @@ class AgentService:
         saved = self.sessions.save(controller["session"])
         if not saved["project_saved"]:
             self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "error": saved["error"] or "Project session mirror is unavailable."})
+        self.emit({"type": "run_started", "sessionId": state["session_id"], "turnId": turn_id})
         thread = threading.Thread(target=self._run_turn, args=(controller, turn), name="agent-run", daemon=True)
         controller["thread"] = thread
         thread.start()
@@ -912,8 +919,17 @@ class AgentService:
     def _run_turn(self, controller: dict[str, Any], turn: TurnContext) -> None:
         state = controller["session"]
         relay = AgentEventRelay(lambda event: self._publish_run_event(controller, turn, event))
+
+        def update_turn_record(status: str) -> None:
+            for record in reversed(state.get("turns", [])):
+                if isinstance(record, dict) and record.get("turn_id") == controller["turn_id"]:
+                    record.update(status=status, finished_at=time.time())
+                    break
+
         try:
             if controller["cancel"].is_set():
+                update_turn_record("cancelled")
+                self.sessions.save(state)
                 self.emit({"type": "cancelled", "elapsed": 0, "sessionId": state["session_id"]})
                 return
             mcp_tools = list(turn.mcp_tools)
@@ -991,11 +1007,11 @@ class AgentService:
                 run_state["safe_messages"] = copy.deepcopy(messages)
                 run_state["partial_content"] = ""
                 run_state["partial_thinking"] = ""
+                update_turn_record(str(run_state["status"]))
             if terminal and terminal.get("type") == "error":
                 state["last_error"] = {"message": str(terminal.get("error", "Run failed.")), "occurred_at": time.time()}
             else:
                 state.pop("last_error", None)
-            state.setdefault("turns", []).append({"prompt": turn.prompt, "started_at": time.time(), "workspace": str(turn.workspace), "approval_mode": turn.approval_mode})
             state["working_workspace"] = str(turn.workspace)
             if turn.access == "copy":
                 state["copy_manifest"] = state.get("copy_manifest") or capture_manifest(turn.workspace)
@@ -1006,6 +1022,7 @@ class AgentService:
             relay.emit_terminal_after_persist()
         except Exception as exc:
             state["messages"] = state.get("messages", [])
+            update_turn_record("failed")
             if isinstance(state.get("run_state"), dict):
                 state["run_state"]["status"] = "failed"
                 state["run_state"]["active_operation"] = None

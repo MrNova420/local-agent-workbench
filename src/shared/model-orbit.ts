@@ -53,6 +53,9 @@ export function buildModelOrbitSlots(
   labels: Record<string, string>,
   selectedModel: string,
 ): ModelOrbitSlot[] {
+  // The source catalog may contain the same installed model through multiple
+  // provider views. Give each unique local model exactly one stable marker.
+  modelIds = [...new Set(modelIds.filter((id) => typeof id === 'string' && id.trim()))].sort((a, b) => a.localeCompare(b));
   const ringCounts = Array.from({ length: ORBIT_COUNT }, (_, ring) =>
     modelIds.reduce((total, _id, index) => total + Number(index % ORBIT_COUNT === ring), 0),
   );

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
 import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
 import { nextRunPhase, restoredRunPhase, runStepProgress } from '../shared/run-state';
@@ -13,7 +13,7 @@ import { DEFAULT_RUN_SHEET_LAYOUT, moveRunSheetPanel, normalizeRunSheetLayout, r
 import { nextHarnessProfile } from '../shared/harness-profile';
 import { isNearTranscriptEnd } from '../shared/transcript-follow';
 
-type ChatMessage = { role: 'user' | 'assistant'; content: string; thinking?: string; streaming?: boolean; recoveredPartial?: boolean };
+type ChatMessage = { role: 'user' | 'assistant'; content: string; turnId?: string; thinking?: string; streaming?: boolean; recoveredPartial?: boolean };
 type Session = {
   session_id: string;
   workspace: string;
@@ -34,6 +34,7 @@ type Session = {
   last_error?: { message: string; occurred_at: number };
   activity_mode?: ActivityMode;
   activity_events?: ActivityRecord[];
+  turns?: Array<{ turn_id?: string; prompt?: string; started_at?: number; finished_at?: number; status?: string }>;
   plan?: Array<{ title?: string; text?: string; status?: string }>;
   run_state?: Record<string, unknown> | null;
 };
@@ -90,6 +91,33 @@ function Icon({ name }: { name: 'spark' | 'folder' | 'arrow' | 'close' | 'play' 
 
 function Button({ children, onClick, kind = 'quiet', disabled, title, className = '' }: { children: React.ReactNode; onClick?: () => void; kind?: 'quiet' | 'bright' | 'outline' | 'danger'; disabled?: boolean; title?: string; className?: string }) {
   return <button className={`button button-${kind} ${className}`} onClick={onClick} disabled={disabled} title={title}>{children}</button>;
+}
+
+function WindowControls() {
+  const [maximized, setMaximized] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    const unsubscribe = window.agent.onWindowState(setMaximized);
+    void window.agent.windowState().then(setMaximized).catch(() => undefined);
+    return unsubscribe;
+  }, []);
+  const run = (action: 'minimize' | 'maximize' | 'close') => {
+    void window.agent.windowControl(action).catch((error) => console.error('Window control failed:', error));
+  };
+  return <div
+    className={`window-control-hotspot${revealed ? ' is-revealed' : ''}`}
+    onMouseEnter={() => setRevealed(true)}
+    onMouseLeave={() => setRevealed(false)}
+    onFocus={() => setRevealed(true)}
+    onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setRevealed(false); }}
+    aria-label="Window controls"
+  >
+    <div className="window-control-buttons">
+      <button type="button" onClick={() => run('minimize')} aria-label="Minimize window" title="Minimize">−</button>
+      <button type="button" onClick={() => run('maximize')} aria-label={maximized ? 'Restore window' : 'Maximize window'} title={maximized ? 'Restore' : 'Maximize'}><span className={maximized ? 'restore-glyph' : ''}/></button>
+      <button type="button" className="window-close" onClick={() => run('close')} aria-label="Close window" title="Close">×</button>
+    </div>
+  </div>;
 }
 
 function SheetPanelControls({ panel, layout, onMove, onResize }: { panel: RunSheetPanel; layout: RunSheetLayout; onMove: (panel: RunSheetPanel, direction: -1 | 1) => void; onResize: (panel: RunSheetPanel, direction: -1 | 1) => void }) {
@@ -170,21 +198,21 @@ export default function App() {
 
   const request = useCallback(async <T,>(command: WorkerCommand): Promise<T> => window.agent.request<T>(command), []);
 
-  const refreshModels = useCallback(async () => {
-    setConnected('checking');
+  const refreshModels = useCallback(async (quiet = false) => {
+    if (!quiet) setConnected('checking');
     try {
       const catalog = await request<ModelCatalog>({ command: 'model_catalog' });
-      const rows = [...catalog.ollama, ...catalog.gguf.map((entry) => entry.id)];
+      const rows = [...new Set([...catalog.ollama, ...catalog.gguf.map((entry) => entry.id)].filter(Boolean))].sort((a, b) => a.localeCompare(b));
       setModels(rows);
       setModelLabels(Object.fromEntries(catalog.gguf.map((entry) => [entry.id, entry.label])));
       setConnected(catalog.ollama_error ? 'no' : 'yes');
       setModel((current) => chooseDefaultModel(rows, current));
-      if (catalog.ollama_error && !catalog.gguf.length) notify(`Ollama is not reachable: ${catalog.ollama_error}`, 'bad');
-      else if (!catalog.ollama_error && !rows.length) notify('Ollama is connected, but no models are installed.', 'warn');
+      if (!quiet && catalog.ollama_error && !catalog.gguf.length) notify(`Ollama is not reachable: ${catalog.ollama_error}`, 'bad');
+      else if (!quiet && !catalog.ollama_error && !rows.length) notify('Ollama is connected, but no models are installed.', 'warn');
     } catch (error) {
       setConnected('no');
       setModels([]);
-      notify(`Ollama is not reachable: ${(error as Error).message}`, 'bad');
+      if (!quiet) notify(`Ollama is not reachable: ${(error as Error).message}`, 'bad');
     }
   }, [notify, request]);
 
@@ -238,13 +266,22 @@ export default function App() {
       setPhase(restoredRunPhase(loaded.run_state?.status));
       const root = loaded.workspace;
       setModel(loaded.model);
-      const rows: ChatMessage[] = restoreTranscriptMessages(loaded.messages);
+      const rows: ChatMessage[] = restoreTranscriptMessages(loaded.messages, loaded.turns);
       setWorkspace(root);
       localStorage.setItem('agent-workspace', root);
       setSession(loaded);
       const partial = typeof loaded.run_state?.partial_content === 'string' ? loaded.run_state.partial_content : '';
       const partialThinking = typeof loaded.run_state?.partial_thinking === 'string' ? loaded.run_state.partial_thinking : '';
-      if (loaded.run_state?.status === 'interrupted' && (partial || partialThinking)) rows.push({ role: 'assistant', content: partial, thinking: partialThinking, recoveredPartial: true });
+      if (loaded.run_state?.status === 'interrupted') {
+        const interruptedTurnId = typeof loaded.run_state.turn_id === 'string' ? loaded.run_state.turn_id : undefined;
+        if (typeof loaded.run_state.prompt === 'string') {
+          const alreadyPresent = interruptedTurnId
+            ? rows.some((row) => row.role === 'user' && row.turnId === interruptedTurnId)
+            : rows.at(-1)?.role === 'user' && rows.at(-1)?.content === loaded.run_state.prompt;
+          if (!alreadyPresent) rows.push({ role: 'user', content: loaded.run_state.prompt, turnId: interruptedTurnId });
+        }
+        if (partial || partialThinking) rows.push({ role: 'assistant', content: partial, thinking: partialThinking, turnId: interruptedTurnId, recoveredPartial: true });
+      }
       setMessages(rows);
       setActivities(Array.isArray(loaded.activity_events) ? loaded.activity_events : []);
       setPlan(Array.isArray(loaded.plan) ? loaded.plan : []);
@@ -274,10 +311,11 @@ export default function App() {
     const recovered = await request<{ state: Session; prompt?: string; action: string }>({ command: 'session_recover', sessionId: recoverySession.session_id, action });
     setRecoverySession(null);
     setSession(recovered.state);
-    const restored: ChatMessage[] = restoreTranscriptMessages(recovered.state.messages);
+    const restored: ChatMessage[] = restoreTranscriptMessages(recovered.state.messages, recovered.state.turns);
     const partial = typeof recovered.state.run_state?.partial_content === 'string' ? recovered.state.run_state.partial_content : '';
     const partialThinking = typeof recovered.state.run_state?.partial_thinking === 'string' ? recovered.state.run_state.partial_thinking : '';
-    if (partial || partialThinking) restored.push({ role: 'assistant', content: partial, thinking: partialThinking, recoveredPartial: true });
+    if (action !== 'restore' && recovered.prompt) restored.push({ role: 'user', content: recovered.prompt });
+    if (partial || partialThinking) restored.push({ role: 'assistant', content: partial, thinking: partialThinking, turnId: typeof recovered.state.run_state?.turn_id === 'string' ? recovered.state.run_state.turn_id : undefined, recoveredPartial: true });
     setMessages(restored);
     setActivities(Array.isArray(recovered.state.activity_events) ? recovered.state.activity_events : []);
     if (action === 'restore' || !recovered.prompt) return;
@@ -348,6 +386,16 @@ export default function App() {
           const root = activityEvent.activity.workspace || workspace;
           if (root && root === workspace) void refreshWorkspace(root).catch((error) => notify(`Workspace files could not refresh after ${activityEvent.activity?.name || 'the operation'}: ${(error as Error).message}`, 'warn'));
         }
+      }
+      if (event.type === 'run_started' && typeof event.turnId === 'string') {
+        setMessages((current) => {
+          let index = current.length - 1;
+          while (index >= 0 && (current[index].role !== 'user' || current[index].turnId)) index -= 1;
+          if (index < 0) return current;
+          const next = current.slice();
+          next[index] = { ...next[index], turnId: event.turnId as string };
+          return next;
+        });
       }
       if (event.type === 'tool_batch') assistantSegmentBreakRef.current = true;
       if (event.type === 'session_mirror_error') notify(`The app copy is saved, but the project mirror failed: ${String(event.error || 'unavailable')}`, 'warn');
@@ -460,6 +508,12 @@ export default function App() {
     const unsubscribeClose = window.agent.onCloseDecision(() => setCloseChoiceOpen(true));
     return () => { unsubscribe(); unsubscribeClose(); unsubscribeUpdate(); };
   }, [notify, refreshHome, refreshModels, refreshWorkspaceHistory, request, workspace]);
+
+  useEffect(() => {
+    if (view !== 'landing') return;
+    const timer = window.setInterval(() => void refreshModels(true), 30_000);
+    return () => window.clearInterval(timer);
+  }, [refreshModels, view]);
 
   useEffect(() => {
     const onShortcut = (event: KeyboardEvent) => {
@@ -716,6 +770,7 @@ export default function App() {
   const readyToRun = installed && connected === 'yes' && !!workspace && !!session && !!model && !!prompt.trim() && !running && !modelPreloading;
 
   return <div className="app-shell">
+    <WindowControls />
     <header className="topbar drag-region">
       <div className="brand-lockup no-drag">
         <div className="brand-orbit"><i/><b/><em/></div>
@@ -919,6 +974,16 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
 }) {
   const transcriptRef = useRef<HTMLDivElement>(null);
   const [followTranscript, setFollowTranscript] = useState(true);
+  const activitiesByTurn = useMemo(() => {
+    const grouped = new Map<string, ActivityRecord[]>();
+    for (const activity of activities) {
+      if (!activity.turnId) continue;
+      const rows = grouped.get(activity.turnId) || [];
+      rows.push(activity);
+      grouped.set(activity.turnId, rows);
+    }
+    return grouped;
+  }, [activities]);
   const [sheetLayout, setSheetLayout] = useState<RunSheetLayout>(() => {
     try { return normalizeRunSheetLayout(JSON.parse(localStorage.getItem('agent-run-sheet-layout') || 'null')); }
     catch { return DEFAULT_RUN_SHEET_LAYOUT; }
@@ -944,11 +1009,11 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
     <div className="task-route" aria-label="Task execution phases">{steps.map((step, index) => <div className={`route-step ${index < currentStep ? 'done' : ''} ${index === currentStep ? 'current' : ''}`} key={step}><span className="route-node">{index < currentStep ? <Icon name="check"/> : `0${index + 1}`}</span><span>{step === 'Waiting for first token' ? 'Prefill / waiting' : step}</span></div>)}</div>
     <div className="session-main-grid">
       <section className="transcript-plane" aria-label="Conversation transcript">
-        {!messages.length ? <div className="transcript-empty"><div className="empty-symbol"><Icon name="spark"/></div><span className="eyebrow-line">NEW WORK UNIT / {shortPath(root).toUpperCase()}</span><h2>What should we<br/>work through?</h2><p>The model sees selected, relevant project files as needed. You control any action that can change the workspace.</p><div className="starter-prompts"><button onClick={() => setPrompt('Inspect this project and explain its architecture and how to run it.')}>Map the project <Icon name="arrow"/></button><button onClick={() => setPrompt('Review this project for the highest-priority bug and propose a fix.')}>Find a bug <Icon name="arrow"/></button><button onClick={() => setPrompt('Add a focused feature to this project and verify it with the existing tests.')}>Build a feature <Icon name="arrow"/></button></div></div> : <div className="message-list" ref={transcriptRef} onScroll={updateTranscriptFollow}>{messages.map((message, index) => <article className={`message-card message-${message.role}`} key={`${index}-${message.role}`}>
+        {!messages.length ? <div className="transcript-empty"><div className="empty-symbol"><Icon name="spark"/></div><span className="eyebrow-line">NEW WORK UNIT / {shortPath(root).toUpperCase()}</span><h2>What should we<br/>work through?</h2><p>The model sees selected, relevant project files as needed. You control any action that can change the workspace.</p><div className="starter-prompts"><button onClick={() => setPrompt('Inspect this project and explain its architecture and how to run it.')}>Map the project <Icon name="arrow"/></button><button onClick={() => setPrompt('Review this project for the highest-priority bug and propose a fix.')}>Find a bug <Icon name="arrow"/></button><button onClick={() => setPrompt('Add a focused feature to this project and verify it with the existing tests.')}>Build a feature <Icon name="arrow"/></button></div></div> : <div className="message-list" ref={transcriptRef} onScroll={updateTranscriptFollow}>{messages.map((message, index) => <Fragment key={`${message.turnId || 'legacy'}-${index}-${message.role}`}><article className={`message-card message-${message.role}`}>
           <div className="message-meta"><span className={`speaker-mark ${message.role}`}>{message.role === 'user' ? 'YOU' : <Icon name="spark"/>}</span><strong>{message.role === 'user' ? 'Task brief' : 'Local agent'}</strong><span>{message.recoveredPartial ? 'PARTIAL · INTERRUPTED' : message.role === 'user' ? 'INPUT' : message.streaming ? 'LIVE OUTPUT' : 'RESPONSE'}</span>{message.streaming && <i className="stream-pulse"/>}</div>
           <div className="message-content"><Markdown content={message.content}/></div>
           {message.thinking && <details className="reasoning-trace"><summary>Model reasoning · {message.thinking.length.toLocaleString()} characters</summary><div>{message.thinking}</div></details>}
-        </article>)}<ActivityFeed entries={activities} mode={activityMode} surface="chat"/><div ref={endRef}/>{!followTranscript && <button className="jump-latest" onClick={() => { setFollowTranscript(true); if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight; }} aria-label="Jump to latest message">↓ Latest</button>}</div>}
+        </article>{message.role === 'user' && message.turnId && <ActivityFeed entries={activitiesByTurn.get(message.turnId) || []} mode={activityMode} surface="chat"/>}</Fragment>)}<div ref={endRef}/>{!followTranscript && <button className="jump-latest" onClick={() => { setFollowTranscript(true); if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight; }} aria-label="Jump to latest message">↓ Latest</button>}</div>}
         <div className="composer-shell">
           <div className="composer-profile"><span className={`profile-chip access-${options.access}`}>{options.access.toUpperCase()}</span><span className="profile-chip approval-chip">{options.approvalMode === 'auto' ? 'AUTO APPROVE · THIS RUN' : options.approvalMode === 'per-task' ? 'PER TASK' : 'PER ACTION'}</span><span className="profile-chip capability-chip" title="Capability reported by the selected local runtime; support metadata may be unknown">TOOLS {modelInfo?.tool_support === 'supported' ? 'SUPPORTED' : modelInfo?.tool_support === 'unsupported' ? 'UNSUPPORTED' : 'UNKNOWN'}</span><button className={`profile-toggle ${options.harnessProfile === 'small-model' ? 'is-active' : ''}`} type="button" aria-pressed={options.harnessProfile === 'small-model'} title="Changes agent workflow guidance only; model settings and token limits stay unchanged" onClick={onToggleHarnessProfile} disabled={running}>Small-model {options.harnessProfile === 'small-model' ? 'on' : 'off'}</button><span className="profile-hint">{fmt(options.context)} context · {fmt(options.maxTokens)} output</span><button onClick={onSettings}>Adjust run</button></div>
           <textarea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={onEnter} placeholder="Describe the work. Use Shift + Enter to add detail…" rows={3} disabled={running} aria-label="Task prompt"/>

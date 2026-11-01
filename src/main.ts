@@ -216,13 +216,20 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1510, height: 990, minWidth: 1080, minHeight: 700,
     backgroundColor: '#080B12', title: 'Local Agent Workbench',
-    titleBarStyle: 'hidden', titleBarOverlay: { color: '#0B101B', symbolColor: '#DCE6F2', height: 42 },
+    titleBarStyle: 'hidden',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true,
     },
   });
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  const publishWindowState = () => {
+    const window = mainWindow;
+    if (window && !window.isDestroyed()) window.webContents.send('app:window-state', window.isMaximized());
+  };
+  mainWindow.on('maximize', publishWindowState);
+  mainWindow.on('unmaximize', publishWindowState);
+  mainWindow.webContents.once('did-finish-load', publishWindowState);
   mainWindow.on('close', (event) => {
     if (quitting || !service.isRunActive()) return;
     event.preventDefault();
@@ -255,6 +262,15 @@ app.whenReady().then(async () => {
 
   service.onEvent((event) => mainWindow?.webContents.send('agent:event', event));
   ipcMain.handle('agent:request', async (event, command: WorkerCommand) => { assertTrusted(event); return service.request(command); });
+  ipcMain.handle('app:window-state', (event) => { assertTrusted(event); return mainWindow?.isMaximized() ?? false; });
+  ipcMain.handle('app:window-control', (event, action: unknown) => {
+    assertTrusted(event);
+    if (action !== 'minimize' && action !== 'maximize' && action !== 'close') throw new Error('Invalid window action.');
+    if (!mainWindow) return;
+    if (action === 'minimize') mainWindow.minimize();
+    else if (action === 'maximize') mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
+    else mainWindow.close();
+  });
   ipcMain.handle('app:choose-workspace', async (event) => {
     assertTrusted(event);
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory'], title: 'Choose a project workspace' });
