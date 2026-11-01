@@ -23,7 +23,9 @@ The first-run checklist in the app reports runtime, model, and workspace readine
 
 These saved historical screenshots are included to show earlier product states. They are not screenshots of the release candidate:
 
-The early Home concept explored the orbital visual language that later informed the adaptive local-model display. This crop shows the previous static version; it does not represent the current interactive model slots:
+### Home hero and local-model orbit
+
+This saved Home hero screenshot is included as the visual reference for the local-AI orbit. It is an older static capture: its decorative dots do **not** prove the live installed-model count, one-dot-per-model behavior, or click-to-inspect interaction. Those live behaviors are tracked and will be shown with a fresh release-candidate capture after verification:
 
 ![Historical Home orbit concept](docs/screenshots/history/home-orbit-concept-2026-10-31.png)
 

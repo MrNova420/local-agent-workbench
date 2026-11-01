@@ -4,6 +4,9 @@ All notable user-facing changes are recorded here. This project is in unstable b
 
 ## Unreleased
 
+- Correlated chat activity to its originating turn so tool steps appear alongside the task that caused them and remain attached after session restoration.
+- Deduplicated and stably arranged Home model markers, with installed-model catalog refresh while Home is open; zero installed models still means zero model dots.
+- Added top-right hover-revealed minimize, maximize/restore, and close controls while preserving the app's running-task close decision.
 - Refined chat tool activity into small clickable text rows with expandable full operation details; the worksheet Activity Trace remains a detailed panel.
 
 ## 0.1.0-beta.2 — 2026-10-31

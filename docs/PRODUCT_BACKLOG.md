@@ -128,7 +128,7 @@ The app and shared engine have independent public MIT-licensed Git repositories 
 
 ### B-015: Chat reading continuity and concise tool activity
 
-**Status:** Scroll-follow is implemented. Chat activity is being refined from compact cards into clickable text rows; package/UI acceptance and session-resume checks are queued.
+**Status:** Source now places each operation feed below its originating turn and persists turn IDs for resume. Compact clickable rows remain the default; automated and packaged visual acceptance are queued.
 
 - Keep the transcript at the end only while the reader is already following live output. Show a jump-to-latest control after they scroll into earlier messages; restore follow mode when they return to the end.
 - In chat, show each operation as a small clickable text line (action, affected path when available, and state), not a bordered panel. Expand that line on demand to see full arguments, output, results, and affected files. Keep the worksheet Activity Trace detailed and unchanged.
@@ -137,7 +137,7 @@ The app and shared engine have independent public MIT-licensed Git repositories 
 
 ### B-016: Accurate model-orbit home visualization
 
-**Status:** Adaptive slot layout and model-detail popover exist in source; visible click acceptance pending.
+**Status:** Source catalog is deduplicated and stable-sorted, with the Home catalog refreshed every 30 seconds while visible. Each unique installed local model maps to one clickable marker; visible count/click acceptance remains queued.
 
 - Render one interactive marker per installed local model; render zero model markers when no models are installed. Ring outlines remain decoration only and do not imply models.
 - Clicking a marker opens that model's metadata without loading it. Escape and clicking outside dismiss the card.
@@ -149,6 +149,13 @@ The app and shared engine have independent public MIT-licensed Git repositories 
 
 - Add real screenshots from the exact rebuilt release candidate: Home/model orbit, chat with compact live activity, and the worksheet showing plan, trace, and resource readings.
 - Keep historical screenshots clearly labeled and ensure captures contain no private project paths or credentials.
+
+### B-018: Hover-revealed desktop window controls
+
+**Status:** Source implementation added; native packaged interaction remains unverified.
+
+- Hide minimize, maximize/restore, and close controls during normal use. Reveal them only in the top-right edge hotspot; reserve header space so they cannot overlap application actions.
+- Route close through the existing required running-task close decision. Validate hover, keyboard focus, maximize/restore state, and window close behavior in the packaged app.
 ### B-011: Provider-accurate live KV-cache telemetry
 
 **Priority:** High; telemetry is implemented in source in both runtime adapters, with end-to-end packaged evidence pending.
