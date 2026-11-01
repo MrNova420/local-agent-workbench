@@ -478,6 +478,24 @@ def test_tool_call_progress_is_live_but_not_journaled_or_saved(service, tmp_path
     assert not any(event.get("type") == "tool_call_progress" for event in saved.get("run_state", {}).get("events", []))
 
 
+def test_tool_catalog_exposes_mcp_schema_capability_warning(service):
+    service.mcp.servers = {"demo": {"command": "demo"}}
+    service.mcp.clients["demo"] = (object(), object())
+    service.mcp.schema_warnings = {"mcp__demo__schedule": ["$.properties.when.format: unsupported keyword"]}
+    service.mcp_tools = [{"type": "function", "function": {"name": "mcp__demo__schedule",
+                          "description": "create a schedule [validation does not support format]",
+                          "parameters": {"type": "object"}}}]
+
+    catalog = service.handle("tool_catalog", {})
+
+    row = next(tool for tool in catalog["tools"] if tool["name"] == "mcp__demo__schedule")
+    server = next(item for item in catalog["mcpServers"] if item["name"] == "demo")
+    integration = next(item for item in catalog["integrations"] if item["name"] == "Local and remote MCP tools")
+    assert "format" in row["description"]
+    assert "does not support" in server["detail"]
+    assert "1 discovered tool schema" in integration["detail"]
+
+
 def test_run_errors_are_persisted_as_rehydratable_activity(service, tmp_path, monkeypatch):
     project = tmp_path / "error-activity-project"
     project.mkdir()

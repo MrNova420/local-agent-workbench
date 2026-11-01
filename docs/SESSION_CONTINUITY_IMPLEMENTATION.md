@@ -42,10 +42,11 @@
 8. Verify prompt provenance emits before every actual model request, survives mirrored journal replay without duplicates, matches the provider messages/tool names and exact included skills, and remains visibly expandable in chat and the Live Work Sheet after app/session relaunch.
 9. Verify cached prompt-token reporting for Ollama and llama.cpp and distinguish provider-exact counts from estimates in the UI.
 10. Run the full engine, sidecar, renderer, typecheck, packaged-app, and visible acceptance gates only after all implementation work is complete.
+11. Configure a mocked MCP tool with nested unsupported keywords and verify discovery reports the exact schema capability gap, Tool Catalog shows the server/tool warning, attempted arguments fail closed, and no unsupported effect is dispatched.
 
 ## Remaining reliability work
 
-- The shared engine is pinned at `6649cadb5205709dcb4db5048d209ab32e9ea85f` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. It records provider-specific body fields alongside normalized options, persists uncertain dispatched MCP effects, and streams safe tool-preparation metadata without persisting partial arguments. Reconcile and build the packaged app only after implementation is complete.
+- The shared engine is pinned at `57c7c3faf0a92846fda0475f6d3204690f0642c3` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. It records provider-specific body fields alongside normalized options, persists uncertain dispatched MCP effects, streams safe tool-preparation metadata without persisting partial arguments, and reports unsupported MCP schema-validation features before a tool call. Reconcile and build the packaged app only after implementation is complete.
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.
 - Add persisted context/input usage presentation and distinguish actual runtime allocation from selected context where the provider exposes it.

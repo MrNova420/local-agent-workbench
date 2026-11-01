@@ -608,7 +608,7 @@ export default function App() {
         setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
         setPhase((current) => nextRunPhase(current, event));
       }
-      if (event.type === 'mcp_status') notify(String(event.text), event.text && String(event.text).startsWith('MCP unavailable') ? 'warn' : 'good');
+      if (event.type === 'mcp_status') notify(String(event.text), event.text && (String(event.text).startsWith('MCP unavailable') || String(event.text).startsWith('MCP schema warning')) ? 'warn' : 'good');
       if (event.type === 'load_warn') notify(String(event.text), 'warn');
       if (event.type === 'context_limit') notify(String(event.error), 'bad');
     });

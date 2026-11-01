@@ -576,17 +576,19 @@ class AgentService:
                          for item in self.mcp_tools)
             mcp_servers = []
             for name in sorted(self.mcp.servers):
+                schema_warning_count = sum(1 for tool_name in self.mcp.schema_warnings if tool_name.startswith(f"mcp__{name}__"))
+                schema_detail = (f"{schema_warning_count} tool schema(s) contain features the Workbench validator does not support; affected tool descriptions list them." if schema_warning_count else None)
                 if name in self.mcp.errors:
                     mcp_servers.append({"name": name, "status": "error", "detail": self.mcp.errors[name]})
                 elif name in self.mcp.clients:
-                    mcp_servers.append({"name": name, "status": "connected"})
+                    mcp_servers.append({"name": name, "status": "connected", "detail": schema_detail})
                 else:
-                    mcp_servers.append({"name": name, "status": "configured"})
+                    mcp_servers.append({"name": name, "status": "configured", "detail": schema_detail})
             return {"tools": tools, "mcpServers": mcp_servers, "integrations": [
                 {"name": "Project files and search", "status": "available", "detail": "Project-scoped list, search, read, create, exact edit, and patch tools."},
                 {"name": "Commands and Git review", "status": "available", "detail": "Approved direct argv and PowerShell commands with streamed output and Git review. Commands run with host-user permissions; project root is not an OS sandbox."},
                 {"name": "Plans and project skills", "status": "available", "detail": "Structured plan updates and on-demand project/user skills."},
-                {"name": "Local and remote MCP tools", "status": "available", "detail": f"{len(self.mcp.servers)} server(s) configured. Supports local stdio and remote Streamable HTTP; each tool call uses the app approval flow."},
+                {"name": "Local and remote MCP tools", "status": "available", "detail": f"{len(self.mcp.servers)} server(s) configured. Supports local stdio and remote Streamable HTTP; each tool call uses the app approval flow. {len(self.mcp.schema_warnings)} discovered tool schema(s) report validation features the Workbench does not support."},
                 {"name": "Browser automation", "status": "planned", "detail": "No first-party browser driver is connected; compatible MCP tools can extend the agent."},
                 {"name": "LSP diagnostics and navigation", "status": "planned", "detail": "No language-server client is connected yet."},
                 {"name": "Debugger", "status": "planned", "detail": "No debugger adapter is connected yet."},
@@ -1259,7 +1261,10 @@ class AgentService:
                 mcp_tools = self.mcp.run(self.mcp.discover(), cancel_event=controller["cancel"])
                 self.mcp_tools = mcp_tools
                 failed = ", ".join(self.mcp.errors.values())
-                self.emit({"type": "mcp_status", "text": f"{len(mcp_tools)} local tools ready" + (f" · {failed}" if failed else "")})
+                schema_warnings = len(self.mcp.schema_warnings)
+                if schema_warnings:
+                    self.emit({"type": "mcp_status", "text": f"MCP schema warning: {schema_warnings} tool schema(s) use unsupported validation features; review affected tool descriptions in Tool Catalog."})
+                self.emit({"type": "mcp_status", "text": f"{len(mcp_tools)} MCP tools ready" + (f" · {failed}" if failed else "")})
 
             knowledge = ProjectKnowledge(turn.workspace)
 
