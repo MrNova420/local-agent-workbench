@@ -13,7 +13,7 @@ import { DEFAULT_RUN_SHEET_LAYOUT, moveRunSheetPanel, normalizeRunSheetLayout, r
 import { nextHarnessProfile } from '../shared/harness-profile';
 import { isNearTranscriptEnd } from '../shared/transcript-follow';
 import { readVerificationEvidence, verificationEvidenceLabel, type VerificationEvidence } from '../shared/verification-evidence';
-import { readPlanAcceptanceCriteria } from '../shared/plan-criteria';
+import { readPlanAcceptanceCriteria, restorePlanItems } from '../shared/plan-criteria';
 import { parsePermissionCommandPrefix } from '../shared/permission-rules';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; turnId?: string; thinking?: string; streaming?: boolean; recoveredPartial?: boolean };
@@ -329,7 +329,7 @@ export default function App() {
       }
       setMessages(rows);
       setActivities(Array.isArray(loaded.activity_events) ? loaded.activity_events : []);
-      setPlan(Array.isArray(loaded.plan) ? loaded.plan : []);
+      setPlan(restorePlanItems(loaded.plan, loaded.activity_events, loaded.turns?.at(-1)?.turn_id) as PlanItem[]);
       setAcceptanceCriteria(readPlanAcceptanceCriteria(loaded.activity_events));
       const latestTurnId = loaded.turns?.at(-1)?.turn_id;
       setRunMetrics(restoreRunMetrics((loaded.usage_events || []).filter((row) => !latestTurnId || row.turn_id === latestTurnId)));
@@ -375,7 +375,8 @@ export default function App() {
     if (partial || partialThinking) restored.push({ role: 'assistant', content: partial, thinking: partialThinking, turnId: typeof recovered.state.run_state?.turn_id === 'string' ? recovered.state.run_state.turn_id : undefined, recoveredPartial: true });
     setMessages(restored);
     setActivities(Array.isArray(recovered.state.activity_events) ? recovered.state.activity_events : []);
-    setPlan(Array.isArray(recovered.state.plan) ? recovered.state.plan : []);
+    setPlan(restorePlanItems(recovered.state.plan, recovered.state.activity_events,
+      typeof recovered.state.run_state?.turn_id === 'string' ? recovered.state.run_state.turn_id : recovered.state.turns?.at(-1)?.turn_id) as PlanItem[]);
     setAcceptanceCriteria(readPlanAcceptanceCriteria(recovered.state.activity_events));
     if (action === 'restore' || !recovered.prompt) return;
     const settings = (recovered.state.run_state?.settings || {}) as Record<string, unknown>;

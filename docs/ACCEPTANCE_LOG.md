@@ -588,3 +588,8 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 ## 2026-11-01 checkpoint plan-decision migration guard (verification queued)
 
 - Engine commit 8f0d477b467008bae802613cd53e89c3050f9969 discards a malformed legacy decisions field safely before recording new concise plan decisions. A regression is added for this recovery case and remains unrun. The app source pin and current readiness/roadmap references are synchronized; no tests or builds were run.
+
+## 2026-11-01 recover missing Plan snapshots on session reopen (verification queued)
+
+- The renderer now uses the latest turn's durable Plan activity only when an older/migrated session lacks its top-level plan field. Explicit empty snapshots remain authoritative, preventing old task checklists from returning.
+- Added regression cases for turn filtering and intentional empty snapshots; unrun pending the planned verification phase.

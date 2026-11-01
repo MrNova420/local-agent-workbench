@@ -70,3 +70,5 @@
 No live model, app process, OpenCode setting, selected token value, model reasoning default, or runtime placement was changed for this work.
 
 - Plan activity cards now restore concise decisions and acceptance criteria in compact disclosures alongside task items. The shared activity event already persisted these fields; this closes the renderer gap after app or session reopen. Renderer regression coverage is added and queued; it has not been run.
+
+- Session reopen now recovers a missing Plan snapshot from the latest turn's durable plan event. It preserves an explicit empty snapshot and filters journal fallback by the latest turn to avoid reviving an older task checklist. Renderer recovery coverage is added and queued.
