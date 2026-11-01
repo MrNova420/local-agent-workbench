@@ -511,3 +511,9 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Added engine streaming coverage and renderer activity coverage. Neither was run because broad regression verification remains queued until implementation is complete.
 - App and engine revisions are paired at `923292b6879ea90e5c647519074ee5dfdfaf164c`. Existing user-selected settings were not edited, and no model was loaded or called.
 
+## 2026-11-01 persistent permission policy source (verification queued)
+
+- Engine commits `4448ad080a07bc37fc60601d91a453da7af48081` and `6841ff5e16a908250ec22e5ffc13ffa07222787f` add a validated rule evaluator for exact or wildcard tools, project-relative path patterns, and command prefixes. Deny wins over ask/allow and auto-approval; ask forces the ordinary approval prompt; no matching rule retains existing run behavior. Path patterns reject absolute paths and parent traversal.
+- The Electron sidecar persists rules in app data, locks changes during active runs, and snapshots the rules into run settings before engine dispatch. Settings exposes the rule editor. Command and MCP execution remain host-account operations without OS containment.
+- Engine policy, worker persistence/snapshot, and app source tests are queued and unrun. The current app pin is `7b7e575203cd8e3110fe4e89c95c38f451a843d7`; no package or visible UI acceptance has been performed for this change.
+

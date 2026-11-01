@@ -28,6 +28,7 @@ if CORE_PATH.is_dir():
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from desktop_engine import AgentEngine, OllamaRuntime, RequestCancelled, ToolRegistry, Workspace  # noqa: E402
+from permission_policy import validate_permission_rules  # noqa: E402
 from task_checkpoint import begin_task, finish_task, initial_task_plan, record_plan  # noqa: E402
 from disposable_workspace import (  # noqa: E402
     apply_reviewed_changes,
@@ -107,8 +108,10 @@ class AgentService:
         self.llama = LlamaCppServer(APP_DATA)
         self.model_sources_path = APP_DATA / "model-sources.json"
         self.llama_config_path = APP_DATA / "llama.json"
+        self.permission_rules_path = APP_DATA / "permission-rules.json"
         self.gguf_models = self._load_json(self.model_sources_path, [])
         self.llama_config = self._load_json(self.llama_config_path, {})
+        self.permission_rules = validate_permission_rules(self._load_json(self.permission_rules_path, []))
         self.providers = ProviderRegistry([
             OllamaProvider(self.runtime),
             LlamaCppProvider(self.llama, lambda: self.gguf_models),
@@ -652,6 +655,15 @@ class AgentService:
                 {"name": "LSP diagnostics and navigation", "status": "planned", "detail": "No language-server client is connected yet."},
                 {"name": "Debugger", "status": "planned", "detail": "No debugger adapter is connected yet."},
             ]}
+        if command == "permission_rules_get":
+            return copy.deepcopy(self.permission_rules)
+        if command == "permission_rules_set":
+            if self.active:
+                raise RuntimeError("Permission rules cannot change during an active run.")
+            rules = validate_permission_rules(message.get("rules"))
+            self._save_json(self.permission_rules_path, rules)
+            self.permission_rules = rules
+            return copy.deepcopy(self.permission_rules)
         if command == "hf_search":
             return self.hf.search(str(message.get("query", "")))
         if command == "hf_repo_files":
@@ -1194,6 +1206,7 @@ class AgentService:
             state.pop("copy_manifest", None)
         turn_id = uuid.uuid4().hex
         turn_started_at = time.time()
+        captured_permission_rules = copy.deepcopy(self.permission_rules)
         state.setdefault("activity_events", [])
         state.setdefault("plan", [])
         previous_checkpoint = state.get("task_checkpoint")
@@ -1218,6 +1231,7 @@ class AgentService:
                 "task_intent": task_intent,
                 "requested_access": access,
                 "effective_access": "plan" if task_intent in {"discuss", "plan"} else access,
+                "permission_rules": copy.deepcopy(captured_permission_rules),
             },
             plan=copy.deepcopy(state.get("plan", [])),
         )
@@ -1233,7 +1247,8 @@ class AgentService:
                                  "access": access, "effective_access": "plan" if task_intent in {"discuss", "plan"} else access,
                                  "approval_mode": approval_mode, "keep_alive": state.get("keep_alive", "30m"),
                                  "harness_profile": harness_profile, "task_intent": task_intent,
-                                 "skills_enabled": skills_enabled, "skill_sources": list(skill_sources)},
+                                 "skills_enabled": skills_enabled, "skill_sources": list(skill_sources),
+                                 "permission_rules": copy.deepcopy(captured_permission_rules)},
                              "transcript_saved": False, "prior_user_messages": prior_user_messages})
         state["run_state"] = {
             "status": "running", "turn_id": turn_id, "prompt": prompt, "started_at": turn_started_at,
@@ -1244,7 +1259,8 @@ class AgentService:
                 "context": state["context"], "max_tokens": state["max_tokens"], "reasoning": reasoning,
                 "harness_profile": harness_profile, "skills_enabled": skills_enabled,
                 "skill_sources": skill_sources, "task_intent": task_intent,
-                "requested_access": access, "effective_access": "plan" if task_intent in {"discuss", "plan"} else access},
+                "requested_access": access, "effective_access": "plan" if task_intent in {"discuss", "plan"} else access,
+                "permission_rules": copy.deepcopy(captured_permission_rules)},
         }
         turn = TurnContext.capture(
             workspace=working, model=model, context=state["context"], access="plan" if task_intent in {"discuss", "plan"} else access,
@@ -1368,6 +1384,8 @@ class AgentService:
                 self.emit({"type": "activity_event", "activity": copy.deepcopy(activity), "sessionId": state["session_id"], "turnId": controller["turn_id"]})
                 return bool(result["approved"])
 
+            current_run_state = state.get("run_state")
+            run_permission_rules = copy.deepcopy(current_run_state.get("settings", {}).get("permission_rules", [])) if isinstance(current_run_state, dict) else []
             engine = AgentEngine(
                 turn.workspace, turn.model, turn.context, turn.access, turn.approval_mode,
                 relay, approve, runtime_options=turn.runtime_options,
@@ -1379,6 +1397,7 @@ class AgentService:
                 skills_enabled=turn.skills_enabled, skill_sources=turn.skill_sources,
                 task_intent=str(turn.session.get("task_intent", "auto")),
                 operation_result_lookup=lambda operation_id: _saved_operation_result(state, operation_id),
+                permission_rules=run_permission_rules,
             )
             chosen_runtime = self.providers.runtime_for(turn.model, engine.runtime, state.get("provider_id"))
             engine.runtime = RequestScopedOllama(chosen_runtime)

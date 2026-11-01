@@ -17,6 +17,8 @@ import { readPlanAcceptanceCriteria } from '../shared/plan-criteria';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; turnId?: string; thinking?: string; streaming?: boolean; recoveredPartial?: boolean };
 type PlanItem = { title?: string; text?: string; status?: string; source?: 'workbench' | 'agent' };
+type PermissionRule = { tool: string; decision: 'allow' | 'ask' | 'deny'; path_glob?: string; command_prefix?: string | string[] };
+type PermissionRuleDraft = { tool: string; decision: PermissionRule['decision']; scope: 'tool' | 'path' | 'command'; value: string };
 type Session = {
   session_id: string;
   workspace: string;
@@ -205,6 +207,9 @@ export default function App() {
   const [updateState, setUpdateState] = useState<AppUpdateState>({ supported: false, status: 'unsupported', currentVersion: window.agent.version });
   const [approval, setApproval] = useState<Approval | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [permissionsOpen, setPermissionsOpen] = useState(false);
+  const [permissionRules, setPermissionRules] = useState<PermissionRuleDraft[]>([]);
+  const [permissionsLoading, setPermissionsLoading] = useState(false);
   const [mcpOpen, setMcpOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [toolCatalog, setToolCatalog] = useState<ToolCatalog | null>(null);
@@ -875,6 +880,48 @@ export default function App() {
     finally { setToolCatalogLoading(false); }
   }
 
+  async function openPermissions() {
+    setPermissionsLoading(true);
+    try {
+      if (!toolCatalog) {
+        try { setToolCatalog(await request<ToolCatalog>({ command: 'tool_catalog' })); }
+        catch { /* Wildcard and built-in rules remain editable if capability discovery is offline. */ }
+      }
+      const rules = await request<PermissionRule[]>({ command: 'permission_rules_get' });
+      setPermissionRules(rules.map((rule) => ({
+        tool: rule.tool, decision: rule.decision,
+        scope: rule.path_glob ? 'path' : rule.command_prefix ? 'command' : 'tool',
+        value: rule.path_glob || (Array.isArray(rule.command_prefix) ? JSON.stringify(rule.command_prefix) : rule.command_prefix || ''),
+      })));
+      setPermissionsOpen(true);
+    } catch (error) { notify(`Could not load tool permissions: ${(error as Error).message}`, 'bad'); }
+    finally { setPermissionsLoading(false); }
+  }
+
+  async function savePermissionRules() {
+    if (running) { notify('Permission rules cannot change during an active run.', 'warn'); return; }
+    try {
+      const rules: PermissionRule[] = permissionRules.map((draft) => {
+        const base: PermissionRule = { tool: draft.tool, decision: draft.decision };
+        if (draft.scope === 'path') {
+          if (!draft.value.trim()) throw new Error(`Rule ${draft.tool} needs a project-relative path pattern.`);
+          base.path_glob = draft.value.trim();
+        }
+        if (draft.scope === 'command') {
+          if (!draft.value.trim()) throw new Error(`Rule ${draft.tool} needs a command prefix.`);
+          if (draft.tool === 'run_command' || (draft.tool === '*' && draft.value.trim().startsWith('['))) {
+            const prefix = JSON.parse(draft.value) as unknown;
+            if (!Array.isArray(prefix) || !prefix.length || prefix.some((token) => typeof token !== 'string' || !token)) throw new Error('For run_command, enter a JSON array of argv tokens, such as ["python", "-m", "pytest"].');
+            base.command_prefix = prefix as string[];
+          } else base.command_prefix = draft.value.trim();
+        }
+        return base;
+      });
+      await request({ command: 'permission_rules_set', rules });
+      setPermissionsOpen(false); notify('Tool permission rules saved. Deny rules override allow and auto-approval.');
+    } catch (error) { notify(`Could not save tool permissions: ${(error as Error).message}`, 'bad'); }
+  }
+
   async function saveMcp() {
     try {
       const config = JSON.parse(mcpJson) as unknown;
@@ -981,7 +1028,8 @@ export default function App() {
     </footer>
 
     {notice && <div className={`toast toast-${notice.tone}`} role="status"><span>{notice.text}</span><button onClick={() => setNotice(null)}><Icon name="close"/></button></div>}
-    {settingsOpen && <SettingsModal model={model} modelLabel={displayModelLabels[model] || shortModel(model)} modelInfo={modelInfo} options={options} setOptions={setOptions} activityDefault={activityDefault} setActivityDefault={setActivityDefault} activityMode={activityMode} setActivityMode={setActivityMode} askActivityChoice={askActivityChoice} setAskActivityChoice={setAskActivityChoice} hasSession={!!session} running={running} updateState={updateState} onCheckUpdate={() => void window.agent.checkForUpdate().then(setUpdateState).catch((error) => setUpdateState((state) => ({ ...state, status: 'error', error: (error as Error).message })))} onInstallUpdate={() => void window.agent.installUpdate().then((result) => { if (!result.installed) notify(result.reason || 'Update installation is unavailable.', 'warn'); }).catch((error) => notify(`Could not apply update: ${(error as Error).message}`, 'bad'))} onClose={() => setSettingsOpen(false)} onSave={saveSettings} onMcp={openMcp} />}
+    {settingsOpen && <SettingsModal model={model} modelLabel={displayModelLabels[model] || shortModel(model)} modelInfo={modelInfo} options={options} setOptions={setOptions} activityDefault={activityDefault} setActivityDefault={setActivityDefault} activityMode={activityMode} setActivityMode={setActivityMode} askActivityChoice={askActivityChoice} setAskActivityChoice={setAskActivityChoice} hasSession={!!session} running={running} updateState={updateState} onCheckUpdate={() => void window.agent.checkForUpdate().then(setUpdateState).catch((error) => setUpdateState((state) => ({ ...state, status: 'error', error: (error as Error).message })))} onInstallUpdate={() => void window.agent.installUpdate().then((result) => { if (!result.installed) notify(result.reason || 'Update installation is unavailable.', 'warn'); }).catch((error) => notify(`Could not apply update: ${(error as Error).message}`, 'bad'))} onClose={() => setSettingsOpen(false)} onSave={saveSettings} onMcp={openMcp} onPermissions={() => void openPermissions()} />}
+    {permissionsOpen && <PermissionRulesModal rules={permissionRules} setRules={setPermissionRules} tools={toolCatalog?.tools || []} loading={permissionsLoading} running={running} onClose={() => setPermissionsOpen(false)} onSave={savePermissionRules} />}
     {modelLibraryOpen && <ModelLibraryModal model={model} models={models} modelLabels={displayModelLabels} context={options.context} reasoning={options.reasoning} downloadedDirectory={downloadedModelDirectory} onModel={selectModel} onRefresh={refreshModels} onClose={() => setModelLibraryOpen(false)} notify={notify}/>}
     {mcpOpen && <Modal title="MCP connections" eyebrow="EXTEND THE TOOLSET" onClose={() => setMcpOpen(false)}>
       <p className="modal-copy">Connect local stdio or remote Streamable HTTP servers. Every tool call requires approval. Use HTTPS for remote servers; reference credentials as <code>${'{ENV:VARIABLE_NAME}'}</code> so secrets stay out of this file. MCP servers can access whatever their own process/account permits.</p>
@@ -1358,12 +1406,12 @@ function Modal({ title, eyebrow, children, onClose, wide = false, dismissible = 
   return <div className="modal-backdrop" onMouseDown={(e) => { if (dismissible && e.target === e.currentTarget) onClose(); }} onKeyDown={(e) => { if (!dismissible && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); } }}><section className={`modal-card ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>{dismissible && <button className="modal-close" onClick={onClose} aria-label="Close"><Icon name="close"/></button>}<span className="eyebrow-line">{eyebrow}</span><h2>{title}</h2>{children}</section></div>;
 }
 
-function SettingsModal({ model, modelLabel, modelInfo, options, setOptions, activityDefault, setActivityDefault, activityMode, setActivityMode, askActivityChoice, setAskActivityChoice, hasSession, running, updateState, onCheckUpdate, onInstallUpdate, onClose, onSave, onMcp }: {
+function SettingsModal({ model, modelLabel, modelInfo, options, setOptions, activityDefault, setActivityDefault, activityMode, setActivityMode, askActivityChoice, setAskActivityChoice, hasSession, running, updateState, onCheckUpdate, onInstallUpdate, onClose, onSave, onMcp, onPermissions }: {
   model: string; modelLabel: string; modelInfo: ModelInfo | null; options: typeof initialOptions; setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>;
   activityDefault: ActivityMode; setActivityDefault: (mode: ActivityMode) => void; activityMode: ActivityMode; setActivityMode: (mode: ActivityMode) => void;
   askActivityChoice: boolean; setAskActivityChoice: (ask: boolean) => void; hasSession: boolean; running: boolean;
   updateState: AppUpdateState; onCheckUpdate: () => void; onInstallUpdate: () => void;
-  onClose: () => void; onSave: () => void; onMcp: () => void;
+  onClose: () => void; onSave: () => void; onMcp: () => void; onPermissions: () => void;
 }) {
   const tokenPresets = buildTokenPresets({ contextLimit: modelInfo?.context ?? null, contextLimitKnown: modelInfo?.context_limit_known ?? false, outputLimit: modelInfo?.max_output_tokens ?? null });
   const reasoning = modelInfo?.reasoning;
@@ -1384,8 +1432,32 @@ function SettingsModal({ model, modelLabel, modelInfo, options, setOptions, acti
     <section className="update-settings" aria-label="Application updates"><div><span className="eyebrow-line">APPLICATION / {updateState.currentVersion}</span><b>{updateState.status === 'downloaded' ? `${updateState.releaseName || 'Update'} is ready` : updateState.status === 'downloading' || updateState.status === 'available' ? 'Downloading update' : updateState.status === 'checking' ? 'Checking GitHub releases…' : updateState.status === 'not-available' ? 'You’re up to date' : updateState.status === 'error' ? 'Update check failed' : updateState.supported ? 'Automatic updates enabled' : 'Updates unavailable in this build'}</b><small>{updateState.error || (updateState.status === 'downloaded' ? 'Restart to apply it. Updates are never installed during an active task.' : updateState.supported ? 'Checks public GitHub releases and downloads in the background. Install is always user-controlled.' : 'Automatic updates are configured for installed Windows x64 builds.')}</small></div><div>{updateState.status === 'downloaded' ? <Button kind="bright" disabled={running} onClick={onInstallUpdate}>{running ? 'Finish active task to update' : 'Restart and update'}</Button> : <Button kind="outline" disabled={!updateState.supported || running || updateState.status === 'checking' || updateState.status === 'downloading'} onClick={onCheckUpdate}>{running ? 'Available when task ends' : updateState.status === 'checking' ? 'Checking…' : 'Check for updates'}</Button>}</div></section>
     <div className="settings-fields select-fields"><label className="settings-field"><span>App-wide activity default</span><select value={activityDefault} onChange={(event) => setActivityDefault(event.target.value as ActivityMode)}><option value="compact">Compact cards · expandable</option><option value="sidebar">Activity sidebar only</option><option value="inline">Full inline output</option></select></label>{hasSession && <label className="settings-field"><span>This session activity view</span><select value={activityMode} onChange={(event) => setActivityMode(event.target.value as ActivityMode)}><option value="compact">Compact cards · expandable</option><option value="sidebar">Activity sidebar only</option><option value="inline">Full inline output</option></select></label>}</div>
     <label className="activity-choice-toggle"><input type="checkbox" checked={askActivityChoice} onChange={(event) => setAskActivityChoice(event.target.checked)}/><span><b>Choose an activity view for each new session</b><small>When off, new sessions use the app-wide default.</small></span></label>
-    <div className="settings-bottom"><Button kind="outline" onClick={onMcp}>Configure local MCP</Button><span>Context is never silently reduced.</span></div>
+    <div className="settings-bottom"><Button kind="outline" onClick={onMcp}>Configure local MCP</Button><Button kind="outline" onClick={onPermissions}>Tool permissions</Button><span>Context is never silently reduced.</span></div>
     <div className="modal-actions"><Button kind="quiet" onClick={onClose}>Cancel</Button><Button kind="bright" disabled={running} onClick={onSave}>{hasSession ? 'Apply to this session' : 'Save app defaults'}</Button></div>
+  </Modal>;
+}
+
+function PermissionRulesModal({ rules, setRules, tools, loading, running, onClose, onSave }: {
+  rules: PermissionRuleDraft[]; setRules: React.Dispatch<React.SetStateAction<PermissionRuleDraft[]>>;
+  tools: ToolCatalog['tools']; loading: boolean; running: boolean; onClose: () => void; onSave: () => void;
+}) {
+  const toolNames = [...new Set(['run_command', 'run_shell', ...tools.map((tool) => tool.name)])].sort();
+  const update = (index: number, values: Partial<PermissionRuleDraft>) => setRules((current) => current.map((rule, row) => row === index ? { ...rule, ...values } : rule));
+  return <Modal title="Tool permission rules" eyebrow="PERSISTENT ACCESS POLICY" wide onClose={onClose}>
+    <p className="modal-copy">Rules apply across sessions. The default remains the current run approval behavior. A matching <b>deny</b> is a hard block and overrides allow rules and auto-approval. Path patterns match project-relative tool targets. Approved commands and MCP servers still run with your Windows account permissions; these rules are not OS containment.</p>
+    {loading && <div className="empty-state">Loading saved rules…</div>}
+    <div className="permission-rule-list">
+      {rules.map((rule, index) => <div className="permission-rule-row" key={`${index}:${rule.tool}`}>
+        <label className="settings-field"><span>Tool</span><select value={rule.tool} onChange={(event) => { const tool = event.target.value; update(index, { tool, ...((rule.scope === 'command' && !['*', 'run_command', 'run_shell'].includes(tool)) || (rule.scope === 'path' && ['run_command', 'run_shell'].includes(tool)) ? { scope: 'tool' as const, value: '' } : {}) }); }}><option value="*">All tools</option>{toolNames.map((name) => <option value={name} key={name}>{name}</option>)}</select></label>
+        <label className="settings-field"><span>Decision</span><select value={rule.decision} onChange={(event) => update(index, { decision: event.target.value as PermissionRuleDraft['decision'] })}><option value="allow">Allow</option><option value="ask">Ask every time</option><option value="deny">Deny</option></select></label>
+        <label className="settings-field"><span>Match scope</span><select value={rule.scope} onChange={(event) => update(index, { scope: event.target.value as PermissionRuleDraft['scope'], value: '' })}><option value="tool">Every call to this tool</option><option value="path" disabled={['run_command', 'run_shell'].includes(rule.tool)}>Project path glob</option><option value="command" disabled={!['*', 'run_command', 'run_shell'].includes(rule.tool)}>Command prefix</option></select></label>
+        {rule.scope !== 'tool' && <label className="settings-field permission-rule-scope"><span>{rule.scope === 'path' ? 'Relative path pattern' : 'Command prefix'}</span><input value={rule.value} placeholder={rule.scope === 'path' ? 'src/generated/**' : rule.tool === 'run_shell' ? 'python -m pytest' : '["python", "-m", "pytest"]'} onChange={(event) => update(index, { value: event.target.value })}/><small>{rule.scope === 'path' ? 'For multi-file patches, deny/ask matches any affected path; allow applies only when every target matches.' : rule.tool === 'run_shell' ? 'Matches the beginning of the PowerShell command.' : 'For run_command, use a JSON array of exact argv prefix tokens.'}</small></label>}
+        <Button kind="quiet" onClick={() => setRules((current) => current.filter((_, row) => row !== index))}>Remove</Button>
+      </div>)}
+      {!rules.length && <div className="empty-state">No persistent overrides. Actions continue to use the run’s selected approval mode.</div>}
+    </div>
+    <div className="permission-rule-actions"><Button kind="outline" disabled={running} onClick={() => setRules((current) => [...current, { tool: 'run_command', decision: 'ask', scope: 'tool', value: '' }])}>Add rule</Button><span>{rules.length} saved override{rules.length === 1 ? '' : 's'}</span></div>
+    <div className="modal-actions"><Button kind="quiet" onClick={onClose}>Cancel</Button><Button kind="bright" disabled={running || loading} onClick={onSave}>{running ? 'Unavailable during a run' : 'Save permission rules'}</Button></div>
   </Modal>;
 }
 

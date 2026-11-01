@@ -73,6 +73,23 @@ def test_session_run_settings_persist_skill_controls_and_inference_values(servic
     assert service.sessions.load(session["session_id"], str(workspace))["state"]["skills_enabled"] is False
 
 
+def test_permission_rules_are_validated_persisted_and_locked_during_runs(service):
+    rules = [{"tool": "write_file", "decision": "deny", "path_glob": "generated/**"}]
+    saved = service.handle("permission_rules_set", {"rules": rules})
+    assert saved == rules
+    assert service.handle("permission_rules_get", {}) == rules
+    assert json.loads(service.permission_rules_path.read_text(encoding="utf-8")) == rules
+    reloaded = worker.AgentService()
+    assert reloaded.handle("permission_rules_get", {}) == rules
+    reloaded.mcp.shutdown()
+    reloaded.llama.shutdown()
+
+    service.active = {"session": {}}
+    with pytest.raises(RuntimeError, match="active run"):
+        service.handle("permission_rules_set", {"rules": []})
+    assert service.handle("permission_rules_get", {}) == rules
+
+
 def test_provider_request_settings_update_the_matching_prompt_activity_and_stream_live(service, tmp_path, monkeypatch):
     events = []
     service.emit = events.append
@@ -143,6 +160,7 @@ def test_plan_intent_seeds_live_checklist_and_enforces_read_only_builtin_tools(s
     events = []
     captured = {}
     service.emit = events.append
+    service.permission_rules = [{"tool": "write_file", "decision": "deny"}]
     service.mcp_tools = [{"type": "function", "function": {"name": "mcp__mutating_tool", "parameters": {"type": "object"}}}]
 
     class CapturingEngine:
@@ -177,6 +195,8 @@ def test_plan_intent_seeds_live_checklist_and_enforces_read_only_builtin_tools(s
     assert captured["access"] == "plan"
     assert captured["kwargs"]["task_intent"] == "plan"
     assert captured["kwargs"]["mcp_tools"] == []
+    assert captured["kwargs"]["permission_rules"] == [{"tool": "write_file", "decision": "deny"}]
+    assert saved["run_state"]["settings"]["permission_rules"] == [{"tool": "write_file", "decision": "deny"}]
     assert saved["task_intent"] == "plan"
     assert saved["plan"][0]["title"] == "Use the task brief and project instructions as the objective"
     assert saved["task_checkpoint"]["current"]["acceptance_criteria_source"] == "awaiting_agent_refinement"
