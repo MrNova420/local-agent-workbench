@@ -18,6 +18,14 @@ class MirroredSessionStoreTests(unittest.TestCase):
         self.assertEqual((row["kind"], row["name"], row["status"]), ("tool_preparation", "write_file", "preparing"))
         self.assertEqual(row["argumentCharacters"], 768)
         self.assertNotIn("arguments", row)
+        _replay_run_event(state, {"type": "tool_batch", "request_index": 0,
+                                  "assistantMessage": {"role": "assistant"}, "calls": []})
+        self.assertEqual(state["activity_events"][0]["status"], "assembled")
+
+        state["activity_events"][0]["status"] = "preparing"
+        _replay_run_event(state, {"type": "request_error", "request_index": 0,
+                                  "turnId": "turn-progress", "error": "connection ended"})
+        self.assertEqual(state["activity_events"][0]["status"], "interrupted")
 
     def test_journal_recovery_preserves_uncertain_remote_tool_effects(self):
         state = {

@@ -492,6 +492,12 @@ def test_tool_call_progress_is_live_safe_and_durable(service, tmp_path, monkeypa
     assert "arguments" not in progress
     assert not any(event.get("type") == "tool_call_progress" for event in saved.get("run_state", {}).get("events", []))
 
+    service._publish_run_event(controller, SimpleNamespace(workspace=project), {
+        "type": "tool_batch", "request_index": 0, "assistantMessage": {"role": "assistant"}, "calls": [],
+    })
+    assembled = next(event for event in state["activity_events"] if event.get("kind") == "tool_preparation")
+    assert assembled["status"] == "assembled"
+
 
 def test_tool_catalog_exposes_mcp_schema_capability_warning(service):
     service.mcp.servers = {"demo": {"command": "demo"}}

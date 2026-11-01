@@ -483,6 +483,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 ## 2026-11-01 durable model tool-preparation activity (verification queued)
 
 - Ollama streamed tool-call progress now updates a compact activity card in chat and the Live Work Sheet. The same row is journaled and restored after session recovery. Persisted fields are limited to provider, tool name, request/call identity, and argument character count; partial arguments are not saved or shown.
+- Completed tool batches mark their preparation rows `assembled`; a provider request error marks them `interrupted`, keeping saved activity state consistent with the run result.
+- The paired engine now includes the inference request index on `tool_batch` events so activity transitions remain tied to the correct request. Engine and sidecar regressions are queued.
 - Added worker, journal-replay, and renderer regressions, including repeated progress updates coalescing to one call row. They remain unrun with the broader verification pass.
 ## 2026-11-01 selected Ollama settings authority (verification queued)
 

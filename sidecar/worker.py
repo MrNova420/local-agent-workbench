@@ -219,6 +219,7 @@ class AgentService:
 
             kind = event.get("type")
             activity: dict[str, Any] | None = None
+            activity_updates: list[dict[str, Any]] = []
             activity_id = str(event.get("operationId") or event.get("actionId") or event.get("activityId") or uuid.uuid4().hex)
             if kind == "tool_call_progress":
                 activity_id = f"tool-call:{controller['turn_id']}:{int(event.get('request_index', 0))}:{int(event.get('call_index', 0))}"
@@ -363,6 +364,15 @@ class AgentService:
                             "workspace": str(turn.workspace), "kind": "error", "name": "Run failed", "status": "failed",
                             "result": str(event.get("error", "The run failed.")), "timestamp": time.time()}
                 rows.append(activity)
+            if kind in {"tool_batch", "request_error"}:
+                request_index = event.get("request_index")
+                next_status = "assembled" if kind == "tool_batch" else "interrupted"
+                for row in rows:
+                    if (row.get("kind") == "tool_preparation" and row.get("requestIndex") == request_index
+                            and row.get("status") == "preparing"):
+                        row["status"] = next_status
+                        row["timestamp"] = event.get("at", time.time())
+                        activity_updates.append(copy.deepcopy(row))
             if kind == "generation_usage":
                 enriched["first_token_seconds"] = run_state.get("request_first_token_seconds") if isinstance(run_state, dict) else None
             if activity and kind == "tool_call_progress":
@@ -382,6 +392,9 @@ class AgentService:
                     self.emit(enriched)
             else:
                 self.emit(enriched)
+            for row in activity_updates:
+                self.emit({"type": "activity_event", "activity": row,
+                           "sessionId": state["session_id"], "turnId": controller["turn_id"]})
 
             pending = controller.setdefault("journal_pending", [])
             journal_event = {**event, "sessionId": state["session_id"], "turnId": controller["turn_id"],

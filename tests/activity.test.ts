@@ -14,6 +14,12 @@ describe('durable live activity state', () => {
     expect(markup).toContain('Model is preparing a structured tool call');
     expect(markup).toContain('512 argument characters');
     expect(markup).not.toContain('arguments-preview');
+    const assembled = renderToStaticMarkup(createElement(ActivityFeed, { entries: [{
+      id: 'tool-call:turn-1:0:0', turnId: 'turn-1', sessionId: 'session-1', kind: 'tool_preparation',
+      name: 'write_file', status: 'assembled', provider: 'ollama', requestIndex: 0, callIndex: 0,
+      argumentCharacters: 512,
+    }], mode: 'compact', surface: 'chat' }));
+    expect(assembled).toContain('Complete structured call received');
   });
   it('progressively renders long activity histories without discarding older records', () => {
     const entries: ActivityRecord[] = Array.from({ length: 245 }, (_, index) => ({

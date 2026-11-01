@@ -139,6 +139,12 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
                 prompt["status"] = "cancelled_during_request" if event.get("cancelled") else "request_failed"
                 provider_request.update(dispatch_status=prompt["status"], failure_phase=event.get("phase"),
                                         request_error=event.get("error"))
+        if kind == "request_error":
+            for row in state.setdefault("activity_events", []):
+                if (row.get("kind") == "tool_preparation" and row.get("requestIndex") == request_index
+                        and row.get("status") == "preparing"):
+                    row["status"] = "interrupted"
+                    row["timestamp"] = event.get("timestamp", time.time())
     elif kind == "tool_call_progress":
         activity_id = str(event.get("activityId") or
                           f"tool-call:{event.get('turnId', run.get('turn_id'))}:{int(event.get('request_index', 0))}:{int(event.get('call_index', 0))}")
@@ -155,6 +161,12 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any]) -> None:
         else:
             row.update(progress)
     elif kind == "tool_batch":
+        request_index = event.get("request_index")
+        for row in state.setdefault("activity_events", []):
+            if (row.get("kind") == "tool_preparation" and row.get("requestIndex") == request_index
+                    and row.get("status") == "preparing"):
+                row["status"] = "assembled"
+                row["timestamp"] = event.get("timestamp", time.time())
         run["tool_batch"] = {"assistant_message": copy.deepcopy(event.get("assistantMessage")),
                              "calls": copy.deepcopy(event.get("calls", [])),
                              "base_messages": copy.deepcopy(run.get("safe_messages", []))}
