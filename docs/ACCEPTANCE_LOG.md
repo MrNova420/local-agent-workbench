@@ -462,3 +462,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 
 - Chat and the Live Work Sheet continue to consume the same full session activity records. The renderer now starts with the most recent 100 cards and exposes older cards in 100-entry increments, keeping long histories available without mounting every card immediately. This window is presentation-only and does not truncate or rewrite session history.
 - Added a renderer regression for a 245-event history. No tests, typecheck, package, or visual acceptance were run.
+
+## 2026-11-01 runtime worker resource attribution (verification queued)
+
+- Resource telemetry now separates the Agent Workbench sidecar from detected Ollama/llama.cpp worker CPU and resident memory. Where NVIDIA reports compute-process memory, the worker PID is matched and runtime-process VRAM is shown separately; system GPU utilization/power and device VRAM remain explicitly device-wide. No selected-model GPU percentage is inferred.
+- Added mocked telemetry coverage and advanced the app's engine pin to `8e5702467fd7b36249a0574831a5d0261ad89ee3`. Tests, typecheck, packaged UI, and live hardware evidence remain queued; no model or runtime settings changed.

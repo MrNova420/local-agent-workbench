@@ -32,6 +32,7 @@
 - The active-task checkpoint explicitly instructs the model to inspect the saved operation result and workspace before requesting or repeating an uncertain operation; uncertain operations are never automatically replayed. The continuity regression is queued.
 - `read_operation_result` now falls back to the engine's in-memory completed-operation map when running without the desktop's durable session callback, so standalone CLI use does not advertise an unavailable lookup. In the desktop, the captured session store remains authoritative, with engine memory as same-run fallback. Regression queued, not run.
 - Long chat/trace activity histories now render progressively: the latest 100 records appear first, with explicit loading of earlier records in batches. All records stay in persisted state; this is not a retention cap. Regression and visible scroll/restore acceptance are queued.
+- Resource display now distinguishes Agent Workbench sidecar metrics, Ollama/llama.cpp worker CPU/RAM, NVIDIA worker-process VRAM when available, and device-wide GPU utilization/power. This does not claim selected-model utilization. Mocked coverage and live hardware acceptance are queued.
 
 ## Verification queue (not run in this implementation phase)
 
@@ -51,7 +52,7 @@
 
 ## Remaining reliability work
 
-- The shared engine is pinned at `0f5c7f193f3bab4a162e167cccd6a0f6536e45ff` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. It records provider-specific body fields alongside normalized options, persists uncertain dispatched MCP effects, streams safe tool-preparation metadata without persisting partial arguments, reports unsupported MCP schema-validation features before a tool call, validates common conditional/dependent/modern array-schema keywords, and supports within-task compaction with saved tool-result retrieval from durable desktop history or standalone engine memory. JSON Schema `format` remains an annotation without value validation. Reconcile and build the packaged app only after implementation is complete.
+- The shared engine is pinned at `8e5702467fd7b36249a0574831a5d0261ad89ee3` in `core-revision.txt`; CI and the Windows release workflow read that same pinned revision. It records provider-specific request data, uncertain MCP effects, safe tool-preparation metadata, MCP schema capability gaps, within-task compaction and result lookup, and separate local runtime worker CPU/RAM/NVIDIA process VRAM measurements where available. JSON Schema `format` remains an annotation without value validation; GPU load remains device-wide. Reconcile and build the packaged app only after implementation is complete.
 - Test and harden simultaneous session writes, read-only project mirrors, project moves, copy conflicts, app startup recovery, and migration from older saved sessions.
 - Add retention/export controls before any journal compaction or deletion policy; do not discard activity or transcript records silently.
 - Add persisted context/input usage presentation and distinguish actual runtime allocation from selected context where the provider exposes it.

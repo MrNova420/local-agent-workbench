@@ -53,6 +53,7 @@ type TelemetryView = {
   cpu: number | null; ram: string; gpu: string; gpuUtil: number | null;
   vramUsed: number | null; vramTotal: number | null; vramPercent: number | null; gpuPower: number | null;
   loadedContext: number | null; contextMismatch: boolean; serviceRss: string; serviceCpu: number | null;
+  runtimeWorkerCount: number; runtimeWorkerCpu: number | null; runtimeWorkerRss: string; runtimeGpuMemory: number | null;
   kvSlot: { contextTokens: number | null; contextLimit: number | null; cachedTokens: number | null; processing: boolean } | null;
 };
 type AppliedSettings = { model: string; context: number; maxOutput: number; reasoning: boolean | string | null; estimatedInput: number | null };
@@ -696,6 +697,10 @@ export default function App() {
       } : null,
       serviceRss: typeof snapshot.service_rss_bytes === 'number' ? `${(snapshot.service_rss_bytes / 1024 ** 3).toFixed(2)} GB` : '—',
       serviceCpu: typeof snapshot.service_cpu_percent === 'number' ? Math.round(snapshot.service_cpu_percent) : null,
+      runtimeWorkerCount: typeof snapshot.runtime_worker_count === 'number' ? snapshot.runtime_worker_count : 0,
+      runtimeWorkerCpu: typeof snapshot.runtime_worker_cpu_percent === 'number' ? Math.round(snapshot.runtime_worker_cpu_percent) : null,
+      runtimeWorkerRss: typeof snapshot.runtime_worker_rss_bytes === 'number' ? `${(snapshot.runtime_worker_rss_bytes / 1024 ** 3).toFixed(2)} GB` : '—',
+      runtimeGpuMemory: typeof snapshot.runtime_gpu_memory_mib === 'number' ? snapshot.runtime_gpu_memory_mib : null,
     };
   }, [model, options.context, snapshot]);
 
@@ -1183,6 +1188,8 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
             <div className="resource-tile"><small>GPU LOAD</small><strong>{telemetry.gpuUtil == null ? '—' : `${telemetry.gpuUtil}%`}</strong><div className="meter"><i style={{ width: `${Math.min(100, telemetry.gpuUtil ?? 0)}%` }}/></div></div>
             <div className="resource-tile"><small>VRAM · {telemetry.gpu}</small><strong>{telemetry.vramUsed == null ? '—' : fmt(telemetry.vramUsed)} / {telemetry.vramTotal == null ? '—' : fmt(telemetry.vramTotal)} MiB</strong><div className="meter"><i style={{ width: `${telemetry.vramPercent ?? 0}%` }}/></div></div>
             <div className="resource-tile"><small>GPU POWER</small><strong>{telemetry.gpuPower == null ? '—' : `${telemetry.gpuPower.toFixed(2)} W`}</strong><span>BOARD DRAW</span></div>
+            <div className="resource-tile"><small>OLLAMA / LLAMA WORKERS</small><strong>{telemetry.runtimeWorkerCount ? `${telemetry.runtimeWorkerCpu == null ? '—' : `${telemetry.runtimeWorkerCpu}% CPU`} · ${telemetry.runtimeWorkerRss} RAM` : 'Not detected'}</strong><span>SHARED RUNTIME PROCESSES</span></div>
+            <div className="resource-tile"><small>RUNTIME GPU MEMORY</small><strong>{telemetry.runtimeGpuMemory == null ? 'Unavailable' : `${fmt(telemetry.runtimeGpuMemory)} MiB`}</strong><span>PROCESS VRAM · NOT MODEL-SPECIFIC</span></div>
             <div className="resource-tile"><small>AGENT SERVICE</small><strong>{telemetry.serviceCpu == null ? '—' : `${telemetry.serviceCpu}% CPU`}</strong><span>{telemetry.serviceRss} RAM</span></div>
           </div>
         </div>
