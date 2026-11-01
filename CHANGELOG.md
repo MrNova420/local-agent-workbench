@@ -2,7 +2,7 @@
 
 All notable user-facing changes are recorded here. This project is in unstable beta; changes may be incompatible before a stable release.
 
-## 0.1.0-beta.2 — unreleased
+## 0.1.0-beta.2 — 2026-10-31
 
 - Added a first-run checklist and a direct path to recover an unavailable Ollama installation.
 - Added background GitHub Release checks and downloads for installed Windows x64 builds, with explicit user-controlled restart and task-safe installation.
@@ -11,7 +11,8 @@ All notable user-facing changes are recorded here. This project is in unstable b
 - Preserved clickable installed-model orbit markers and model detail cards, including outside-click and Escape dismissal.
 - Added a public Windows beta release workflow, release runbook, checksums, and historical acceptance screenshots.
 - Corrected the updater feed route to match Electron's documented `/{owner}/{repo}/{platform}-{arch}/{version}` form.
-- Verification and packaged release acceptance are pending; see `docs/ACCEPTANCE_LOG.md`.
+- Local verification: TypeScript typecheck; 52 desktop Vitest tests; 44 sidecar pytest tests; 140 shared-engine pytest tests; Windows x64 Squirrel installer and portable ZIP built; bundled sidecar JSONL ready/ping/shutdown passed; packaged Home, model detail popover, and run-configuration values visually checked. No model request was issued.
+- GitHub Actions did not start a runner for source-check pushes (zero steps, runner ID 0); the local checks above passed independently. Squirrel installation/upgrade and updater discovery require a later installed-build/update cycle; see `docs/ACCEPTANCE_LOG.md`.
 
 ## 0.1.0-beta.1 — 2026-10-31
 
