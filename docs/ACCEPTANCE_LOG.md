@@ -629,3 +629,9 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - Read-only batches are concurrent only when every call is schema-valid, independently readable, and free of permission rules. Writes, commands, MCP, and mixed or permission-sensitive batches retain ordered execution. Completion events/checkpoints are persisted as each read finishes.
 - Tool output budgets account for current prompt, schemas, assistant tool-call, and prior batch results. Full results remain saved and oversized model-facing output carries a recovery pointer. This supersedes the earlier fixed one-eighth allocation; selected context/output/reasoning remain unchanged.
 - Regression coverage was added for concurrency/order, plan expansion, scan defaults, workstream restoration, and selected-context accounting. No tests, typecheck, build, package, UI acceptance, or live model check was run.
+
+## 2026-11-01 paged checkpoint recovery and cancellable file operations (verification queued)
+
+- Engine commit `23f0f000db4d8d32ca063bd8242b879058ecfc0b` adds a read-only paged checkpoint tool for retrieving saved task plan/progress details omitted from a compacted inference copy. Complete transcript, emitted reasoning, and operation results remain in session history.
+- Project retrieval, listing, search, and file reads now observe request cancellation. Text search processes files incrementally by line to avoid loading whole files into memory; completed/partial results are preserved and explicitly marked cancelled.
+- Regression cases were added but no tests, typecheck, package, app launch, or live model run was performed.

@@ -4,7 +4,7 @@
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
-**Current paired engine source:** `0f05d7824c16d51ac491c3b48027ef9b9df57b25` (unpublished; regressions intentionally queued).
+**Current paired engine source:** `23f0f000db4d8d32ca063bd8242b879058ecfc0b` (unpublished; regressions intentionally queued).
 
 ## Implemented in this source batch
 
@@ -88,3 +88,9 @@ No live model, app process, OpenCode setting, selected token value, model reason
 - Tool output allocation now estimates the current request plus schemas, complete assistant tool-call, and prior results in the batch; each result receives a share of the remaining input budget, with complete output retained in operation history and a recovery pointer for oversized output. This replaces the earlier fixed one-eighth allocation.
 - Fully schema-validated batches made solely of independent read-only project/Git calls execute concurrently. Starts and completions are emitted and checkpointed per operation as work proceeds. Mixed or permission-sensitive batches and all writes, commands, and MCP calls remain ordered.
 - Added mocked regressions for plan append, independent read concurrency, unlimited defaults, and dynamic budget behavior. They are queued and have not been run; this is source implementation, not verified readiness.
+
+## 2026-11-01 paged checkpoint recovery and cooperative cancellation (verification queued)
+
+- Engine commit `23f0f000db4d8d32ca063bd8242b879058ecfc0b` adds `read_task_checkpoint` so the model can retrieve paged sections of the complete canonical checkpoint when compaction reports omitted history. It exposes current/prior tasks, plans, decisions, user updates, operation references, changed files, and verification.
+- Project listing/search/read/relevance retrieval now observes the run's cancellation signal. Search streams lines rather than materializing every matched file in memory. Cancellation yields explicit status and preserves any results already received; no Ollama process/model is stopped.
+- Added queued tests for paged checkpoint recovery and responsive read cancellation. They remain unrun; the engine revision is pinned above but not packaged or user-accepted.
