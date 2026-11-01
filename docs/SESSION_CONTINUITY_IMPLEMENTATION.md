@@ -4,7 +4,7 @@
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
-**Current paired engine source:** `8e377b23fde6dc38f51b3b1ffec12524de186572` (unpublished; regressions intentionally queued).
+**Current paired engine source:** `515d2c34837b2cc915a979bc1aed39b70cc2e369` (unpublished; regressions intentionally queued).
 
 ## Implemented in this source batch
 
@@ -78,3 +78,5 @@ No live model, app process, OpenCode setting, selected token value, model reason
 - File discovery now shares the same per-run context-derived response budget: listing pages stop at a continuation offset, search pages report large matching lines with a read_file cursor, and both disclose page/scan limits. This reduces oversized tool exchanges without changing selected model context/output. Regression cases are queued.
 
 - Bounded list/search scans now probe one extra candidate before reporting incompleteness, eliminating false cap warnings when a project has exactly the configured scan limit. Boundary regressions are queued.
+
+- Every oversized tool result now keeps its complete value in the operation journal but sends the model a bounded UTF-8-safe beginning/end excerpt and an exact operation ID/offset/length for omitted text. The app's Activity Trace still receives the complete result. Regression coverage is queued.

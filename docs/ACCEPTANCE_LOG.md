@@ -616,3 +616,8 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 ## 2026-11-01 accurate file-scan cap boundaries (verification queued)
 
 - Engine commit 8e377b23fde6dc38f51b3b1ffec12524de186572 checks one additional candidate before calling a bounded file scan incomplete. Projects with exactly the configured number of files no longer receive a false partial-results warning. Added exact-limit and over-limit cases; tests remain queued.
+
+## 2026-11-01 oversized operation-result continuation (verification queued)
+
+- Engine commit 515d2c34837b2cc915a979bc1aed39b70cc2e369 keeps the full operation result in engine/session history and bounds only the next model-facing tool message to the per-run context budget. The excerpt preserves both ends of logs, remains UTF-8-safe, and includes exact read_operation_result coordinates for the omitted middle.
+- Added range/cursor and short-result regressions; engine, sidecar, and UI tests remain queued.
