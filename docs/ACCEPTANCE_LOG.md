@@ -517,3 +517,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - The Electron sidecar persists rules in app data, locks changes during active runs, and snapshots the rules into run settings before engine dispatch. Settings exposes the rule editor. Command and MCP execution remain host-account operations without OS containment.
 - Engine policy, worker persistence/snapshot, and app source tests are queued and unrun. The current app pin is `7b7e575203cd8e3110fe4e89c95c38f451a843d7`; no package or visible UI acceptance has been performed for this change.
 
+## 2026-11-01 project review session-data boundary (verification queued)
+
+- Project change review now omits `.agent-workbench` from non-Git project snapshots and from Git diffs, including session files explicitly added to Git. This keeps mirrored conversation/tool history out of the model-facing change review while preserving the user's choice to track those files in Git.
+- Added regression cases for both non-Git and Git-tracked project review paths. They remain unrun with the deferred verification pass; no project/session data was read from the user's workspace.
+

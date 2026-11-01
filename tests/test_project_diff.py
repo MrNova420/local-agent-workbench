@@ -37,3 +37,37 @@ def test_repository_diff_includes_untracked_project_files(tmp_path):
 
     assert "new module.py" in result
     assert "+value = 42" in result
+
+
+def test_non_git_project_review_excludes_private_workbench_session_data(tmp_path):
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "app.py").write_text("print('hello')\n", encoding="utf-8")
+    private = root / ".agent-workbench" / "sessions" / "private.json"
+    private.parent.mkdir(parents=True)
+    private.write_text('{"messages":[{"content":"private conversation"}]}', encoding="utf-8")
+
+    result = workspace_diff_text(root)
+
+    assert "app.py" in result
+    assert "private.json" not in result
+    assert "private conversation" not in result
+
+
+def test_git_project_review_excludes_opted_in_workbench_session_data(tmp_path):
+    root = tmp_path / "project"
+    root.mkdir()
+    _git(root, "init", "-q")
+    private = root / ".agent-workbench" / "sessions" / "private.json"
+    private.parent.mkdir(parents=True)
+    private.write_text('{"messages":[{"content":"private baseline"}]}', encoding="utf-8")
+    _git(root, "add", "-f", ".agent-workbench/sessions/private.json")
+    _git(root, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "baseline")
+    private.write_text('{"messages":[{"content":"private changed content"}]}', encoding="utf-8")
+    (root / "app.py").write_text("print('hello')\n", encoding="utf-8")
+
+    result = workspace_diff_text(root)
+
+    assert "app.py" in result
+    assert "private.json" not in result
+    assert "private changed content" not in result
