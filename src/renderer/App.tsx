@@ -466,9 +466,11 @@ export default function App() {
         setApproval(null);
         setRunning(false); setPhase((current) => nextRunPhase(current, event));
         const verification = event.verification;
-        const hasRecordedCheck = Boolean(verification && typeof verification === 'object' && 'status' in verification && verification.status === 'check_ran');
-        if (event.implementationRequested && event.projectChanged && !hasRecordedCheck) {
-          notify('Changes were made, but no successful post-change inspection or check was recorded. Treat this result as unverified.', 'warn');
+        const verificationStatus = verification && typeof verification === 'object' && 'status' in verification ? String(verification.status) : 'unknown';
+        if (event.implementationRequested && event.projectChanged && verificationStatus === 'command_failed') {
+          notify('Changes were made, but a post-change command failed. Review its output; the work is not verified.', 'warn');
+        } else if (event.implementationRequested && event.projectChanged && !['check_ran', 'inspected', 'command_completed'].includes(verificationStatus)) {
+          notify('Changes were made, but no successful post-change inspection or command was recorded. Treat this result as unverified.', 'warn');
         }
         setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
         setRunMetrics((current) => endGeneration(current));
