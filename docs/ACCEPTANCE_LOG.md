@@ -593,3 +593,8 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 
 - The renderer now uses the latest turn's durable Plan activity only when an older/migrated session lacks its top-level plan field. Explicit empty snapshots remain authoritative, preventing old task checklists from returning.
 - Added regression cases for turn filtering and intentional empty snapshots; unrun pending the planned verification phase.
+
+## 2026-11-01 disclose bounded Git review omissions (verification queued)
+
+- The Git project review now reports the exact number of untracked files omitted by its file-count or total-preview-size guard and points users to Git for complete review. Existing tracked diff output is unaffected.
+- Added a limit-injected regression case; tests remain queued.

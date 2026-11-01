@@ -88,9 +88,19 @@ def workspace_diff_text(workspace: str | Path) -> str:
             record[3:] for record in status.stdout.split("\0")
             if record.startswith("?? ") and record[3:]
         ]
+        omitted_files = max(0, len(untracked) - _MAX_FILES)
         for name in untracked[:_MAX_FILES]:
             chunk = _new_file_diff(root, Path(name))
-            if chunk and sum(map(len, chunks)) + len(chunk) <= _MAX_DIFF_CHARS:
+            if not chunk:
+                continue
+            if sum(map(len, chunks)) + len(chunk) <= _MAX_DIFF_CHARS:
                 chunks.append(chunk)
+            else:
+                omitted_files += 1
+        if omitted_files:
+            chunks.append(
+                f"\nReview incomplete: {omitted_files} untracked file(s) omitted because preview size limits were reached. "
+                "Use Git directly for a complete review.\n"
+            )
     result = "\n".join(chunks).strip()
     return result or "No unstaged Git changes in this project."

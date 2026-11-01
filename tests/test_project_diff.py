@@ -1,6 +1,7 @@
 import subprocess
 from pathlib import Path
 
+import sidecar.project_diff as project_diff
 from sidecar.project_diff import workspace_diff_text
 
 
@@ -37,6 +38,22 @@ def test_repository_diff_includes_untracked_project_files(tmp_path):
 
     assert "new module.py" in result
     assert "+value = 42" in result
+
+
+def test_repository_diff_discloses_untracked_files_omitted_by_preview_limit(tmp_path, monkeypatch):
+    root = tmp_path / "project"
+    root.mkdir()
+    _git(root, "init", "-q")
+    (root / "first.txt").write_text("first\n", encoding="utf-8")
+    (root / "second.txt").write_text("second\n", encoding="utf-8")
+    monkeypatch.setattr(project_diff, "_MAX_FILES", 1)
+
+    result = workspace_diff_text(root)
+
+    assert "first.txt" in result
+    assert "Review incomplete" in result
+    assert "1 untracked file(s) omitted" in result
+    assert "second.txt" not in result
 
 
 def test_non_git_project_review_excludes_private_workbench_session_data(tmp_path):

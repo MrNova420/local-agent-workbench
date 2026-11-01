@@ -321,3 +321,5 @@ The section above records an earlier checkpoint and its evidence; it is not the 
 - Source now includes a first-run checklist, an official Ollama setup route, Squirrel startup-event handling, a GitHub release updater for packaged Windows x64, transcript following that respects scroll-up, compact expandable chat activity, and outside/Escape dismissal for the existing model-detail popover. The orbit's model markers are data-driven; fixed rings are decorative only.
 - README/setup docs have been refreshed and the one available screenshot is retained as historical. Current release-candidate Home/chat/worksheet screenshots do not yet exist in the repo.
 - Automated checks, typecheck, a fresh package, visible UI acceptance, installer upgrade, update discovery/application, release publication, and current screenshots remain open. Context/output/reasoning were not changed by these source edits.
+
+- Git change review now explicitly labels omitted untracked files when the bounded preview reaches its file or size guard. The existing guard remains to keep the review UI responsive; this is not a complete-diff claim. Regression coverage is added and queued.
