@@ -328,8 +328,15 @@ class AgentService:
             except Exception as exc:
                 ollama_models = []
                 ollama_error = f"{type(exc).__name__}: {exc}"
-            gguf_models = [{"id": row.model_id, "label": row.display_name, "provider": row.provider_id}
-                           for row in self.providers.by_id("llama.cpp").models()]
+            gguf_models = []
+            for row in self.providers.by_id("llama.cpp").models():
+                try:
+                    self._gguf_record(row.model_id)
+                except (OSError, ValueError):
+                    # A saved library entry whose GGUF was moved/deleted is not
+                    # an installed local model and must not create a Home dot.
+                    continue
+                gguf_models.append({"id": row.model_id, "label": row.display_name, "provider": row.provider_id})
             return {"ollama": ollama_models,
                     "gguf": gguf_models,
                     "ollama_error": ollama_error}
