@@ -479,3 +479,9 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 
 - Cancel now remains visible until the sidecar acknowledges the action; IPC failure leaves the required decision available for retry. The sidecar reports when there is no active run, and the UI reports that state instead of implying a cancel succeeded. Finish-current-operation also waits for the host's accepted/not-active result. Added mocked worker coverage; no tests or UI checks were run.
 - App-close choices now remain pending until Electron acknowledges keep/hide/cancel; cancellation must be accepted and the run must become idle before shutdown. IPC or tray failures leave the choice available and report the error. Packaged close-flow acceptance remains queued.
+## 2026-11-01 selected Ollama settings authority (verification queued)
+
+- Fixed a request-construction precedence bug where generic runtime options could overwrite the selected context, output-token cap, and temperature. The selected controls now win; unrelated supported runtime options still pass through. Conflicts are included in provider request provenance and surfaced in the activity detail.
+- Added engine streaming coverage and renderer activity coverage. Neither was run because broad regression verification remains queued until implementation is complete.
+- App and engine revisions are paired at `923292b6879ea90e5c647519074ee5dfdfaf164c`. Existing user-selected settings were not edited, and no model was loaded or called.
+

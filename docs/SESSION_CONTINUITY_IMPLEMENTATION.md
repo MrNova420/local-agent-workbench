@@ -4,6 +4,8 @@
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
+**Current paired engine source:** `923292b6879ea90e5c647519074ee5dfdfaf164c` (unpublished; regressions intentionally queued).
+
 ## Implemented in this source batch
 
 - A session-owned task checkpoint now carries the original goal, user follow-up instructions, captured runtime settings, plan, completed operation references, changed files, verification, and the latest assistant update. Complete transcript, emitted reasoning, and complete tool results remain in session history/activity.

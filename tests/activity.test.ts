@@ -166,6 +166,11 @@ describe('durable live activity state', () => {
     expect(trace).toContain('Cached prompt tokens');
     expect(trace).toContain('2,048');
     expect(trace).toContain('30.00 s');
+    const conflictTrace = renderToStaticMarkup(createElement(ActivityFeed, { entries: [{ ...record,
+      providerRequest: { ...record.providerRequest, additional_fields: { ignored_runtime_option_overrides: { num_ctx: 8192, num_predict: 500 } } },
+    }], mode: 'sidebar', surface: 'sidebar' }));
+    expect(conflictTrace).toContain('Runtime options tried to override controls owned by this run');
+    expect(conflictTrace).toContain('num_ctx');
     const waiting = renderToStaticMarkup(createElement(ActivityFeed, { entries: [{ ...record, status: 'awaiting_response_headers',
       providerRequest: { ...record.providerRequest, dispatch_status: 'awaiting_response_headers' } }], mode: 'sidebar', surface: 'sidebar' }));
     expect(waiting).toContain('waiting for response headers');

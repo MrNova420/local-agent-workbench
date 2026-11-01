@@ -8,7 +8,8 @@ Deliver **1:1 user-facing feature and workflow parity with Codex and OpenCode** 
 
 ## Current active source state (2026-11-01)
 
-- Unpublished app source pins engine commit `51cd9e4a6fc3c414d56b454d0e1c365ac3abf37e` in `core-revision.txt`. These commits are isolated in worktrees and have not been pushed or packaged.
+- Unpublished app source pins engine commit `923292b6879ea90e5c647519074ee5dfdfaf164c` in `core-revision.txt`. These commits are isolated in worktrees and have not been pushed or packaged.
+- The Ollama request adapter now prevents generic runtime options from silently overriding selected context, output-token, and temperature controls. Conflicts are recorded in request provenance and called out in activity details. A regression is queued; settings were not changed and no inference was run.
 - New source changes add progressive rendering for long activity timelines, separate Ollama/llama.cpp worker CPU/RAM and NVIDIA worker-process VRAM from device-wide GPU readings, and remove the approved-command default of 120 seconds and one-hour ceiling. Standalone operation-result retrieval now works from engine memory when no app session store is available.
 - The cancel chooser now waits for a positive sidecar acknowledgment and stays open on transport failure; a stale click after a run ended is reported as no active run rather than success.
 - The app-close chooser now also waits for Electron's accepted choice; cancel-and-close verifies the sidecar accepted cancellation and waits for the run to become idle before shutdown. This source behavior remains unverified in a packaged UI.

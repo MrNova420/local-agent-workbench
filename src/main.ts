@@ -322,7 +322,7 @@ app.whenReady().then(async () => {
     try {
       if (service.isRunActive()) {
         const result = await service.request<{ cancelled: boolean }>({ command: 'run_cancel' });
-        if (!result.cancelled && service.isRunActive()) throw new Error('The agent sidecar did not accept cancellation.');
+        if (!result.cancelled && service.isRunActive()) throw new Error('The agent sidecar did not accept cancellation while its run is still active.');
         await service.waitForRunIdle();
       }
     } catch (error) { closeDecisionPending = false; throw error; }
