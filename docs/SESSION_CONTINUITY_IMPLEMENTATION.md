@@ -44,7 +44,7 @@
 ## 2026-11-01 Project/session read isolation follow-up
 
 - Project opening and file refresh depend on project file access only. Session enumeration runs independently with loading/error/retry state, so a session-index failure does not make a valid folder appear unavailable.
-- Session restoration completes independently from refreshing the project session list. Project session responses are sequenced, and a late save event from a previously active workspace cannot replace the current project's list.
+- Session restoration completes independently from refreshing the project session list. Its file inventory reloads from the restored session's captured workspace, and navigation/file/session request sequences prevent late responses from a previously active project or session from replacing current state.
 - Renderer regression and packaged workspace-switch acceptance remain queued; no verification was run for this follow-up.
 - The required cancel chooser now waits for explicit sidecar acknowledgment; a failed IPC call leaves it open, and a no-longer-active run is reported instead of silently looking canceled. Finish-after-current-operation receives the same acceptance check. Mocked and visible chooser tests remain queued.
 - App-close choices also wait for host acknowledgment. Cancel-and-close validates cancellation acceptance and waits for run-idle before shutdown; failures keep the modal available instead of silently closing.

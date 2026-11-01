@@ -684,4 +684,5 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 
 - Project opening now waits for file access only; session enumeration loads independently, reports loading/failure, and provides retry without making the project appear unavailable. File refresh updates usable files even if session history cannot be queried.
 - Project session reads are request-sequenced. A late save event for a previous workspace cannot replace the current project's session list. Restoring a session completes independently from its background project-session-list refresh.
+- Restoring a session also reloads that session's own file inventory; stale navigation, file, and session requests are ignored to prevent the previous workspace's file panel from remaining visible after a project switch.
 - No tests, typecheck, package build, UI acceptance, or model request was run. Verification remains queued for the final phase.

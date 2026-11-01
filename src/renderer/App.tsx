@@ -243,6 +243,8 @@ export default function App() {
   const assistantSegmentBreakRef = useRef(false);
   const workspaceHistoryRequestId = useRef(0);
   const projectSessionRequestId = useRef(0);
+  const projectFileRequestId = useRef(0);
+  const navigationRequestId = useRef(0);
   const modelCatalogLoaded = useRef(false);
   const modelCatalogRequestId = useRef(0);
 
@@ -294,7 +296,9 @@ export default function App() {
   const refreshWorkspace = useCallback(async (root: string) => {
     // File access is the essential project operation. A session-index failure
     // must not make the workspace look unavailable or discard refreshed files.
+    const requestId = ++projectFileRequestId.current;
     const fileRows = await request<ProjectFile[]>({ command: 'workspace_files', workspace: root });
+    if (requestId !== projectFileRequestId.current) return;
     setFiles(fileRows);
     void refreshProjectSessions(root).catch((error) => notify(`Project files loaded, but saved sessions could not be refreshed: ${(error as Error).message}`, 'warn'));
   }, [notify, refreshProjectSessions, request]);
@@ -330,8 +334,11 @@ export default function App() {
   }, [refreshWorkspaceHistory, request]);
 
   const showProject = useCallback(async (root: string) => {
+    const navigationId = ++navigationRequestId.current;
+    const fileRequestId = ++projectFileRequestId.current;
     try {
       const filesResult = await request<ProjectFile[]>({ command: 'workspace_files', workspace: root });
+      if (navigationId !== navigationRequestId.current || fileRequestId !== projectFileRequestId.current) return;
       setWorkspace(root);
       localStorage.setItem('agent-workspace', root);
       setFiles(filesResult);
@@ -364,8 +371,10 @@ export default function App() {
   }, [notify, refreshWorkspaceHistory, request]);
 
   const loadSession = useCallback(async (id: string, selectedWorkspace = workspace, source?: 'app' | 'project') => {
+    const navigationId = ++navigationRequestId.current;
     try {
       const response = await request<Session | { conflict: true; recommended_source: 'project'; versions: Array<{ source: 'app' | 'project'; updated_at?: number }> }>({ command: 'session_resume', sessionId: id, workspace: selectedWorkspace || undefined, source });
+      if (navigationId !== navigationRequestId.current) return;
       if ('conflict' in response && response.conflict) {
         setSessionConflict({ id, workspace: selectedWorkspace, versions: response.versions });
         return;
@@ -377,9 +386,11 @@ export default function App() {
       setVerificationEvidence(readVerificationEvidence(loaded.run_state?.verification));
       const root = loaded.workspace;
       const sessionRequestId = ++projectSessionRequestId.current;
+      const fileRequestId = ++projectFileRequestId.current;
       setModel(loaded.model);
       const rows: ChatMessage[] = restoreTranscriptMessages(loaded.messages, loaded.turns);
       setWorkspace(root);
+      setFiles([]);
       localStorage.setItem('agent-workspace', root);
       setSession(loaded);
       if (loaded.recovery_issues?.length) {
@@ -427,6 +438,13 @@ export default function App() {
       setView('session');
       setRecoverySession(loaded.run_state?.status === 'interrupted' ? loaded : null);
       setProjectSessionHistoryStatus('loading');
+      void request<ProjectFile[]>({ command: 'workspace_files', workspace: root }).then((rows) => {
+        if (fileRequestId !== projectFileRequestId.current || navigationId !== navigationRequestId.current) return;
+        setFiles(rows);
+      }).catch((error) => {
+        if (fileRequestId !== projectFileRequestId.current || navigationId !== navigationRequestId.current) return;
+        notify(`Session restored, but the project file list could not be loaded: ${(error as Error).message}`, 'warn');
+      });
       void request<SessionSummary[]>({ command: 'sessions_list', workspace: root }).then((rows) => {
         if (sessionRequestId !== projectSessionRequestId.current) return;
         setSessions(rows);
