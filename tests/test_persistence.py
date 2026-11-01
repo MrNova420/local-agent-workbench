@@ -131,7 +131,10 @@ class MirroredSessionStoreTests(unittest.TestCase):
                 {"_journal_event_id": "next-request", "_journal_recorded_at_ns": 4, "type": "phase", "phase": "waiting"},
                 {"_journal_event_id": "final-text", "_journal_recorded_at_ns": 5, "type": "text", "text": "Page is ready."},
                 {"_journal_event_id": "complete", "_journal_recorded_at_ns": 6, "type": "generation_complete",
-                 "verification": {"status": "not_verified"}, "workflowOutcome": "changed"},
+                 "verification": {"status": "not_verified", "steps": [], "contract": {
+                     "implementation_requested": True, "project_change": "observed",
+                     "post_change_inspection": "missing", "approved_command_results": [],
+                     "command_success_is_test_pass": False}}, "workflowOutcome": "changed"},
             ])
 
             recovered = store.load(state["session_id"], str(root))["state"]
@@ -139,10 +142,12 @@ class MirroredSessionStoreTests(unittest.TestCase):
 
             self.assertEqual(recovered["run_state"]["status"], "completed")
             self.assertEqual(recovered["run_state"]["workflow_outcome"], "changed")
+            self.assertEqual(recovered["run_state"]["verification"]["contract"]["post_change_inspection"], "missing")
             self.assertEqual(messages[1]["content"], "Build the page")
             self.assertEqual(messages[3]["content"], "Wrote index.html")
             self.assertEqual(messages[-1]["content"], "Page is ready.")
             self.assertEqual(recovered["task_checkpoint"]["current"]["operations"][0]["result_ref"], "op-2")
+            self.assertEqual(recovered["task_checkpoint"]["current"]["verification"]["contract"]["command_success_is_test_pass"], False)
 
     def test_app_snapshot_save_reports_app_failure_without_skipping_project_mirror(self):
         with tempfile.TemporaryDirectory() as temp:

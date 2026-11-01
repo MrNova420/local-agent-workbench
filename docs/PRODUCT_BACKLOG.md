@@ -10,7 +10,7 @@ The product target is full 1:1 user-facing feature and workflow parity with Code
 - The README now contains three relevant historical Workbench screenshots; each is labeled historical. Current release-build Home/chat/worksheet captures remain a follow-up because the user-specific Home contains private workspace paths.
 - Keep the user's context/output/reasoning values unchanged. The next core-development batch remains isolated from the published beta.
 - The active unpublished session-continuity source batch adds rolling task checkpoints, append-only mirrored run journals, coalesced full snapshots, bounded replace retry, durable per-turn provider usage, cached-token forwarding, and the missing Plan-panel binding. These changes are not tested, typechecked, packaged, or visibly accepted yet. The detailed verification queue is in [SESSION_CONTINUITY_IMPLEMENTATION.md](SESSION_CONTINUITY_IMPLEMENTATION.md).
-- The current unpublished source also includes Workbench-owned skill switches/sources, durable session run settings, evidence-based terminal outcomes, and explicit task intent with a host-generated initial checklist. These are not promoted to the public beta and are queued for full cross-repository verification.
+- The current unpublished source also includes Workbench-owned skill switches/sources, durable session run settings, evidence-based terminal outcomes, and explicit task intent with a host-generated initial checklist. Terminal verification records actual project-change, post-change-inspection, and approved-command evidence; implementation with no observed project change has its own incomplete outcome. These are not promoted to the public beta and are queued for full cross-repository verification.
 
 ## Queued for review and implementation
 

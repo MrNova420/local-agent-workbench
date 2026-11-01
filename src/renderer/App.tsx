@@ -12,6 +12,7 @@ import { applyActivityEvent, shouldRefreshWorkspaceForActivity } from '../shared
 import { DEFAULT_RUN_SHEET_LAYOUT, moveRunSheetPanel, normalizeRunSheetLayout, resizeRunSheetPanel, type RunSheetLayout, type RunSheetPanel } from '../shared/run-sheet-layout';
 import { nextHarnessProfile } from '../shared/harness-profile';
 import { isNearTranscriptEnd } from '../shared/transcript-follow';
+import { readVerificationEvidence, verificationEvidenceLabel, type VerificationEvidence } from '../shared/verification-evidence';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; turnId?: string; thinking?: string; streaming?: boolean; recoveredPartial?: boolean };
 type PlanItem = { title?: string; text?: string; status?: string; source?: 'workbench' | 'agent' };
@@ -85,13 +86,12 @@ function secs(ms: number) { return `${Math.floor(ms / 1000)}s`; }
 function tokenDelay(ms: number | null) { return ms == null ? '—' : `${(ms / 1000).toFixed(1)}s`; }
 function workflowOutcomeLabel(value: unknown): string | null {
   const labels: Record<string, string> = {
-    discussion: 'Discussion only', plan_only: 'Plan recorded · no edits', blocked: 'Blocked', changed: 'Changes made · not verified',
+    discussion: 'Discussion only', plan_only: 'Plan recorded · no edits', blocked: 'Blocked', implementation_incomplete: 'Implementation not completed', changed: 'Changes made · not verified',
     inspected: 'Changes inspected', command_completed: 'Command completed · not a test claim', command_failed: 'Command failed',
     cancelled: 'Cancelled', failed: 'Failed', interrupted: 'Interrupted', stopped: 'Stopped after operation',
   };
   return typeof value === 'string' ? labels[value] || value.replaceAll('_', ' ') : null;
 }
-
 function Icon({ name }: { name: 'spark' | 'folder' | 'arrow' | 'close' | 'play' | 'stop' | 'clock' | 'cpu' | 'memory' | 'branch' | 'chevron' | 'plus' | 'terminal' | 'check' | 'refresh' }) {
   const paths: Record<string, React.ReactNode> = {
     spark: <><path d="m12 2 1.7 6.3L20 10l-6.3 1.7L12 18l-1.7-6.3L4 10l6.3-1.7L12 2Z"/><path d="m19 16 .8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16Z"/></>,
@@ -189,6 +189,7 @@ export default function App() {
   const [running, setRunning] = useState(false);
   const [phase, setPhase] = useState('Ready');
   const [workflowOutcome, setWorkflowOutcome] = useState<string | null>(null);
+  const [verificationEvidence, setVerificationEvidence] = useState<VerificationEvidence | null>(null);
   const [startedAt, setStartedAt] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [runMetrics, setRunMetrics] = useState<RunMetrics>(emptyRunMetrics);
@@ -274,6 +275,8 @@ export default function App() {
       await refreshWorkspaceHistory('');
       setSession(null);
       setMessages([]);
+      setWorkflowOutcome(null);
+      setVerificationEvidence(null);
       setView('project');
       setProjectTab('overview');
     } catch (error) { notify(`Could not open project: ${(error as Error).message}`, 'bad'); }
@@ -290,6 +293,7 @@ export default function App() {
       setSessionConflict(null);
       setPhase(restoredRunPhase(loaded.run_state?.status));
       setWorkflowOutcome(typeof loaded.run_state?.workflow_outcome === 'string' ? loaded.run_state.workflow_outcome : loaded.run_state?.status === 'interrupted' ? 'interrupted' : null);
+      setVerificationEvidence(readVerificationEvidence(loaded.run_state?.verification));
       const root = loaded.workspace;
       setModel(loaded.model);
       const rows: ChatMessage[] = restoreTranscriptMessages(loaded.messages, loaded.turns);
@@ -350,6 +354,7 @@ export default function App() {
     setRecoverySession(null);
     setSession(recovered.state);
     setWorkflowOutcome(typeof recovered.state.run_state?.workflow_outcome === 'string' ? recovered.state.run_state.workflow_outcome : null);
+    setVerificationEvidence(readVerificationEvidence(recovered.state.run_state?.verification));
     const restored: ChatMessage[] = restoreTranscriptMessages(recovered.state.messages, recovered.state.turns);
     const partial = typeof recovered.state.run_state?.partial_content === 'string' ? recovered.state.run_state.partial_content : '';
     const partialThinking = typeof recovered.state.run_state?.partial_thinking === 'string' ? recovered.state.run_state.partial_thinking : '';
@@ -533,12 +538,14 @@ export default function App() {
         setApproval(null);
         setRunning(false); setPhase((current) => nextRunPhase(current, event));
         setWorkflowOutcome(typeof event.workflowOutcome === 'string' ? event.workflowOutcome : 'discussion');
+        const evidence = readVerificationEvidence(event.verification);
+        setVerificationEvidence(evidence);
         const verification = event.verification;
         const verificationStatus = verification && typeof verification === 'object' && 'status' in verification ? String(verification.status) : 'unknown';
         if (event.implementationRequested && event.projectChanged && verificationStatus === 'command_failed') {
           notify('Changes were made, but a post-change command failed. Review its output; the work is not verified.', 'warn');
-        } else if (event.implementationRequested && event.projectChanged && !['check_ran', 'inspected', 'command_completed'].includes(verificationStatus)) {
-          notify('Changes were made, but no successful post-change inspection or command was recorded. Treat this result as unverified.', 'warn');
+        } else if (event.implementationRequested && event.projectChanged && evidence?.contract?.post_change_inspection !== 'completed') {
+          notify('Changes were made, but no successful post-change inspection was recorded. Treat this result as unverified.', 'warn');
         }
         setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
         setRunMetrics((current) => endGeneration(current));
@@ -695,7 +702,7 @@ export default function App() {
       const tokenPreferences = readRunTokenPreferences(localStorage.getItem('agent-run-token-preferences'));
       const chosenMode = selectedActivityMode || activityDefault;
       const created = await request<Session>({ command: 'session_new', workspace, model: selectedModel, context: tokenPreferences.context, activityMode: chosenMode });
-      setSession(created); setMessages([]); setTrace([]); setPlan([]); setPrompt(''); setElapsed(0); setPhase('Ready'); setView('session');
+      setSession(created); setMessages([]); setTrace([]); setPlan([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setElapsed(0); setPhase('Ready'); setView('session');
       setActivities([]); setActivityMode(chosenMode); sessionStorage.setItem('agent-activity-mode', chosenMode);
       setRunMetrics(emptyRunMetrics());
       setOptions((old) => ({ ...old, context: created.context, maxTokens: tokenPreferences.maxTokens, approvalMode: 'per-action', reasoning: null }));
@@ -730,7 +737,7 @@ export default function App() {
     };
     if (options.approvalMode === 'auto') setOptions((current) => ({ ...current, approvalMode: 'per-action' }));
     setMessages((current) => [...current, { role: 'user', content: task }]);
-    setTrace([]); setPlan([]); setWorkflowOutcome(null); setPrompt(''); setRunning(true); setPhase('Connecting to Ollama');
+    setTrace([]); setPlan([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setRunning(true); setPhase('Connecting to Ollama');
     setStartedAt(Date.now()); setElapsed(0); setRunMetrics(emptyRunMetrics());
     try { await request({ command: 'run_start', options: run }); }
     catch (error) { setRunning(false); setPhase('Run failed'); setWorkflowOutcome('failed'); notify((error as Error).message, 'bad'); }
@@ -900,7 +907,7 @@ export default function App() {
         onHome={() => setView('landing')}
       />}
       {view === 'session' && <SessionRoom
-        root={workspace} session={session} messages={messages} activities={activities} activityMode={activityMode} plan={plan} phase={phase} workflowOutcome={workflowOutcome}
+        root={workspace} session={session} messages={messages} activities={activities} activityMode={activityMode} plan={plan} phase={phase} workflowOutcome={workflowOutcome} verificationEvidence={verificationEvidence}
         elapsed={elapsed} running={running} prompt={prompt} setPrompt={setPrompt} promptRef={promptRef}
         options={options} setOptions={setOptions} files={availableFiles} telemetry={telemetry}
         runMetrics={runMetrics} onRun={startRun} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
@@ -1051,10 +1058,10 @@ function ProjectHome({ root, tab, setTab, files, sessions, onNew, onOpenSession,
   </section>;
 }
 
-function SessionRoom({ root, session, messages, activities, activityMode, plan, phase, workflowOutcome, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
+function SessionRoom({ root, session, messages, activities, activityMode, plan, phase, workflowOutcome, verificationEvidence, elapsed, running, prompt, setPrompt, promptRef, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
   root: string; session: Session | null; messages: ChatMessage[]; activities: ActivityRecord[]; activityMode: ActivityMode; plan: PlanItem[];
   phase: string; elapsed: number; running: boolean; prompt: string; setPrompt: (value: string) => void;
-  workflowOutcome: string | null; promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
+  workflowOutcome: string | null; verificationEvidence: VerificationEvidence | null; promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
   setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>; files: ProjectFile[];
   telemetry: TelemetryView;
   runMetrics: RunMetrics; appliedSettings: AppliedSettings | null;
@@ -1096,7 +1103,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
   return <section className="session-view">
     <div className="session-commandline"><button className="crumb-back" onClick={onBack}>PROJECT / {shortPath(root).toUpperCase()}</button><span className="crumb-slash">/</span><span className="session-crumb">SESSION {session?.session_id.slice(-8).toUpperCase()}</span><span className="commandline-spacer"/><button className="inline-command" onClick={onTools}>TOOLS</button><button className="inline-command" onClick={onMcp}>MCP</button><button className="inline-command" onClick={onDiff}>CHANGES</button><span className={`phase-chip ${running ? 'is-running' : ''}`}><i/>{running ? phase.toUpperCase() : phase.toUpperCase()}</span><span className="run-elapsed"><Icon name="clock"/> {running ? secs(elapsed) : '—'}</span></div>
     <div className="task-route" aria-label="Task execution phases">{steps.map((step, index) => <div className={`route-step ${index < currentStep ? 'done' : ''} ${index === currentStep ? 'current' : ''}`} key={step}><span className="route-node">{index < currentStep ? <Icon name="check"/> : `0${index + 1}`}</span><span>{step === 'Waiting for first token' ? 'Prefill / waiting' : step}</span></div>)}</div>
-    {workflowOutcome && <div className={`workflow-outcome outcome-${workflowOutcome}`} role="status"><span>OBSERVED OUTCOME</span><strong>{workflowOutcomeLabel(workflowOutcome)}</strong><small>{workflowOutcome === 'command_completed' ? 'Command exit was successful; this does not alone prove tests passed.' : workflowOutcome === 'changed' ? 'Project changes exist without a recorded verification step.' : workflowOutcome === 'inspected' ? 'A post-change inspection completed; semantic correctness is not implied.' : 'Based on the host-observed tools and terminal status.'}</small></div>}
+    {workflowOutcome && <div className={`workflow-outcome outcome-${workflowOutcome}`} role="status"><span>OBSERVED OUTCOME</span><strong>{workflowOutcomeLabel(workflowOutcome)}</strong><small>{workflowOutcome === 'command_completed' ? 'Command exit was successful; this does not alone prove tests passed.' : workflowOutcome === 'changed' ? 'Project changes exist without a recorded post-change inspection.' : workflowOutcome === 'inspected' ? 'A post-change inspection completed; semantic correctness is not implied.' : workflowOutcome === 'implementation_incomplete' ? 'No project change was recorded for this implementation request. Review the response and checkpoint before continuing.' : 'Based on the host-observed tools and terminal status.'}</small>{verificationEvidenceLabel(verificationEvidence) && <small className="verification-evidence">{verificationEvidenceLabel(verificationEvidence)}</small>}</div>}
     <div className="session-main-grid">
       <section className="transcript-plane" aria-label="Conversation transcript">
         {!messages.length ? <div className="transcript-empty"><div className="empty-symbol"><Icon name="spark"/></div><span className="eyebrow-line">NEW WORK UNIT / {shortPath(root).toUpperCase()}</span><h2>What should we<br/>work through?</h2><p>The model sees selected, relevant project files as needed. You control any action that can change the workspace.</p><div className="starter-prompts"><button onClick={() => setPrompt('Inspect this project and explain its architecture and how to run it.')}>Map the project <Icon name="arrow"/></button><button onClick={() => setPrompt('Review this project for the highest-priority bug and propose a fix.')}>Find a bug <Icon name="arrow"/></button><button onClick={() => setPrompt('Add a focused feature to this project and verify it with the existing tests.')}>Build a feature <Icon name="arrow"/></button></div></div> : <div className="message-list" ref={transcriptRef} onScroll={updateTranscriptFollow}>{messages.map((message, index) => <Fragment key={`${message.turnId || 'legacy'}-${index}-${message.role}`}><article className={`message-card message-${message.role}`}>
