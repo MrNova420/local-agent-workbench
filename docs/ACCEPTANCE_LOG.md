@@ -574,3 +574,8 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - Engine commit `b2db2d8428298f6d9d31749e3e469a62c5d2e6b8` scopes anti-loop/progress guidance to implementation tasks and explicitly preserves Discussion and Plan-only behavior.
 - Added prompt coverage; it remains unrun. The app pin is synchronized to this engine commit; inference settings are unchanged.
 
+## 2026-11-01 plan decisions survive compaction and replay (verification queued)
+
+- Engine commit `fd1104d1ef6fe321ae238721fe523c9bc4ca854e` adds optional concise design-decision/assumption summaries to `update_plan`. The engine writes them to the durable task checkpoint; the app includes them in Plan activity and reconstructs them from event journals. Guidance excludes hidden chain-of-thought.
+- Added engine, sidecar, and journal-replay coverage; it remains unrun. The app pin is synchronized. No model or inference settings changed.
+
