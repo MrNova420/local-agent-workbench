@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
-import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
+import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, RunOptions, SessionSummary, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
 import { nextRunPhase, restoredRunPhase, runStepProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordStreamedText, type RunMetrics } from '../shared/run-metrics';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice, readRunTokenPreferences } from '../shared/model-controls';
@@ -11,6 +11,7 @@ import { ActivityFeed } from './ActivityFeed';
 import { applyActivityEvent, shouldRefreshWorkspaceForActivity } from '../shared/activity';
 import { DEFAULT_RUN_SHEET_LAYOUT, moveRunSheetPanel, normalizeRunSheetLayout, resizeRunSheetPanel, type RunSheetLayout, type RunSheetPanel } from '../shared/run-sheet-layout';
 import { nextHarnessProfile } from '../shared/harness-profile';
+import { isNearTranscriptEnd } from '../shared/transcript-follow';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; thinking?: string; streaming?: boolean; recoveredPartial?: boolean };
 type Session = {
@@ -141,6 +142,7 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<Record<string, unknown>>({});
   const [appliedSettings, setAppliedSettings] = useState<AppliedSettings | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [updateState, setUpdateState] = useState<AppUpdateState>({ supported: false, status: 'unsupported', currentVersion: window.agent.version });
   const [approval, setApproval] = useState<Approval | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mcpOpen, setMcpOpen] = useState(false);
@@ -298,6 +300,8 @@ export default function App() {
   }
 
   useEffect(() => {
+    const unsubscribeUpdate = window.agent.onUpdateState(setUpdateState);
+    void window.agent.updateState().then(setUpdateState).catch(() => undefined);
     void refreshModels();
     void refreshHome().catch((error) => notify(`Could not load saved workspace history: ${(error as Error).message}`, 'warn'));
     void request({ command: 'ping' }).then(() => setInstalled(true)).catch(() => setInstalled(false));
@@ -454,7 +458,7 @@ export default function App() {
       if (event.type === 'context_limit') notify(String(event.error), 'bad');
     });
     const unsubscribeClose = window.agent.onCloseDecision(() => setCloseChoiceOpen(true));
-    return () => { unsubscribe(); unsubscribeClose(); };
+    return () => { unsubscribe(); unsubscribeClose(); unsubscribeUpdate(); };
   }, [notify, refreshHome, refreshModels, refreshWorkspaceHistory, request, workspace]);
 
   useEffect(() => {
@@ -498,8 +502,6 @@ export default function App() {
     }, 1000);
     return () => window.clearInterval(interval);
   }, [running, startedAt]);
-
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [messages]);
 
   const currentSessions = useMemo(() => sessions.filter((row) => !workspace || row.workspace === workspace), [sessions, workspace]);
   const availableFiles = useMemo(() => files.filter((row) => row.path).slice(0, 500), [files]);
@@ -745,6 +747,7 @@ export default function App() {
         onPin={(root, pinned) => void request({ command: 'workspace_pin', workspace: root, pinned }).then(() => refreshWorkspaceHistory(workspaceSearch)).catch((error) => notify((error as Error).message, 'warn'))}
         onRemove={(root) => void request({ command: 'workspace_remove', workspace: root }).then(() => refreshWorkspaceHistory(workspaceSearch)).catch((error) => notify((error as Error).message, 'warn'))}
         onLibrary={() => setModelLibraryOpen(true)}
+        onInstallOllama={() => void window.agent.openOllamaDownload().catch((error) => notify(`Could not open Ollama setup: ${(error as Error).message}`, 'bad'))}
       />}
       {view === 'project' && <ProjectHome
         root={workspace} tab={projectTab} setTab={setProjectTab} files={availableFiles} sessions={currentSessions}
@@ -774,7 +777,7 @@ export default function App() {
     </footer>
 
     {notice && <div className={`toast toast-${notice.tone}`} role="status"><span>{notice.text}</span><button onClick={() => setNotice(null)}><Icon name="close"/></button></div>}
-    {settingsOpen && <SettingsModal model={model} modelLabel={displayModelLabels[model] || shortModel(model)} modelInfo={modelInfo} options={options} setOptions={setOptions} activityDefault={activityDefault} setActivityDefault={setActivityDefault} activityMode={activityMode} setActivityMode={setActivityMode} askActivityChoice={askActivityChoice} setAskActivityChoice={setAskActivityChoice} hasSession={!!session} onClose={() => setSettingsOpen(false)} onSave={saveSettings} onMcp={openMcp} />}
+    {settingsOpen && <SettingsModal model={model} modelLabel={displayModelLabels[model] || shortModel(model)} modelInfo={modelInfo} options={options} setOptions={setOptions} activityDefault={activityDefault} setActivityDefault={setActivityDefault} activityMode={activityMode} setActivityMode={setActivityMode} askActivityChoice={askActivityChoice} setAskActivityChoice={setAskActivityChoice} hasSession={!!session} running={running} updateState={updateState} onCheckUpdate={() => void window.agent.checkForUpdate().then(setUpdateState).catch((error) => setUpdateState((state) => ({ ...state, status: 'error', error: (error as Error).message })))} onInstallUpdate={() => void window.agent.installUpdate().then((result) => { if (!result.installed) notify(result.reason || 'Update installation is unavailable.', 'warn'); }).catch((error) => notify(`Could not apply update: ${(error as Error).message}`, 'bad'))} onClose={() => setSettingsOpen(false)} onSave={saveSettings} onMcp={openMcp} />}
     {modelLibraryOpen && <ModelLibraryModal model={model} models={models} modelLabels={displayModelLabels} context={options.context} reasoning={options.reasoning} downloadedDirectory={downloadedModelDirectory} onModel={selectModel} onRefresh={refreshModels} onClose={() => setModelLibraryOpen(false)} notify={notify}/>}
     {mcpOpen && <Modal title="MCP connections" eyebrow="EXTEND THE TOOLSET" onClose={() => setMcpOpen(false)}>
       <p className="modal-copy">Connect local stdio or remote Streamable HTTP servers. Every tool call requires approval. Use HTTPS for remote servers; reference credentials as <code>${'{ENV:VARIABLE_NAME}'}</code> so secrets stay out of this file. MCP servers can access whatever their own process/account permits.</p>
@@ -827,11 +830,11 @@ export default function App() {
   </div>;
 }
 
-function Landing({ workspaces, workspaceSearch, sessions, models, modelLabels, model, modelPreloading, context, connected, telemetry, onChoose, onOpen, onModel, onModelInfo, onRefresh, onSearch, onPin, onRemove, onLibrary }: {
+function Landing({ workspaces, workspaceSearch, sessions, models, modelLabels, model, modelPreloading, context, connected, telemetry, onChoose, onOpen, onModel, onModelInfo, onRefresh, onSearch, onPin, onRemove, onLibrary, onInstallOllama }: {
   workspaces: WorkspaceHistoryEntry[]; workspaceSearch: string; sessions: SessionSummary[]; models: string[]; modelLabels: Record<string, string>; model: string; modelPreloading: boolean; context: number; connected: string;
   telemetry: TelemetryView;
   onChoose: () => void; onOpen: (root: string) => void; onModel: (name: string) => void; onModelInfo: (name: string) => Promise<ModelInfo>; onRefresh: () => void;
-  onSearch: (value: string) => void; onPin: (root: string, pinned: boolean) => void; onRemove: (root: string) => void; onLibrary: () => void;
+  onSearch: (value: string) => void; onPin: (root: string, pinned: boolean) => void; onRemove: (root: string) => void; onLibrary: () => void; onInstallOllama: () => void;
 }) {
   return <section className="landing-view">
     <div className="landing-grid">
@@ -849,6 +852,10 @@ function Landing({ workspaces, workspaceSearch, sessions, models, modelLabels, m
         <div className="visual-coordinate">[LOCATION REMOVED]<br/>[LOCATION REMOVED]</div>
       </div>
     </div>
+    {!workspaces.length && <section className="first-run-guide" aria-label="First run setup">
+      <div><span className="eyebrow-line">QUICK SETUP / NO MODEL LOAD ON LAUNCH</span><h2>Ready your first workspace</h2><p>The app bundles its agent service. Connect a runtime, select or add a local model, then open a project. A model starts only when you explicitly run or preload it.</p></div>
+      <div className="first-run-steps"><span className={connected === 'yes' ? 'step-ready' : ''}><b>01</b><strong>{connected === 'yes' ? 'Runtime connected' : 'Connect a runtime'}</strong><small>{connected === 'yes' ? 'Ollama is reachable' : 'Ollama or local GGUF server'}</small></span><span className={models.length ? 'step-ready' : ''}><b>02</b><strong>{models.length ? `${models.length} model${models.length === 1 ? '' : 's'} available` : 'Choose a model'}</strong><small>Browse installed or add one</small></span><button onClick={onChoose}><b>03</b><strong>Open a project</strong><small>Keep files and sessions scoped</small></button></div>
+    </section>}
     <div className="landing-lower">
       <div className="landing-column">
         <div className="section-heading"><div><span className="section-number">01</span><h2>Recent workspaces</h2></div><button onClick={onRefresh}><Icon name="refresh"/> Refresh</button></div>
@@ -863,6 +870,8 @@ function Landing({ workspaces, workspaceSearch, sessions, models, modelLabels, m
         <div className="section-heading"><div><span className="section-number">02</span><h2>Inference source</h2></div><span className={`source-status ${connected}`}>{connected === 'yes' ? 'REACHABLE' : connected === 'no' ? 'OFFLINE' : 'CHECKING'}</span></div>
         <label className="model-picker-card"><span className="picker-symbol"><Icon name="spark"/></span><span className="picker-content"><small>LOCAL MODEL</small><select value={model} disabled={modelPreloading} onChange={(e) => onModel(e.target.value)}>{!models.length && <option value="">No installed models</option>}{models.map((name) => <option key={name} value={name}>{modelLabels[name] || shortModel(name)}</option>)}</select><span>{modelPreloading ? 'Model warming; selection returns when ready.' : 'Choose Ollama models or add Hugging Face GGUF files.'}</span></span><Icon name="chevron"/></label>
         <Button kind="outline" onClick={onLibrary}>Browse Hugging Face / add local models</Button>
+        {connected === 'no' && <div className="setup-help" role="status"><b>Ollama is not responding</b><span>Use the official Windows installer, then check the connection again. Existing model data is not changed.</span><div><Button kind="outline" onClick={onInstallOllama}>Open Ollama setup</Button><button onClick={onRefresh}>Check connection</button></div></div>}
+        {connected === 'yes' && models.length === 0 && <div className="setup-help"><b>No local models found</b><span>Add an Ollama model or download a Hugging Face GGUF to get started.</span><div><Button kind="outline" onClick={onLibrary}>Add a model</Button></div></div>}
         <div className="engine-foot"><span><Icon name="cpu"/> {telemetry.serviceCpu == null ? 'SERVICE READY' : `SERVICE ${telemetry.serviceCpu}% CPU`}</span><span><Icon name="memory"/> {telemetry.serviceRss} SIDECAR</span><span>{sessions.length} SAVED SESSIONS</span></div>
       </div>
     </div>
@@ -908,11 +917,23 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
   onRun: () => void; onCancel: () => void; onSettings: () => void; onBack: () => void; onDiff: () => void; onMcp: () => void; onTools: () => void;
   onEnter: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void; endRef: React.RefObject<HTMLDivElement | null>; model: string; modelInfo: ModelInfo | null; onToggleHarnessProfile: () => void;
 }) {
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const [followTranscript, setFollowTranscript] = useState(true);
   const [sheetLayout, setSheetLayout] = useState<RunSheetLayout>(() => {
     try { return normalizeRunSheetLayout(JSON.parse(localStorage.getItem('agent-run-sheet-layout') || 'null')); }
     catch { return DEFAULT_RUN_SHEET_LAYOUT; }
   });
   useEffect(() => { localStorage.setItem('agent-run-sheet-layout', JSON.stringify(sheetLayout)); }, [sheetLayout]);
+  useEffect(() => {
+    if (!followTranscript || !transcriptRef.current) return;
+    transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
+  }, [messages, activities, followTranscript]);
+  useEffect(() => { setFollowTranscript(true); }, [session?.session_id]);
+  const updateTranscriptFollow = () => {
+    const element = transcriptRef.current;
+    if (!element) return;
+    setFollowTranscript(isNearTranscriptEnd(element));
+  };
   const movePanel = (panel: RunSheetPanel, direction: -1 | 1) => setSheetLayout((layout) => moveRunSheetPanel(layout, panel, direction));
   const resizePanel = (panel: RunSheetPanel, direction: -1 | 1) => setSheetLayout((layout) => resizeRunSheetPanel(layout, panel, direction));
   const panelStyle = (panel: RunSheetPanel) => ({ order: sheetLayout.order.indexOf(panel) + 1, height: `${sheetLayout.heights[panel]}px` });
@@ -923,11 +944,11 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
     <div className="task-route" aria-label="Task execution phases">{steps.map((step, index) => <div className={`route-step ${index < currentStep ? 'done' : ''} ${index === currentStep ? 'current' : ''}`} key={step}><span className="route-node">{index < currentStep ? <Icon name="check"/> : `0${index + 1}`}</span><span>{step === 'Waiting for first token' ? 'Prefill / waiting' : step}</span></div>)}</div>
     <div className="session-main-grid">
       <section className="transcript-plane" aria-label="Conversation transcript">
-        {!messages.length ? <div className="transcript-empty"><div className="empty-symbol"><Icon name="spark"/></div><span className="eyebrow-line">NEW WORK UNIT / {shortPath(root).toUpperCase()}</span><h2>What should we<br/>work through?</h2><p>The model sees selected, relevant project files as needed. You control any action that can change the workspace.</p><div className="starter-prompts"><button onClick={() => setPrompt('Inspect this project and explain its architecture and how to run it.')}>Map the project <Icon name="arrow"/></button><button onClick={() => setPrompt('Review this project for the highest-priority bug and propose a fix.')}>Find a bug <Icon name="arrow"/></button><button onClick={() => setPrompt('Add a focused feature to this project and verify it with the existing tests.')}>Build a feature <Icon name="arrow"/></button></div></div> : <div className="message-list">{messages.map((message, index) => <article className={`message-card message-${message.role}`} key={`${index}-${message.role}`}>
+        {!messages.length ? <div className="transcript-empty"><div className="empty-symbol"><Icon name="spark"/></div><span className="eyebrow-line">NEW WORK UNIT / {shortPath(root).toUpperCase()}</span><h2>What should we<br/>work through?</h2><p>The model sees selected, relevant project files as needed. You control any action that can change the workspace.</p><div className="starter-prompts"><button onClick={() => setPrompt('Inspect this project and explain its architecture and how to run it.')}>Map the project <Icon name="arrow"/></button><button onClick={() => setPrompt('Review this project for the highest-priority bug and propose a fix.')}>Find a bug <Icon name="arrow"/></button><button onClick={() => setPrompt('Add a focused feature to this project and verify it with the existing tests.')}>Build a feature <Icon name="arrow"/></button></div></div> : <div className="message-list" ref={transcriptRef} onScroll={updateTranscriptFollow}>{messages.map((message, index) => <article className={`message-card message-${message.role}`} key={`${index}-${message.role}`}>
           <div className="message-meta"><span className={`speaker-mark ${message.role}`}>{message.role === 'user' ? 'YOU' : <Icon name="spark"/>}</span><strong>{message.role === 'user' ? 'Task brief' : 'Local agent'}</strong><span>{message.recoveredPartial ? 'PARTIAL · INTERRUPTED' : message.role === 'user' ? 'INPUT' : message.streaming ? 'LIVE OUTPUT' : 'RESPONSE'}</span>{message.streaming && <i className="stream-pulse"/>}</div>
           <div className="message-content"><Markdown content={message.content}/></div>
           {message.thinking && <details className="reasoning-trace"><summary>Model reasoning · {message.thinking.length.toLocaleString()} characters</summary><div>{message.thinking}</div></details>}
-        </article>)}<ActivityFeed entries={activities} mode={activityMode} surface="chat"/><div ref={endRef}/></div>}
+        </article>)}<ActivityFeed entries={activities} mode={activityMode} surface="chat"/><div ref={endRef}/>{!followTranscript && <button className="jump-latest" onClick={() => { setFollowTranscript(true); if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight; }} aria-label="Jump to latest message">↓ Latest</button>}</div>}
         <div className="composer-shell">
           <div className="composer-profile"><span className={`profile-chip access-${options.access}`}>{options.access.toUpperCase()}</span><span className="profile-chip approval-chip">{options.approvalMode === 'auto' ? 'AUTO APPROVE · THIS RUN' : options.approvalMode === 'per-task' ? 'PER TASK' : 'PER ACTION'}</span><span className="profile-chip capability-chip" title="Capability reported by the selected local runtime; support metadata may be unknown">TOOLS {modelInfo?.tool_support === 'supported' ? 'SUPPORTED' : modelInfo?.tool_support === 'unsupported' ? 'UNSUPPORTED' : 'UNKNOWN'}</span><button className={`profile-toggle ${options.harnessProfile === 'small-model' ? 'is-active' : ''}`} type="button" aria-pressed={options.harnessProfile === 'small-model'} title="Changes agent workflow guidance only; model settings and token limits stay unchanged" onClick={onToggleHarnessProfile} disabled={running}>Small-model {options.harnessProfile === 'small-model' ? 'on' : 'off'}</button><span className="profile-hint">{fmt(options.context)} context · {fmt(options.maxTokens)} output</span><button onClick={onSettings}>Adjust run</button></div>
           <textarea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={onEnter} placeholder="Describe the work. Use Shift + Enter to add detail…" rows={3} disabled={running} aria-label="Task prompt"/>
@@ -1101,10 +1122,11 @@ function Modal({ title, eyebrow, children, onClose, wide = false, dismissible = 
   return <div className="modal-backdrop" onMouseDown={(e) => { if (dismissible && e.target === e.currentTarget) onClose(); }} onKeyDown={(e) => { if (!dismissible && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); } }}><section className={`modal-card ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>{dismissible && <button className="modal-close" onClick={onClose} aria-label="Close"><Icon name="close"/></button>}<span className="eyebrow-line">{eyebrow}</span><h2>{title}</h2>{children}</section></div>;
 }
 
-function SettingsModal({ model, modelLabel, modelInfo, options, setOptions, activityDefault, setActivityDefault, activityMode, setActivityMode, askActivityChoice, setAskActivityChoice, hasSession, onClose, onSave, onMcp }: {
+function SettingsModal({ model, modelLabel, modelInfo, options, setOptions, activityDefault, setActivityDefault, activityMode, setActivityMode, askActivityChoice, setAskActivityChoice, hasSession, running, updateState, onCheckUpdate, onInstallUpdate, onClose, onSave, onMcp }: {
   model: string; modelLabel: string; modelInfo: ModelInfo | null; options: typeof initialOptions; setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>;
   activityDefault: ActivityMode; setActivityDefault: (mode: ActivityMode) => void; activityMode: ActivityMode; setActivityMode: (mode: ActivityMode) => void;
-  askActivityChoice: boolean; setAskActivityChoice: (ask: boolean) => void; hasSession: boolean;
+  askActivityChoice: boolean; setAskActivityChoice: (ask: boolean) => void; hasSession: boolean; running: boolean;
+  updateState: AppUpdateState; onCheckUpdate: () => void; onInstallUpdate: () => void;
   onClose: () => void; onSave: () => void; onMcp: () => void;
 }) {
   const tokenPresets = buildTokenPresets({ contextLimit: modelInfo?.context ?? null, contextLimitKnown: modelInfo?.context_limit_known ?? false, outputLimit: modelInfo?.max_output_tokens ?? null });
@@ -1120,6 +1142,7 @@ function SettingsModal({ model, modelLabel, modelInfo, options, setOptions, acti
     <label className="settings-field"><span>Keep model warm after a request</span><select value={options.keepAlive} onChange={(e) => setOptions((old) => ({ ...old, keepAlive: e.target.value }))}><option value="30m">30 minutes</option><option value="10m">10 minutes</option><option value="5m">5 minutes</option><option value="0">Unload when idle (Ollama setting)</option></select></label>
     <div className="settings-fields select-fields"><label className="settings-field"><span>File access</span><select value={options.access} onChange={(e) => setOptions((old) => ({ ...old, access: e.target.value as AccessMode }))}><option value="copy">Copy workspace</option><option value="plan">Plan only</option><option value="ask">Ask before writes</option><option value="edit">Edit project</option></select></label><label className="settings-field"><span>Approval</span><select value={options.approvalMode} onChange={(e) => setOptions((old) => ({ ...old, approvalMode: e.target.value as ApprovalMode }))}><option value="per-action">Approve each action</option><option value="per-task">Approve for this task</option><option value="auto">Auto-approve actions · this run</option></select>{options.approvalMode === 'auto' && <small className="auto-approve-warning">Skips action prompts for this run. Commands and MCP still run with your Windows account permissions; this setting does not sandbox them to the selected project.</small>}</label></div>
     <label className="settings-field"><span>Harness workflow</span><select value={options.harnessProfile} onChange={(e) => setOptions((old) => ({ ...old, harnessProfile: e.target.value as HarnessProfile }))}><option value="standard">Standard</option><option value="small-model">Small-model workflow</option></select><small>Small-model workflow asks the agent to take shorter, sequential tool steps and inspect each result. It does not change model, context, output tokens, reasoning, temperature, access, or approvals.</small></label>
+    <section className="update-settings" aria-label="Application updates"><div><span className="eyebrow-line">APPLICATION / {updateState.currentVersion}</span><b>{updateState.status === 'downloaded' ? `${updateState.releaseName || 'Update'} is ready` : updateState.status === 'downloading' || updateState.status === 'available' ? 'Downloading update' : updateState.status === 'checking' ? 'Checking GitHub releases…' : updateState.status === 'not-available' ? 'You’re up to date' : updateState.status === 'error' ? 'Update check failed' : updateState.supported ? 'Automatic updates enabled' : 'Updates unavailable in this build'}</b><small>{updateState.error || (updateState.status === 'downloaded' ? 'Restart to apply it. Updates are never installed during an active task.' : updateState.supported ? 'Checks public GitHub releases and downloads in the background. Install is always user-controlled.' : 'Automatic updates are configured for installed Windows x64 builds.')}</small></div><div>{updateState.status === 'downloaded' ? <Button kind="bright" disabled={running} onClick={onInstallUpdate}>{running ? 'Finish active task to update' : 'Restart and update'}</Button> : <Button kind="outline" disabled={!updateState.supported || running || updateState.status === 'checking' || updateState.status === 'downloading'} onClick={onCheckUpdate}>{running ? 'Available when task ends' : updateState.status === 'checking' ? 'Checking…' : 'Check for updates'}</Button>}</div></section>
     <div className="settings-fields select-fields"><label className="settings-field"><span>App-wide activity default</span><select value={activityDefault} onChange={(event) => setActivityDefault(event.target.value as ActivityMode)}><option value="compact">Compact cards · expandable</option><option value="sidebar">Activity sidebar only</option><option value="inline">Full inline output</option></select></label>{hasSession && <label className="settings-field"><span>This session activity view</span><select value={activityMode} onChange={(event) => setActivityMode(event.target.value as ActivityMode)}><option value="compact">Compact cards · expandable</option><option value="sidebar">Activity sidebar only</option><option value="inline">Full inline output</option></select></label>}</div>
     <label className="activity-choice-toggle"><input type="checkbox" checked={askActivityChoice} onChange={(event) => setAskActivityChoice(event.target.checked)}/><span><b>Choose an activity view for each new session</b><small>When off, new sessions use the app-wide default.</small></span></label>
     <div className="settings-bottom"><Button kind="outline" onClick={onMcp}>Configure local MCP</Button><span>Context is never silently reduced.</span></div>

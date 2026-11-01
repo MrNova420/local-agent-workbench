@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { buildModelOrbitSlots, type ModelOrbitSlot } from '../shared/model-orbit';
 import type { ModelInfo } from '../shared/protocol';
@@ -11,6 +11,17 @@ export function ModelOrbit({ slots, onModelInfo }: { slots: ModelOrbitSlot[]; on
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [popoverPoint, setPopoverPoint] = useState<{ left: number; top: number } | null>(null);
+
+  useEffect(() => {
+    if (!openedModel) return;
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpenedModel(null); };
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Element && !event.target.closest('.model-orbit-popover, .model-orbit-dot')) setOpenedModel(null);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => { document.removeEventListener('keydown', onKeyDown); document.removeEventListener('pointerdown', onPointerDown); };
+  }, [openedModel]);
 
   async function showInfo(model: string, button: HTMLButtonElement) {
     setOpenedModel(model);
