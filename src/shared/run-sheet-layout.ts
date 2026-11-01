@@ -19,7 +19,7 @@ export function normalizeRunSheetLayout(value: unknown): RunSheetLayout {
   const source = value && typeof value === 'object' ? value as Partial<RunSheetLayout> : {};
   const requested = Array.isArray(source.order) ? source.order : [];
   const order = [...new Set(requested.filter((id): id is RunSheetPanel => RUN_SHEET_PANELS.includes(id as RunSheetPanel)))];
-  for (const id of RUN_SHEET_PANELS) if (!order.includes(id)) order.push(id);
+  for (const id of DEFAULT_RUN_SHEET_LAYOUT.order) if (!order.includes(id)) order.push(id);
   const rawHeights: Partial<Record<RunSheetPanel, unknown>> = source.heights && typeof source.heights === 'object'
     ? source.heights as Partial<Record<RunSheetPanel, unknown>>
     : {};
