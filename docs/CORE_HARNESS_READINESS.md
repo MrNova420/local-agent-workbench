@@ -280,6 +280,10 @@ This checkpoint closes the current source implementation batch. It does not clai
 
 Resume from the current two repository commits and this checklist. Do not treat the unrun package, visible, or live-model gates as passed.
 
+### Current branch reconciliation note (2026-10-31)
+
+The section above records an earlier checkpoint and its evidence; it is not the current source tip. The active app branch now pins shared engine commit `e5158359cca2e780ca506cfd98e8b8015c63852a` in `core-revision.txt` and both workflows. Recent app/engine changes include persisted turn-to-activity placement, compact inline operation rows, current-model catalog refresh/filtering, hover-revealed controls, approval-safe command continuation, and explicit verification outcomes. Regression tests for the newest batch are queued, and the paired source has not yet been packaged or visibly accepted. The full ordered handoff is in [MASTER_ROADMAP.md](MASTER_ROADMAP.md). No model/token/reasoning settings were changed by this documentation checkpoint.
+
 ### Package and partial visible verification update (2026-10-31)
 
 - Fresh Windows x64 `npm run make` completed. It generated the Squirrel Setup executable, full nupkg, RELEASES manifest, and ZIP. The bundled worker responded to startup, ping, and shutdown and exited 0; no inference request was sent.

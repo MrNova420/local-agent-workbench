@@ -1,5 +1,12 @@
 # Visible Acceptance Log
 
+## 2026-10-31 roadmap and release-policy reconciliation
+
+- Added `docs/MASTER_ROADMAP.md` as the cross-repository source for current branch state, ordered source/package/visible/live-model/release gates, remaining core work, deferred backlog, evidence tiers, and documentation ownership.
+- Clarified release policy: documentation and planning commits do not bump the app version, create a tag, or publish. A new SemVer tag is selected only after an installable app build passes its release gates. No version, tag, release, source behavior, model setting, or user data changed in this checkpoint.
+- Corrected stale backlog/readiness notes to state that engine `e5158359cca2e780ca506cfd98e8b8015c63852a` is pinned in the active app worktree but remains unverified, un-packaged, and unpublished.
+- Verification was intentionally not run or claimed. Existing automated checks for the latest source batch, hosted CI, current package, full visible workflow, fresh controlled model measurement, and installed-app update remain separate gates.
+
 ## Current live acceptance — 2026-10-31
 
 - A fresh beta user-data window started the disposable-project task with the full 262,144 context and 4,096 output cap. The reopened app had fallen back to its fresh-window settings and the untouched-context path selected the model's advertised maximum. This failed to preserve the already verified 65,536 / 8,192 choice; no user instruction authorized changing those values.
