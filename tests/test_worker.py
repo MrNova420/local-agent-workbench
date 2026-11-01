@@ -543,6 +543,39 @@ def test_parallel_active_reads_are_tracked_and_recovered_individually(service, t
     assert [item["operationId"] for item in state["run_state"]["uncertain_operations"]] == ["op-b"]
 
 
+def test_session_recovery_returns_every_uncertain_concurrent_operation(service, tmp_path):
+    project = tmp_path / "recover-parallel-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    state["run_state"] = {
+        "status": "running", "turn_id": "turn-parallel-recovery", "prompt": "inspect both files",
+        "safe_messages": [{"role": "user", "content": "inspect both files"}], "partial_content": "",
+        "partial_thinking": "", "active_operation": {"operationId": "op-b", "toolCallId": "read-b", "name": "read_file", "arguments": {"path": "b.py"}},
+        "active_operations": {
+            "op-a": {"operationId": "op-a", "toolCallId": "read-a", "name": "read_file", "arguments": {"path": "a.py"}},
+            "op-b": {"operationId": "op-b", "toolCallId": "read-b", "name": "read_file", "arguments": {"path": "b.py"}},
+        },
+        "tool_batch": {"assistant_message": {"role": "assistant", "tool_calls": [{"id": "read-a"}, {"id": "read-b"}]},
+                       "calls": [{"id": "read-a", "name": "read_file"}, {"id": "read-b", "name": "read_file"}],
+                       "base_messages": [{"role": "user", "content": "inspect both files"}]},
+        "completed_tool_results": {},
+    }
+    state["activity_events"] = [
+        {"id": "op-a", "operationId": "op-a", "kind": "operation", "name": "read_file", "status": "running"},
+        {"id": "op-b", "operationId": "op-b", "kind": "operation", "name": "read_file", "status": "running"},
+    ]
+    service.sessions.save(state)
+
+    loaded = service.handle("session_resume", {"sessionId": state["session_id"], "workspace": str(project)})
+    recovered = service.handle("session_recover", {"sessionId": state["session_id"], "action": "resume"})
+
+    assert [item["operationId"] for item in loaded["run_state"]["uncertain_operations"]] == ["op-a", "op-b"]
+    assert [item["status"] for item in loaded["activity_events"]] == ["uncertain", "uncertain"]
+    assert [item["operationId"] for item in recovered["uncertain_operations"]] == ["op-a", "op-b"]
+    assert '"operationId": "op-a"' in recovered["prompt"]
+    assert '"operationId": "op-b"' in recovered["prompt"]
+
+
 def test_tool_call_progress_is_live_safe_and_durable(service, tmp_path, monkeypatch):
     project = tmp_path / "tool-progress-project"
     project.mkdir()

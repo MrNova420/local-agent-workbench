@@ -75,6 +75,7 @@ No live model, app process, OpenCode setting, selected token value, model reason
 - Session reopen now recovers a missing Plan snapshot from the latest turn's durable plan event. It preserves an explicit empty snapshot and filters journal fallback by the latest turn to avoid reviving an older task checklist. Renderer recovery coverage is added and queued.
 
 - Concurrent safe reads exposed that sidecar state represented only one active tool operation. Live snapshots and journal replay now maintain the full active-operation set; crash recovery marks and displays every interrupted operation, and the continuation prompt includes all uncertain effects. Older single-operation sessions remain supported. Regressions are added and queued; they have not been run.
+- An integration regression now covers loading and recovering a session with two active reads, including both uncertain activity rows and both operation identities in the continuation prompt. It is queued and unrun.
 
 - Engine-managed read_file calls now use an excerpt budget derived from the run's selected context and output values. Oversized files and long single lines stream in bounded UTF-8 chunks; the tool reports the exact next line/column, and the dynamic budget is disclosed in the tool schema. No context/output setting is changed, and the remainder is never silently discarded. Regression coverage is queued.
 
