@@ -486,6 +486,12 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Completed tool batches mark their preparation rows `assembled`; a provider request error marks them `interrupted`, keeping saved activity state consistent with the run result.
 - The paired engine now includes the inference request index on `tool_batch` events so activity transitions remain tied to the correct request. Engine and sidecar regressions are queued.
 - The app pin now advances to `1ca4754432a9f2d974c530bc0d25b56a5ab7521b`; it matches the request-indexed tool-batch event implementation. No tests, typecheck, package, or visible UI verification were run.
+
+## 2026-11-01 incomplete command verification (verification queued)
+
+- The engine now records cancelled, partial, uncertain, and otherwise incomplete command results as `command_incomplete`; that state takes precedence over a generic “changed” outcome when the task also modified files. Failed commands remain `command_failed`, and completed command execution still does not imply a test passed.
+- Added helper regressions for partial and cancelled command results. No tests or command execution were run.
+- The app pin advances to engine `a846152c539daa235abb6b2d6fa1beb07a1ee851`.
 - Added worker, journal-replay, and renderer regressions, including repeated progress updates coalescing to one call row. They remain unrun with the broader verification pass.
 ## 2026-11-01 selected Ollama settings authority (verification queued)
 
