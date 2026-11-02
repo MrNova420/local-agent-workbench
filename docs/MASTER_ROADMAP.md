@@ -30,11 +30,11 @@ The original delayed-header regression did not assert that the request ended bef
 
 ## 2026-11-02 earlier model reasoning control update
 
-- Current app `core-revision.txt` pins engine `9f0af2756f08d46c3246d99ee76c6da10c1a043b`. Existing model-advertised reasoning controls remain exact and model-specific. Added a separate llama.cpp per-request thinking-token budget, default unlimited, persisted with sessions and reported as requested (not falsely claimed as enforced); Ollama receives no unsupported budget field. Output-token cap is unchanged. Focused tests pass: engine 90; app renderer 15, sidecar 2; TypeScript typecheck passes. Actual enforcement, packaged UI, complete suites, and long-run acceptance remain unverified.
+- The current app pin is `48e6218730effd253d94deee0cd4bafff39d4280` (see the current evidence block above). The separate llama.cpp per-request thinking-token budget was implemented and tested at an earlier pin; that historical feature evidence does not imply its runtime enforcement, packaged UI, full suites, or long-run acceptance have been verified on the current pin. Ollama receives no unsupported budget field, and context/output/reasoning values are not changed by this comparison task.
 
-## 2026-11-02 current source pin and loop handling
+## Historical 2026-11-02 source pin and loop handling
 
-- The app's `core-revision.txt` pins engine `b1981571c9a7680646cb1cef587fe4c384fae869`. The engine now terminates repeated plan-only calls correctly across implementation, read-only, denied-action, and planning modes; the renderer explains blocked access/denial outcomes and offers same-checkpoint continuation in chat. Focused engine suites pass (79), focused renderer summary tests pass (6), and both changed trees pass `git diff --check`. This is focused source evidence only. Broad suites, current worker/typecheck, package, visible workflow, extended local-model behavior, updater, and release gates remain open. No model/context/output/reasoning setting changed.
+- At this checkpoint, app `core-revision.txt` pinned engine `b1981571c9a7680646cb1cef587fe4c384fae869`. That source terminated repeated plan-only calls across implementation, read-only, denied-action, and planning modes. Focused engine suites passed (79) and renderer summary tests passed (6). Those counts and that pin are historical. Current paired source is `48e6218730effd253d94deee0cd4bafff39d4280`, as recorded at the top of this roadmap. Plans remain expandable; plan edits alone do not count as implementation progress, and no fixed plan size, iteration, or runtime cap was added. Full suites, package, visible workflow, extended Flint behavior, updater, and release gates remain open. No inference setting changed.
 
 ## 2026-11-02 same-chat continuity source audit
 
