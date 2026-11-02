@@ -1,5 +1,10 @@
 # Visible Acceptance Log
 
+## 2026-11-02 command cancellation process-tree handling
+
+- Engine `eb3721443a113badd6313e706f1e9787bafef44b` attaches approved command roots to a Windows Job Object where supported and terminates the job on cancellation/timeout; the existing psutil tree termination remains as fallback. A focused Windows test launched a child after assignment and verified both root and child exited. The sidecar build script now requires and packages the helper through the pinned engine path.
+- Focused engine checks: cancellation integration **1 passed**, normal Unicode command streaming **1 passed**, and real Windows Job Object child termination **1 passed**. Python compilation and `git diff --check` passed. Job Objects do not constrain file, network, registry, or Windows user permissions; an OS containment backend remains open. Broad suites, package/installer, visible acceptance and Flint final acceptance remain queued. No model or inference settings changed.
+
 ## 2026-11-02 MCP future cancellation recovery
 
 - Engine `36c7317226e21d1e01338b70f7d3e99de2260428` translates an unexpectedly cancelled asyncio bridge future into an ordinary recoverable MCP failure; when the user cancellation event is set, it remains a normal MCP cancellation. This prevents `concurrent.futures.CancelledError` (a `BaseException`) from escaping the worker without a saved terminal state.
