@@ -818,3 +818,9 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 
 - The source audit confirmed that `task_mode=plan` in Automatic intent did not remove write tools, but the saved mode could remain “plan” until the model changed it. The engine now promotes a non-empty agent-authored plan to `implement` in the same state update. This makes automatic plan-to-build transition host-owned while leaving the plan expandable and honoring workspace access/approval. Explicit Plan-only remains read-only.
 - Engine commit `04272e7a997e8e247e639c25a0228ac0a604f28f` is now pinned for the next sidecar build. The regression is queued and unrun. The current running package was not rebuilt and no model task was started.
+
+## 2026-11-02 Same-chat steering research
+
+- Source inspection confirmed that the composer remains editable during generation but Enter saves only a queued follow-up; it cannot inject direction into the active task. No implementation change or live run was made in this research step.
+- OpenCode's v2 session design and Codex's Queue/Steer guidance both distinguish steering the active task from starting queued work. The Workbench requirement is to deliver a durable steering message at a safe boundary while preserving the same task/session/project/checkpoint; a pending steer must remain visible if a run ends before delivery. The Codex Responses API has separate steering limitations, so its hosted transport constraints must not be assumed for the local engine.
+- The detailed source comparison, confirmed gaps, and ordered acceptance criteria are recorded in `CORE_HARNESS_READINESS.md` and backlog item B-019. No test, package, app launch, model request, or token/reasoning setting change occurred.

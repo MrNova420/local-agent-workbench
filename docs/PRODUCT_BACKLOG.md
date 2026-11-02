@@ -16,6 +16,20 @@ The product target is full 1:1 user-facing feature and workflow parity with Code
 
 ## Queued for review and implementation
 
+### B-019: Same-chat steering, queue-next, and first-operation progress
+
+**Priority:** Core harness blocker. Source inspection confirmed the current composer only queues follow-ups; it cannot direct the active task. A new message must continue the same chat/task and preserve its plan, checkpoint, project, completed operations, and approval state.
+
+- Default a prompt submitted during a run to **Steer this task**. Persist it immediately, deliver it at the next safe boundary after the current inference response or active tool completes, and incorporate it into the existing task without starting a new task ID or replaying completed actions.
+- Keep **Queue next task** as a separate explicit choice. Do not silently turn steering into cancellation or task restart.
+- Display durable accepted/waiting/delivered/error status. If the current run completes, is cancelled, or crashes before delivery, preserve the message and ask before applying it later; never silently drop or auto-duplicate it.
+- Steering changes task direction but grants no approval. Existing per-action, per-task, per-session, and persistent permission checks still apply.
+- Record steering in transcript, user-update checkpoint, event journal, compaction, and recovery. Preserve ordering for multiple steering messages and isolate each to its captured session/project.
+- Keep the composer editable while the model is reasoning or a tool is active. Explain that steering is applied at a safe boundary; the current response/tool is not modified in place.
+- Show whether the model is reasoning with no project operation yet, waiting for a tool result, or actively changing/inspecting files. Measure time to first non-plan operation and distinguish provider finish reasons from a stalled live request.
+- **Deferred:** no `plan.md` requirement. A concise, optional `progress.md` can be evaluated after task continuity is reliable; it must not duplicate the complete activity journal or become a prerequisite for code changes.
+- Tests: steering during inference, active operation and approval; same task/workspace/turn continuity; order; compaction; crash before delivery; cancellation; queue-next; rejection and mirror failure; no approval bypass; rendered chat and activity after resume.
+
 ### B-008: Preserve chosen token settings and warm selected Ollama models
 
 **Status:** Source implementation and focused tests are complete; packaged behavior remains to be verified.
