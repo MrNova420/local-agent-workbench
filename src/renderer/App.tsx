@@ -516,7 +516,9 @@ export default function App() {
       }
       if (event.type === 'phase' && typeof event.textRevision === 'number') {
         const cursor = liveSnapshotCursorRef.current;
-        if (!event.sessionId || !cursor.sessionId || event.sessionId === cursor.sessionId) {
+        const sameSession = !event.sessionId || !cursor.sessionId || event.sessionId === cursor.sessionId;
+        const sameTurn = typeof event.turnId !== 'string' || !activeTurnIdRef.current || event.turnId === activeTurnIdRef.current;
+        if (sameSession && sameTurn) {
           cursor.textRevision = Math.max(cursor.textRevision, event.textRevision);
         }
       }
