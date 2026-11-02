@@ -1,8 +1,12 @@
 # Product roadmap and release state
 
+## 2026-11-02 source-startup integrity
+
+- Current app source includes commit `b778410` and remains pinned to engine `dcdf7fc2c3b1ca61bfd44cb2449e4e77b7e69c59`. Unpackaged startup now rejects an engine checkout that does not exactly match that pin before engine modules are imported, and Electron reports the mismatch immediately. Focused build-config tests pass (8) and TypeScript typecheck passes. Full suites, package, visible startup, model workflow, and release readiness remain open.
+
 ## 2026-11-02 loaded-template reasoning discovery
 
-- Current app source commit `55652dc` pins engine `dcdf7fc2c3b1ca61bfd44cb2449e4e77b7e69c59`. llama.cpp reasoning levels are read from the loaded model's chat-template capabilities; unloaded or unreported values remain unknown rather than using generic levels. When levels are reported, the explicit reasoning-off option is available and launches with `--reasoning off`. The app refreshes the selected GGUF's model metadata after load. Checkpoint continuity preserves the next concrete plan action after tool results and the first open step under a compacted budget. Focused checkpoint tests pass (25), runtime tests pass (14), full sidecar worker tests pass (66), renderer tests pass (15), and typecheck passes. Broad suites, package, visible app acceptance, and actual template/budget enforcement remain pending.
+- At that checkpoint, app source commit `55652dc` pinned engine `dcdf7fc2c3b1ca61bfd44cb2449e4e77b7e69c59`. llama.cpp reasoning levels are read from the loaded model's chat-template capabilities; unloaded or unreported values remain unknown rather than using generic levels. When levels are reported, the explicit reasoning-off option is available and launches with `--reasoning off`. The app refreshes the selected GGUF's model metadata after load. Checkpoint continuity preserves the next concrete plan action after tool results and the first open step under a compacted budget. Focused checkpoint tests pass (25), runtime tests pass (14), full sidecar worker tests pass (66), renderer tests pass (15), and typecheck passes. Broad suites, package, visible app acceptance, and actual template/budget enforcement remain pending.
 
 ## 2026-11-02 earlier model reasoning control update
 
