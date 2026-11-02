@@ -4,6 +4,8 @@ The product target is full 1:1 user-facing feature and workflow parity with Code
 
 - **Current reasoning controls:** model-advertised thinking mode/levels remain distinct from an optional llama.cpp `thinking_budget_tokens` cap. llama.cpp levels are now discovered from the loaded template and remain unknown when the server does not report them; they are never filled from a generic list. When levels are reported, the explicit Off option is also available. The budget is unlimited by default, custom per request, saved in sessions, and does not reduce the output cap. Ollama has no documented reasoning-token budget field. Focused tests pass; visible packaged control and actual llama.cpp enforcement remain final-gate items.
 
+- **Checkpoint continuation fix:** completed tool results no longer replace an open plan's concrete next action with a generic checkpoint reminder. Focused checkpoint tests pass (25); broader continuation suites and live long-run model acceptance remain open.
+
 - **Previous source pairing (2026-11-02):** app `core-revision.txt` advanced from engine `b1981571c9a7680646cb1cef587fe4c384fae869` to add the reasoning budget summarized above. The plan-only loop correction remains in the current engine pin. Focused loop tests passed (79) and focused terminal-status tests passed (6); the current source pairing has separate tests and evidence recorded above. Full harness, packaged UI, long-run model, and release verification remain open.
 
 ## Current evidence and this release batch

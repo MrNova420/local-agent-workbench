@@ -885,3 +885,7 @@ Engine commit `88f158e48d85e5647f9431590b9c6a2b14e84786` reads reasoning-effort 
 ### 2026-11-02 template-supported reasoning Off control
 
 App commit `026265ce442667fccb5d84b7b482998016a85483` pins engine `ab2d68259309796a60d19a9b5ce4e420b37e4573`, which includes an explicit Off choice only when llama.cpp reports template reasoning-effort levels and verifies that Off launches with `--reasoning off`. The app keeps the exact levels and Off distinct from the numeric token budget; unreported templates remain unknown. The llama.cpp runtime suite passes (14); sidecar unloaded/loaded capability regressions pass (2). Full suites, package, visible UI, and live model behavior remain pending.
+### 2026-11-02 preserve plan next action through tool results
+
+Engine commit `878ff68eba9720186945fb4ed2b728ee16ae3771` keeps an open plan's concrete next step in the compaction checkpoint after tool operations. The previous implementation replaced it with a generic review reminder, which could misdirect model continuation. Unplanned tasks still get a result-review fallback. Focused task-checkpoint suite: **25 passed**. App pin synchronized; complete engine/renderer suites, packaging, and long-run model acceptance remain pending.
+
