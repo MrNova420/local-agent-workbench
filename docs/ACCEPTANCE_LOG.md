@@ -905,6 +905,6 @@ The reasoning-control design is now recorded in `CORE_HARNESS_READINESS.md`: pre
 
 Focused sidecar checks for cancel acknowledgment and durable tool-call progress passed (**2 passed**). Together, the targeted checks recorded in this section total **122 passed** across engine, sidecar, and renderer layers. The cancellation chooser's behavior in a running packaged window is still an acceptance gate, not established by these unit tests.
 
-Same-task steering state and transcript follow behavior received another focused pass: renderer `tests/run-state.test.ts` and `tests/transcript-follow.test.ts` — **22 passed**; paired sidecar steering acceptance test — **1 passed**. The accumulated focused count is **145 passed**; visible composer behavior during a long real inference remains unverified.
+Same-task steering state and transcript follow behavior received another focused pass: renderer `tests/run-state.test.ts` and `tests/transcript-follow.test.ts` — **22 passed**; paired sidecar steering acceptance test — **1 passed**. Focused saved-session approval checks passed as well: sidecar **3 passed** for grant persistence, fail-closed mirror failure, and revocation; renderer `tests/permission-rules.test.ts` — **2 passed**. The accumulated focused count is **150 passed**; visible composer and non-dismissible approval behavior in a packaged long inference remain unverified.
 
 \r\n
