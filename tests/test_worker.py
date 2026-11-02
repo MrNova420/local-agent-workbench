@@ -740,11 +740,11 @@ def test_loaded_gguf_model_info_uses_only_template_reported_reasoning_levels(ser
     registered = service.handle("gguf_register", {"path": str(model)})
     service.llama.status = lambda: {
         "running": True, "model": str(model.resolve()), "context": 32768,
-        "reasoning_capability": {"support": "levels", "default": None, "values": ["low", "high"]},
+        "reasoning_capability": {"support": "levels", "default": None, "values": [False, "low", "high"]},
     }
 
     info = service.handle("model_info", {"model": registered["id"]})
-    assert info["reasoning"] == {"support": "levels", "default": None, "values": ["low", "high"]}
+    assert info["reasoning"] == {"support": "levels", "default": None, "values": [False, "low", "high"]}
     assert info["effective_context"] == 32768
 
 

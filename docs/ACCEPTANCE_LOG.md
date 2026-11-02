@@ -881,3 +881,7 @@ Engine commit `9f0af2756f08d46c3246d99ee76c6da10c1a043b` adds a separate optiona
 ### 2026-11-02 llama.cpp reasoning capability discovery
 
 Engine commit `88f158e48d85e5647f9431590b9c6a2b14e84786` reads reasoning-effort levels from the loaded server's `chat_template_caps`; absent levels remain unknown, and no default or generic choices are invented. The Electron sidecar now reports unknown for unloaded GGUFs and refreshes capability metadata after an owned llama.cpp load. Focused runtime tests: **13 passed**; full sidecar worker suite: **66 passed**; app `npm run typecheck` passed. Full renderer suite, package, visible settings acceptance, model-template support, and budget enforcement remain open; no model was loaded and no inference settings were changed.
+
+### 2026-11-02 template-supported reasoning Off control
+
+Engine commit `ab2d68259309796a60d19a9b5ce4e420b37e4573` includes an explicit Off choice only when llama.cpp reports template reasoning-effort levels and verifies that Off launches with `--reasoning off`. The app keeps the exact levels and Off distinct from the numeric token budget; unreported templates remain unknown. The llama.cpp runtime suite passes (14); sidecar unloaded/loaded capability regressions pass (2). The app pin is synchronized. Full suites, package, visible UI, and live model behavior remain pending.
