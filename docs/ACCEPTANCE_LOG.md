@@ -1,5 +1,11 @@
 # Visible Acceptance Log
 
+## 2026-11-02 Auto worksheet progress and planning-loop balance
+
+- Paired engine `10b818935d17179dd9e39bc877d0840df7e57c9f`; the app pin resolves to a clean matching checkout. Auto now emits one neutral, host-owned in-progress item before model inference, and completes it at the terminal boundary. It does not guess the request intent or change the reported workflow outcome. An agent `update_plan` still replaces the generic item and supports additions/revisions.
+- The continuation no-progress detector intentionally treats agent plan edits/decision notes alone as non-project progress. This preserves an expandable plan while making the next implementation action the productive continuation; no fixed turn, token, tool, or runtime cap was introduced.
+- Verification: engine workflow outcome **23 passed**; engine operation-stream targeted continuation/Auto cases **7 passed**; app worker plan/Auto **3 passed**; app typecheck and source-pin verification passed. Full suites, packaged worksheet visual acceptance, project task and Flint live acceptance remain queued. No inference settings or model state changed.
+
 ## 2026-11-02 same-task steering recovery correction
 
 - App `dfa079f` pins engine `647df9f9dcc96a894ec773c79e7dc31c92c0862f`. The update is persisted before active provider inference is interrupted; received partial reasoning/text is retained, incomplete tool arguments are excluded, and the existing task resumes. User cancellation, provider failure, and same-task redirection are separate outcomes.
