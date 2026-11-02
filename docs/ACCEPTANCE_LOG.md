@@ -812,4 +812,4 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 ## 2026-11-01 explicit next-action handoff
 
 - The engine continuation now supplies the saved next open plan item to the model and asks it to execute that step with a suitable structured tool, avoiding generic “continue implementation” guidance. Shared prompt guidance also asks for the first useful operation after adequate scoping. It does not alter reasoning, context/output, approval, or runtime settings.
-- The app pin now targets engine `ff09ab97e9d0d4c8d3ebeb63d1dd1a299b2e90fd` so the next sidecar build includes this source. New mocked regressions are queued and have not been run. No package, app UI, or model request was started.
+- The app pin now targets engine `ff09ab994e3d4b154f21c65fd297bb59ebdf71ee` so the next sidecar build includes this source. New mocked regressions are queued and have not been run. No package, app UI, or model request was started.
