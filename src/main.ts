@@ -51,10 +51,11 @@ class AgentWorker {
         cwd: packaged ? path.dirname(packagedExe) : app.getAppPath(),
         windowsHide: true,
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, LOCAL_AGENT_CORE_PATH: corePath, PYTHONUNBUFFERED: '1' },
+        env: { ...process.env, LOCAL_AGENT_CORE_PATH: corePath, LOCAL_AGENT_APP_ROOT: app.getAppPath(), PYTHONUNBUFFERED: '1' },
       });
       this.child = child;
       let ready = false;
+      let startupFailure = false;
       let launchTimer = setTimeout(() => {
         if (ready) return;
         this.emit({ type: 'service_error', error: 'Python agent sidecar did not become ready within 15 seconds.' });
@@ -74,7 +75,13 @@ class AgentWorker {
           let message: Record<string, unknown>;
           try { message = JSON.parse(line) as Record<string, unknown>; }
           catch { this.emit({ type: 'service_error', error: 'Agent service sent invalid protocol data.' }); continue; }
-          if (message.type === 'ready') {
+          if (message.type === 'startup_error' && !ready) {
+            startupFailure = true;
+            const error = typeof message.error === 'string' ? message.error : 'Agent sidecar startup validation failed.';
+            clearTimeout(launchTimer);
+            this.emit({ type: 'service_error', error });
+            reject(new Error(error));
+          } else if (message.type === 'ready') {
             ready = true; clearTimeout(launchTimer); resolve(); this.emit({ type: 'service_ready', warnings: Array.isArray(message.warnings) ? message.warnings : [] });
           } else if (message.type === 'response' && typeof message.id === 'string') {
             const entry = this.pending.get(message.id);
@@ -106,7 +113,7 @@ class AgentWorker {
         const error = new Error(`Agent service exited (${exitLabel}).`);
         for (const entry of this.pending.values()) entry.reject(error);
         this.pending.clear(); this.emit({ type: 'service_exit', error: error.message });
-        if (!ready) reject(error);
+        if (!ready && !startupFailure) reject(error);
       });
     }).finally(() => { this.starting = undefined; });
     return this.starting;

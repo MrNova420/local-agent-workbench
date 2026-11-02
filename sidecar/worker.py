@@ -5,6 +5,7 @@ import json
 import os
 import queue
 import re
+import runpy
 import subprocess
 import sys
 import threading
@@ -23,6 +24,24 @@ def _core_path() -> Path:
 
 
 CORE_PATH = _core_path()
+
+
+def _verify_source_engine_pin() -> None:
+    """Fail before importing engine code when source mode uses the wrong checkout."""
+    if getattr(sys, "frozen", False):
+        return
+    app_root = Path(os.environ.get("LOCAL_AGENT_APP_ROOT", Path(__file__).resolve().parents[1])).resolve()
+    verifier_path = app_root / "scripts" / "verify_core_checkout.py"
+    try:
+        verifier = runpy.run_path(str(verifier_path))
+        verifier["verify_core_checkout"](app_root, CORE_PATH)
+    except Exception as exc:
+        sys.stdout.write(json.dumps({"type": "startup_error", "error": str(exc)}) + "\n")
+        sys.stdout.flush()
+        raise SystemExit(2) from exc
+
+
+_verify_source_engine_pin()
 if CORE_PATH.is_dir():
     sys.path.insert(0, str(CORE_PATH))
 sys.path.insert(0, str(Path(__file__).resolve().parent))

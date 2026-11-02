@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -79,6 +82,40 @@ def test_build_requires_the_engine_repository_root_not_a_subdirectory(tmp_path: 
     verifier = load_verifier()
     with pytest.raises(verifier.CoreRevisionError, match="repository root"):
         verifier.verify_core_checkout(app, nested)
+
+
+def test_source_worker_rejects_mismatched_engine_before_importing_it(tmp_path: Path):
+    core = tmp_path / "engine"
+    actual = make_core_checkout(core)
+    marker = tmp_path / "engine-imported.txt"
+    (core / "desktop_engine.py").write_text(
+        f"from pathlib import Path\nPath({str(marker)!r}).write_text('imported')\n", encoding="utf-8"
+    )
+    app = tmp_path / "app"
+    scripts = app / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "verify_core_checkout.py").write_bytes(HELPER_PATH.read_bytes())
+    (app / "core-revision.txt").write_text("0" * len(actual) + "\n", encoding="utf-8")
+
+    env = os.environ.copy()
+    env["LOCAL_AGENT_CORE_PATH"] = str(core)
+    env["LOCAL_AGENT_APP_ROOT"] = str(app)
+    result = subprocess.run(
+        [sys.executable, "-u", str(APP_ROOT / "sidecar" / "worker.py")],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=8,
+        check=False,
+    )
+
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    assert result.returncode != 0
+    assert lines, result.stderr
+    event = json.loads(lines[0])
+    assert event["type"] == "startup_error"
+    assert "does not match the app pin" in event["error"]
+    assert not marker.exists(), "unpaired engine code must not be imported"
 
 
 def test_local_sidecar_build_verifies_the_pin_before_running_pyinstaller():

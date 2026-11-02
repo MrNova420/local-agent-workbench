@@ -930,3 +930,7 @@ Focused `tests/test_build_config.py` passed **7 tests**; Python compilation, Pow
 ### Live-model acceptance constraint
 
 Per the user’s latest instruction, the eventual live model workflow check must use Flint only. Resolve the exact installed tag at test time and preserve any model already active; do not substitute another model. No model was started or switched during this source-only development pass.
+
+### 2026-11-02 source-sidecar revision guard
+
+Source-mode sidecar startup now verifies the configured engine checkout against the desktop app's `core-revision.txt` before importing engine modules. On mismatch, it emits a structured startup error immediately; Electron surfaces that reason instead of waiting for the generic 15-second startup timeout. Packaged workers continue to rely on the build-time pin check. Regression test verified a mismatched fixture is rejected before its `desktop_engine` module can execute. `tests/test_build_config.py`: **8 passed**; `npm run typecheck`, Python compilation, and `git diff --check` passed. Full suites, package, visible acceptance, and live Flint run remain queued.
