@@ -3,7 +3,7 @@
 ## 2026-11-02 command cancellation process-tree handling
 
 - Engine `eb3721443a113badd6313e706f1e9787bafef44b` attaches approved command roots to a Windows Job Object where supported and terminates the job on cancellation/timeout; the existing psutil tree termination remains as fallback. A focused Windows test launched a child after assignment and verified both root and child exited. The sidecar build script now requires and packages the helper through the pinned engine path.
-- Focused engine checks: cancellation integration **1 passed**, normal Unicode command streaming **1 passed**, and real Windows Job Object child termination **1 passed**. Python compilation and `git diff --check` passed. Job Objects do not constrain file, network, registry, or Windows user permissions; an OS containment backend remains open. Broad suites, package/installer, visible acceptance and Flint final acceptance remain queued. No model or inference settings changed.
+- Focused engine checks: cancellation integration **1 passed**, normal Unicode command streaming **1 passed**, and real Windows Job Object child termination **1 passed**. Python compilation, app build-configuration tests (**8 passed**), exact engine-pin verification, and `git diff --check` passed. The Desktop source checkout fast-forwarded through app commit `83fc713` with the same engine pin. Job Objects do not constrain file, network, registry, or Windows user permissions; an OS containment backend remains open. Broad suites, package/installer, visible acceptance and Flint final acceptance remain queued. No model or inference settings changed.
 
 ## 2026-11-02 MCP future cancellation recovery
 
