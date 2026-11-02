@@ -1259,7 +1259,9 @@ export default function App() {
       const rules: PermissionRule[] = permissionRules.map((draft) => {
         const base: PermissionRule = { tool: draft.tool, decision: draft.decision };
         if (draft.scope === 'path') {
-          if (!draft.value.trim()) throw new Error(`Rule ${draft.tool} needs a project-relative path pattern.`);
+          if (!draft.value.trim()) throw new Error(`Rule ${draft.tool} needs a path pattern.`);
+          if (draft.tool !== 'external_directory' && /^[a-z]:[\\/]|^\\\\/i.test(draft.value.trim())) throw new Error('Only external_directory rules may use absolute paths.');
+          if (draft.tool === 'external_directory' && !draft.value.trim().replaceAll('\\', '/').endsWith('/**')) throw new Error('External directory patterns must end with /**.');
           base.path_glob = draft.value.trim();
         }
         if (draft.scope === 'command') {
@@ -1381,7 +1383,17 @@ export default function App() {
 
     {notice && <div className={`toast toast-${notice.tone}`} role="status"><span>{notice.text}</span><button onClick={() => setNotice(null)}><Icon name="close"/></button></div>}
     {settingsOpen && <SettingsModal model={model} modelLabel={displayModelLabels[model] || shortModel(model)} modelInfo={modelInfo} options={options} setOptions={setOptions} activityDefault={activityDefault} setActivityDefault={setActivityDefault} activityMode={activityMode} setActivityMode={setActivityMode} askActivityChoice={askActivityChoice} setAskActivityChoice={setAskActivityChoice} hasSession={!!session} running={running} updateState={updateState} onCheckUpdate={() => void window.agent.checkForUpdate().then(setUpdateState).catch((error) => setUpdateState((state) => ({ ...state, status: 'error', error: (error as Error).message })))} onInstallUpdate={() => void window.agent.installUpdate().then((result) => { if (!result.installed) notify(result.reason || 'Update installation is unavailable.', 'warn'); }).catch((error) => notify(`Could not apply update: ${(error as Error).message}`, 'bad'))} onClose={() => setSettingsOpen(false)} onSave={saveSettings} onMcp={openMcp} onPermissions={() => void openPermissions()} />}
-    {permissionsOpen && <PermissionRulesModal rules={permissionRules} setRules={setPermissionRules} tools={toolCatalog?.tools || []} loading={permissionsLoading} running={running} onClose={() => setPermissionsOpen(false)} onSave={savePermissionRules} />}
+    {permissionsOpen && <PermissionRulesModal rules={permissionRules} setRules={setPermissionRules} tools={toolCatalog?.tools || []} loading={permissionsLoading} running={running} onChooseExternal={async () => {
+      try {
+        const selected = await window.agent.chooseExternalDirectory();
+        if (selected) {
+          const value = `${selected.replaceAll('\\', '/')}/**`;
+          setPermissionRules((current) => current.some((rule) => rule.tool === 'external_directory' && rule.value.toLocaleLowerCase() === value.toLocaleLowerCase())
+            ? current
+            : [...current, { tool: 'external_directory', decision: 'ask', scope: 'path', value }]);
+        }
+      } catch (error) { notify(`Could not select external folder: ${(error as Error).message}`, 'bad'); }
+    }} onClose={() => setPermissionsOpen(false)} onSave={savePermissionRules} />}
     {modelLibraryOpen && <ModelLibraryModal model={model} models={models} modelLabels={displayModelLabels} context={options.context} reasoning={options.reasoning} downloadedDirectory={downloadedModelDirectory} onModel={selectModel} onRefresh={refreshModels} onClose={() => setModelLibraryOpen(false)} notify={notify}/>}
     {mcpOpen && <Modal title="MCP connections" eyebrow="EXTEND THE TOOLSET" onClose={() => setMcpOpen(false)}>
       <p className="modal-copy">Connect local stdio or remote Streamable HTTP servers. Tool calls require approval by default; matching persistent permission rules can allow, ask, or deny them. Use HTTPS for remote servers; reference credentials as <code>${'{ENV:VARIABLE_NAME}'}</code> so secrets stay out of this file. MCP servers can access whatever their own process/account permits.</p>
@@ -1851,21 +1863,22 @@ function SettingsModal({ model, modelLabel, modelInfo, options, setOptions, acti
   </Modal>;
 }
 
-function PermissionRulesModal({ rules, setRules, tools, loading, running, onClose, onSave }: {
+function PermissionRulesModal({ rules, setRules, tools, loading, running, onChooseExternal, onClose, onSave }: {
   rules: PermissionRuleDraft[]; setRules: React.Dispatch<React.SetStateAction<PermissionRuleDraft[]>>;
-  tools: ToolCatalog['tools']; loading: boolean; running: boolean; onClose: () => void; onSave: () => void;
+  tools: ToolCatalog['tools']; loading: boolean; running: boolean; onChooseExternal: () => void; onClose: () => void; onSave: () => void;
 }) {
-  const toolNames = [...new Set(['run_command', 'run_shell', ...tools.map((tool) => tool.name)])].sort();
+  const toolNames = [...new Set(['external_directory', 'run_command', 'run_shell', ...tools.map((tool) => tool.name)])].sort();
   const update = (index: number, values: Partial<PermissionRuleDraft>) => setRules((current) => current.map((rule, row) => row === index ? { ...rule, ...values } : rule));
   return <Modal title="Tool permission rules" eyebrow="PERSISTENT ACCESS POLICY" wide onClose={onClose}>
-    <p className="modal-copy">Rules apply across sessions. Without a matching rule, the current run approval mode applies. A matching <b>deny</b> is a hard block; <b>ask</b> always opens the approval prompt, even during auto-approval; and <b>allow</b> skips that prompt. Deny takes precedence over ask and allow. Path patterns match project-relative tool targets. Commands and MCP servers still run with your Windows account permissions; these rules are not OS containment.</p>
+    <p className="modal-copy">Rules apply across sessions. Without a matching rule, the current run approval mode applies. A matching <b>deny</b> is a hard block; <b>ask</b> always opens the approval prompt, even during auto-approval; and <b>allow</b> grants that saved scope. Deny takes precedence over ask and allow. Project path rules are relative. External folders require an explicit directory scope; approved commands and MCP still run with your Windows account permissions and are not OS-contained.</p>
+    <div className="permission-rule-actions"><Button kind="outline" disabled={running} onClick={onChooseExternal}>Add external folder · ask each action</Button><span>Structured file tools stay project-bound unless a folder is added here.</span></div>
     {loading && <div className="empty-state">Loading saved rules…</div>}
     <div className="permission-rule-list">
       {rules.map((rule, index) => <div className="permission-rule-row" key={`${index}:${rule.tool}`}>
-        <label className="settings-field"><span>Tool</span><select value={rule.tool} onChange={(event) => { const tool = event.target.value; update(index, { tool, ...((rule.scope === 'command' && !['*', 'run_command', 'run_shell'].includes(tool)) || (rule.scope === 'path' && ['run_command', 'run_shell'].includes(tool)) ? { scope: 'tool' as const, value: '' } : {}) }); }}><option value="*">All tools</option>{toolNames.map((name) => <option value={name} key={name}>{name}</option>)}</select></label>
+        <label className="settings-field"><span>Tool</span><select value={rule.tool} onChange={(event) => { const tool = event.target.value; update(index, { tool, ...(tool === 'external_directory' ? { scope: 'path' as const, value: '' } : (rule.scope === 'command' && !['*', 'run_command', 'run_shell'].includes(tool)) || (rule.scope === 'path' && ['run_command', 'run_shell'].includes(tool)) ? { scope: 'tool' as const, value: '' } : {}) }); }}><option value="*">All tools</option>{toolNames.map((name) => <option value={name} key={name}>{name}</option>)}</select></label>
         <label className="settings-field"><span>Decision</span><select value={rule.decision} onChange={(event) => update(index, { decision: event.target.value as PermissionRuleDraft['decision'] })}><option value="allow">Allow</option><option value="ask">Ask every time</option><option value="deny">Deny</option></select></label>
-        <label className="settings-field"><span>Match scope</span><select value={rule.scope} onChange={(event) => update(index, { scope: event.target.value as PermissionRuleDraft['scope'], value: '' })}><option value="tool">Every call to this tool</option><option value="path" disabled={['run_command', 'run_shell'].includes(rule.tool)}>Project path glob</option><option value="command" disabled={!['*', 'run_command', 'run_shell'].includes(rule.tool)}>Command prefix</option></select></label>
-        {rule.scope !== 'tool' && <label className="settings-field permission-rule-scope"><span>{rule.scope === 'path' ? 'Relative path pattern' : 'Command prefix'}</span><input value={rule.value} placeholder={rule.scope === 'path' ? 'src/generated/**' : rule.tool === 'run_shell' ? 'python -m pytest' : '["python", "-m", "pytest"]'} onChange={(event) => update(index, { value: event.target.value })}/><small>{rule.scope === 'path' ? 'For multi-file patches, deny/ask matches any affected path; allow applies only when every target matches.' : rule.tool === 'run_shell' ? 'Matches the beginning of the PowerShell command.' : rule.tool === '*' ? 'Wildcard command rules use JSON argv tokens and match both run_command and run_shell.' : 'Use a JSON array of exact argv prefix tokens.'}</small></label>}
+        <label className="settings-field"><span>Match scope</span><select value={rule.scope} onChange={(event) => update(index, { scope: event.target.value as PermissionRuleDraft['scope'], value: '' })}><option value="tool" disabled={rule.tool === 'external_directory'}>Every call to this tool</option><option value="path" disabled={['run_command', 'run_shell'].includes(rule.tool)}>Path / directory glob</option><option value="command" disabled={!['*', 'run_command', 'run_shell'].includes(rule.tool)}>Command prefix</option></select></label>
+        {rule.scope !== 'tool' && <label className="settings-field permission-rule-scope"><span>{rule.scope === 'path' ? rule.tool === 'external_directory' ? 'Absolute folder pattern' : 'Project-relative path pattern' : 'Command prefix'}</span><input value={rule.value} placeholder={rule.scope === 'path' ? rule.tool === 'external_directory' ? 'C:/Users/name/Documents/**' : 'src/generated/**' : rule.tool === 'run_shell' ? 'python -m pytest' : '["python", "-m", "pytest"]'} onChange={(event) => update(index, { value: event.target.value })}/><small>{rule.scope === 'path' ? rule.tool === 'external_directory' ? 'Use the folder picker to add a root. “Ask” is selected by default; nested paths are covered. This grants structured file tools in that folder and subfolders only.' : 'For multi-file patches, deny/ask matches any affected path; allow applies only when every target matches.' : rule.tool === 'run_shell' ? 'Matches the beginning of the PowerShell command.' : rule.tool === '*' ? 'Wildcard command rules use JSON argv tokens and match both run_command and run_shell.' : 'Use a JSON array of exact argv prefix tokens.'}</small></label>}
         <Button kind="quiet" onClick={() => setRules((current) => current.filter((_, row) => row !== index))}>Remove</Button>
       </div>)}
       {!rules.length && <div className="empty-state">No persistent overrides. Actions continue to use the run’s selected approval mode.</div>}

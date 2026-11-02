@@ -22,6 +22,7 @@ const api: DesktopApi = {
   },
   resolveCloseChoice: (choice) => ipcRenderer.invoke('app:resolve-close-choice', choice) as Promise<void>,
   chooseWorkspace: () => ipcRenderer.invoke('app:choose-workspace') as Promise<string | null>,
+  chooseExternalDirectory: () => ipcRenderer.invoke('app:choose-external-directory') as Promise<string | null>,
   chooseModelFile: () => ipcRenderer.invoke('app:choose-model-file') as Promise<string | null>,
   chooseLlamaBinary: () => ipcRenderer.invoke('app:choose-llama-binary') as Promise<string | null>,
   chooseModelDirectory: () => ipcRenderer.invoke('app:choose-model-directory') as Promise<string | null>,

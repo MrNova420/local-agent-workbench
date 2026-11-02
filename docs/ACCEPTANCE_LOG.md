@@ -857,3 +857,9 @@ App commit `2437473` adds a same-chat continuation prefill after terminal failur
 ### Engine retry-loop regression
 
 Engine focused test verifies a failed file read is shown to the model, a corrected same-task retry succeeds, and the final answer is returned: **1 passed, 29 deselected**. Engine commit `2c3acd3f4c8cdb9331d3a4d4fdf7a4dfa1c84b9b`; paired app pin synchronized. This does not replay side effects automatically.
+
+### 2026-11-02 scoped external-folder access checks
+
+Engine permission/tool tests: **47 passed** across `tests/test_permission_policy.py` and `tests/test_tools.py`. Renderer TypeScript typecheck passed; focused permission editor tests: **2 passed**. User-picked external folder rules default to Ask; allow/deny scopes persist, deny takes precedence, unavailable roots and symlinks fail closed, and copy mode blocks outside writes. The full app/worker/engine suites and packaged app interaction are still pending; no model or package run occurred.
+
+Paired engine external-folder implementation committed as `0c51f9eebc80c51aec8405ae81326779e450af59`; app pin synchronized. Renderer typecheck and 2 focused permission tests passed again after synchronization. Packaged UI and full suite acceptance remain open.

@@ -278,6 +278,11 @@ app.whenReady().then(async () => {
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory'], title: 'Choose a project workspace' });
     return result.canceled ? null : result.filePaths[0] ?? null;
   });
+  ipcMain.handle('app:choose-external-directory', async (event) => {
+    assertTrusted(event);
+    const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory'], title: 'Choose a folder the agent may access outside the project' });
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  });
   ipcMain.handle('app:choose-model-file', async (event) => {
     assertTrusted(event);
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile'], title: 'Select a GGUF model', filters: [{ name: 'GGUF model', extensions: ['gguf'] }] });

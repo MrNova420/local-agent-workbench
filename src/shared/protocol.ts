@@ -191,6 +191,7 @@ export type DesktopApi = {
   onCloseDecision: (listener: () => void) => () => void;
   resolveCloseChoice: (choice: 'keep' | 'hide' | 'cancel-close') => Promise<void>;
   chooseWorkspace: () => Promise<string | null>;
+  chooseExternalDirectory: () => Promise<string | null>;
   chooseModelFile: () => Promise<string | null>;
   chooseLlamaBinary: () => Promise<string | null>;
   chooseModelDirectory: () => Promise<string | null>;

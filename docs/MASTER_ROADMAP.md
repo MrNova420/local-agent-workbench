@@ -196,3 +196,9 @@ Approved commands may change project files without producing structured `write_f
 - Access review confirms built-in file tools are confined to the captured project; approved command and PowerShell processes retain host-user privileges. Explicit external-folder grants and real Windows containment remain implementation gaps. Packaged recovery, complete suites, and visible full-project acceptance remain queued.
 
 - Engine commit `2c3acd3f4c8cdb9331d3a4d4fdf7a4dfa1c84b9b` adds focused proof that a recoverable tool failure is included in the next same-task model request and may be corrected/retried there. One focused test passed; full suites and package acceptance remain queued. The paired app pin was updated.
+
+### 2026-11-02 scoped external folder access source update
+
+Engine adds path-scoped `external_directory` policy for structured file tools. App adds a native folder picker with Ask default and explicit Allow/Deny choices. Copy mode blocks direct outside writes. Focused engine permission/tool suites and renderer permission tests/typecheck passed. Full suites, sidecar integration, packaged approval UI, and visible project acceptance remain queued. Commands and MCP retain host-user capability; no OS sandbox is claimed.
+
+- Paired engine external-folder implementation is now committed at `0c51f9eebc80c51aec8405ae81326779e450af59`, and `core-revision.txt` pins that exact commit. App folder-picker IPC and permission UI are typechecked; the two focused renderer rule tests pass. Final source suites and packaged approval-flow acceptance remain queued.

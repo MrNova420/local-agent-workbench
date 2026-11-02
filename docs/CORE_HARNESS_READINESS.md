@@ -502,3 +502,9 @@ The engine now returns authoritative plan-change state, next open item, and acce
 ### 2026-11-02 recoverable tool retry regression
 
 - Engine commit `2c3acd3f4c8cdb9331d3a4d4fdf7a4dfa1c84b9b` adds a mocked same-task test: a failed file read is returned in the next model request, the agent retries with a corrected path, the successful result is preserved, and the task completes. Focused pytest: 1 passed, 29 deselected. This verifies existing continuation behavior; it does not add unsafe automatic replay. The app engine pin is synchronized. Full engine suite remains queued.
+
+## 2026-11-02 scoped external-folder access source update
+
+- The Run configuration permission editor now has a native folder picker that adds a global `external_directory` rule with **Ask** selected by default. Users can change the exact folder rule to Ask, Allow, or Deny; nested deny precedence remains enforced by the engine. Absolute paths are restricted to this external-directory rule type and the root must be a concrete folder scope.
+- Paired engine commit is `0c51f9eebc80c51aec8405ae81326779e450af59`; the folder picker is exposed through trusted Electron main/preload IPC with context isolation intact. Renderer typecheck passed and focused permission-rule tests passed (2). Full app/worker suites and packaged visual approval checks remain queued.
+- Copy access intentionally blocks structured writes to external folders because those writes cannot be staged into the copy-review workflow. Shell/PowerShell and MCP are separate host-user capabilities and are not OS-sandboxed. Stable OpenCode documents `external_directory` scopes and per-tool decisions: https://docs.opencode.ai/docs/permissions/ .
