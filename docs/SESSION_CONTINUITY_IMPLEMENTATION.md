@@ -1,6 +1,6 @@
 # Session Continuity and Run Recovery Implementation
 
-**Status:** source implementation in progress; focused persistence and continuity checks are running incrementally, while full suites and packaged acceptance remain queued.  
+**Status:** source implementation in progress; focused persistence and continuity checks are running incrementally, while full suites and packaged acceptance remain queued.
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
