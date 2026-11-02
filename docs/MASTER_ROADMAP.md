@@ -12,6 +12,10 @@
 
 - Current Ollama source bounds only connection establishment (10 seconds); after connect it sets the socket timeout to `None`, so response-header and token-stream waits have no client deadline. Delayed-header testing exposed that socket shutdown/close alone did not wake Python's blocking Windows read. Engine commit `b40f082` also calls Windows `CancelSynchronousIo` on the inference thread before closing the request socket. The delayed-header and blocked-read cancellation tests now pass; normal waits remain unlimited. The reported timeout string was not found in this app/engine source, so its origin in the separate OpenCode session remains undetermined. No runtime settings changed.
 
+### Correction: cancellation polling (2026-11-02)
+
+The original delayed-header regression did not assert that the request ended before releasing the fake server; the corrected assertion showed the `CancelSynchronousIo` attempt in `b40f082` still left the read blocked. Engine `cef092f` now polls the socket every 250 ms for request cancellation using a small HTTP/1.x streaming reader. This is not a response or generation deadline. Header and token waits remain unbounded. The reader handles content-length and chunked streaming; 25 focused engine cancellation/runtime tests pass. The preceding entry records historical investigation, not the current mechanism.
+
 ## 2026-11-02 partial inference recovery
 
 - Engine commit `b40f082` preserves complete reasoning/text already received if a provider stream disconnects before its final record, marks the assistant message as partial, stores it in the transcript/checkpoint, and marks the error event. The metadata is filtered out of provider requests. It never preserves or executes incomplete tool-call arguments. Engine cancellation/stream recovery tests pass (8), and the Windows delayed-header cancellation test passes. App pin and restore acceptance are being reverified. Source sidecar tests must receive `LOCAL_AGENT_CORE_PATH` pointing to this paired worktree. Packaged recovery behavior remains unverified.
