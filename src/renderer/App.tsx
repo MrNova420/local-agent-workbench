@@ -974,12 +974,9 @@ export default function App() {
         if (typeof state.first_file_write_seconds === 'number' && Number.isFinite(state.first_file_write_seconds)) {
           setFirstFileWriteSeconds((current) => current ?? state.first_file_write_seconds as number);
         }
-        const phases: Record<string, string> = {
-          waiting_response_headers: 'Waiting for response headers', waiting: 'Waiting for first token',
-          reasoning: 'Reasoning', generating: 'Generating', processing_response: 'Processing response',
-          working: 'Working', finishing: 'Finishing turn',
-        };
-        if (typeof state.phase === 'string' && phases[state.phase]) setPhase(phases[state.phase]);
+        if (typeof state.status === 'string' && typeof state.phase === 'string') {
+          setPhase(restoredRunPhase(state.status, state.phase));
+        }
         if (typeof state.request_first_token_seconds === 'number') setRunMetrics((current) => recordFirstToken(current, state.request_first_token_seconds));
         if (typeof state.status === 'string' && state.status !== 'running') {
           setRunning(false);

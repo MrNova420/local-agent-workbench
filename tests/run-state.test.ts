@@ -70,6 +70,8 @@ describe('run status transitions', () => {
     expect(restoredRunPhase('running', 'generating')).toBe('Generating');
     expect(restoredRunPhase('running', 'processing_response')).toBe('Processing response');
     expect(restoredRunPhase('running', 'applying_steering')).toBe('Applying your update');
+    expect(restoredRunPhase('running', 'continuing')).toBe('Continuing task');
+    expect(restoredRunPhase('running', 'steering_interrupted')).toBe('Applying your update');
   });
 
   it('shows first-token wait and generation as separate phases', () => {
