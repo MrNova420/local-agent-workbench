@@ -1111,9 +1111,15 @@ export default function App() {
     // a new seed plan.
     setTrace([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setRunning(true); setPhase('Connecting to Ollama');
     setStartedAt(Date.now()); setElapsed(0); setRunMetrics(emptyRunMetrics()); setFirstOperationSeconds(null); setFirstFileWriteSeconds(null);
-    try { await request({ command: 'run_start', options: run }); }
+    try {
+      await request({ command: 'run_start', options: run });
+      // Keep the composer ready for same-task steering while the model reasons.
+      promptRef.current?.focus();
+    }
     catch (error) {
-      setRunning(false); setPhase('Run failed'); setWorkflowOutcome('failed'); setPrompt(task);
+      setRunning(false); setPhase('Run failed'); setWorkflowOutcome('failed');
+      setPrompt((draft) => draft.trim() ? draft : task);
+      promptRef.current?.focus();
       setMessages((current) => current.at(-1)?.role === 'user' && current.at(-1)?.content === task && !current.at(-1)?.turnId
         ? current.slice(0, -1) : current);
       notify((error as Error).message, 'bad');
@@ -1129,6 +1135,7 @@ export default function App() {
       });
       setSession((current) => current?.session_id === session.session_id ? { ...current, queued_prompts: result.queuedPrompts } : current);
       setPrompt('');
+      promptRef.current?.focus();
       notify('Follow-up saved for this session. It will not interrupt the active run.');
     } catch (error) { notify(`Could not save follow-up: ${(error as Error).message}`, 'bad'); }
     finally { setQueueSubmitting(false); }
@@ -1140,6 +1147,7 @@ export default function App() {
     try {
       const result = await request<{ status?: string }>({ command: 'session_steer', sessionId: session.session_id, workspace, prompt: prompt.trim() });
       setPrompt('');
+      promptRef.current?.focus();
       notify(result.status === 'interrupting'
         ? 'Update saved. The active model response is being redirected; its partial output will be kept and this same task will continue.'
         : 'Update saved for the active task. It will be applied at the next safe boundary.');

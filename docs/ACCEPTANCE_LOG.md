@@ -1,3 +1,7 @@
+## 2026-11-02 active-run composer focus handoff
+
+- The renderer now focuses the session composer after run start, steering, queueing, and run-start failure so keyboard input is ready during long inference. A non-empty draft typed while startup is pending is preserved if startup fails. Source diff reviewed; git diff --check passed. Renderer interaction tests and packaged keyboard acceptance are queued; this is not yet behavior-verified.
+
 ## 2026-11-02 small-model prompt deduplication
 
 - Engine b484d7649dc8ffe33ad744b2b7e63824a29074a removes 1,366 characters of repeated guidance from the optional small-model profile. Base workflow instructions remain intact; the profile still preserves full requested scope and expandable plans and encourages acting once a safe next step is clear. No selected model, reasoning, context, output, or runtime setting changed. Source diff reviewed and git diff --check passed. Prompt-manifest measurement, semantic regression suite, and representative model outcomes are queued; this source change is not yet behavior-verified.
