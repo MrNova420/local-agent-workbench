@@ -1,6 +1,14 @@
 # Product roadmap and release state
 
-**Last reconciled:** 2026-11-01
+## 2026-11-02 same-chat continuity source audit
+
+- Engine `39ff5495256e12f5f7e43232f269e5ace8d1ff88` and app `d94f52af7d0e046186c8961f38ed0380f26e4ba2` implement a same-task steering path. A submitted message is attached to the running task/session/project, mirrored before acceptance, and delivered to the next model request at a safe boundary. It does not create a new task or disturb completed work. Queue-next remains separate.
+- Source review confirms the sidecar's stdin dispatcher remains able to receive steering while inference runs on its worker thread. The checkpoint lock protects short state/journal/snapshot updates; it is not held for the full model or command operation. Session persistence still performs synchronous I/O while that lock is held, so slow storage may delay acceptance; this needs the queued storage/fault-injection and visible long-operation checks.
+- A steer cannot alter an already-running generation or an already-dispatched tool call. It is applied after the current complete provider response/tool exchange and before the next request, or after final prose before task completion. Approval rules still apply. This safe-boundary behavior is intentional and exposed in the composer.
+- The engine tests for safe-boundary delivery, final-prose continuation, and provider metadata stripping, plus app tests for captured session/project binding and restored turn identity, are committed but have not been run for these revisions. No app, model, build, or runtime test was started in this audit.
+- This does not complete the broader Codex/OpenCode parity and reliability program. First-operation timing, long-run compaction continuity, repeated planning without implementation, persisted activity/rendering, storage lock recovery, model/runtime truth, permissions/containment, and packaged acceptance remain separate tracked work. Do not write a project `plan.md`; the app's Plan and task checkpoint remain the live structured plan. `progress.md` remains deferred until continuity is proven useful without duplicating the event journal.
+
+**Last reconciled:** 2026-11-02
 **Current release:** `v0.1.0-beta.3` is published. This remains an unstable beta with visible app acceptance and the installed update canary open.
 
 This is the cross-repository execution order. It preserves the full approved product scope while separating core harness readiness from later parity and quality-of-life work. “Implemented in source” is not the same as tested, packaged, or accepted in a visible workflow.
