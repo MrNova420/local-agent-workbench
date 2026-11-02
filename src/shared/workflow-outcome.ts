@@ -16,3 +16,8 @@ export function terminalWorkflowSummary(outcome: unknown): string | null {
       return null;
   }
 }
+
+export function buildSafeContinuationPrompt(goal?: string): string {
+  const original = typeof goal === 'string' && goal.trim() ? `Original request:\n${goal.trim()}\n\n` : '';
+  return `${original}Continue the prior task in this same chat from its saved checkpoint, plan, decisions, and operation history. First inspect the saved checkpoint and current workspace; confirm which completed operations and changes are already present. Do not repeat completed operations. Do not retry uncertain side effects until their current effect is inspected and any required approval is obtained. Continue the unfinished work, update the plan as evidence warrants, and verify the final result under the current access and approval settings.`;
+}

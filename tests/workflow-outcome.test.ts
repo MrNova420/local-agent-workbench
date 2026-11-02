@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { terminalWorkflowSummary } from '../src/shared/workflow-outcome';
+import { buildSafeContinuationPrompt, terminalWorkflowSummary } from '../src/shared/workflow-outcome';
 
 describe('terminal workflow summaries', () => {
   it('explains a missing model final without claiming project work completed', () => {
@@ -16,5 +16,13 @@ describe('terminal workflow summaries', () => {
     expect(terminalWorkflowSummary('discussion')).toBeNull();
     expect(terminalWorkflowSummary('inspected')).toBeNull();
     expect(terminalWorkflowSummary(null)).toBeNull();
+  });
+
+  it('builds a same-chat recovery prompt that inspects effects before retrying', () => {
+    const prompt = buildSafeContinuationPrompt('Add a settings page');
+    expect(prompt).toContain('Add a settings page');
+    expect(prompt).toContain('First inspect the saved checkpoint and current workspace');
+    expect(prompt).toContain('Do not repeat completed operations');
+    expect(prompt).toContain('uncertain side effects until their current effect is inspected');
   });
 });
