@@ -783,3 +783,8 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - The [official Unsloth Flint GGUF model card](https://huggingface.co/unsloth/flint-GGUF/blob/main/README.md) describes Flint as a roughly 40B-parameter MoE with about 2.5B active parameters per token, supporting reasoning and multi-turn tool use. It recommends at least 32,768 output tokens for hard problems, including reasoning, and says prompt and output share the context window. The active acceptance remains at the user-selected 65,536 context / 8,192 output with model-default reasoning; no setting was changed. The upstream recommendation makes output-budget pressure a plausible factor, but it does not prove the cause of this run's long reasoning.
 - Latest live snapshot: the exact Flint request remains active and has produced 14,998 characters of reasoning that include drafted HTML structure; `partial_content` remains empty and no file operation has started. The saved session and visible Workbench both still show the same turn. Keep waiting for its own tool actions; do not replace or restart it.
 
+
+## 2026-11-01 reasoning-plus-tool stream regression and engine pin
+
+- Engine commit `605dc14935f3e1125a7a9397a34edbdd1437d748` adds a regression proving a default-reasoning Ollama response can stream `thinking` and then return a structured `write_file` tool call in the same response. Focused streaming suite: **7 passed**; full engine suite: **253 passed**, with one existing Starlette deprecation warning.
+- `core-revision.txt`, CI, and the Windows release workflow now pin that exact engine commit. The already-running packaged acceptance still uses its previously bundled engine; do not rebuild or replace it before the active Flint task ends.
