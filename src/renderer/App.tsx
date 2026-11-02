@@ -3,7 +3,7 @@ import { Markdown } from './Markdown';
 import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, QueuedPrompt, RunOptions, SessionLiveSnapshot, SessionSummary, SkillSource, TaskIntent, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
 import { applyToolCallProgress, nextRunPhase, restoredRunPhase, runStepProgress, shouldQueuePromptOnEnter, type ToolCallProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordInputEstimate, recordStreamedText, restoreRunMetrics, type RunMetrics } from '../shared/run-metrics';
-import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice, readRunTokenPreferences } from '../shared/model-controls';
+import { buildModelLabels, buildTokenPresets, chooseDefaultModel, isReasoningBudgetValid, MAX_REASONING_BUDGET_TOKENS, normalizeReasoningChoice, readReasoningBudgetPreference, readRunTokenPreferences } from '../shared/model-controls';
 import { featuredInstalledModels } from '../shared/model-recommendations';
 import { normalizeGpuStats } from '../shared/resource-metrics';
 import { appendTranscriptSegment, reconcileLiveAssistantMessage, restoreTranscriptMessages } from '../shared/transcript';
@@ -33,6 +33,7 @@ type Session = {
   access?: AccessMode;
   approval_mode?: ApprovalMode;
   reasoning?: boolean | string | null;
+  reasoning_budget_tokens?: number | null;
   max_tokens?: number;
   temperature?: number;
   keep_alive?: string;
@@ -65,7 +66,7 @@ type TelemetryView = {
   runtimeWorkerCount: number; runtimeWorkerCpu: number | null; runtimeWorkerRss: string; runtimeGpuMemory: number | null;
   kvSlot: { contextTokens: number | null; contextLimit: number | null; cachedTokens: number | null; processing: boolean } | null;
 };
-type AppliedSettings = { model: string; context: number; maxOutput: number; reasoning: boolean | string | null; estimatedInput: number | null };
+type AppliedSettings = { model: string; provider: string; context: number; maxOutput: number; reasoning: boolean | string | null; reasoningBudgetTokens: number | null; estimatedInput: number | null };
 
 function normalizeTaskIntent(value: unknown): TaskIntent { return value === 'discuss' || value === 'plan' || value === 'implement' ? value : 'auto'; }
 
@@ -76,6 +77,7 @@ const initialOptions = {
   access: 'ask' as AccessMode,
   approvalMode: 'per-action' as ApprovalMode,
   reasoning: null as boolean | string | null,
+  reasoningBudgetTokens: readReasoningBudgetPreference(localStorage.getItem('agent-reasoning-budget-tokens')),
   harnessProfile: 'standard' as HarnessProfile,
   taskIntent: normalizeTaskIntent(localStorage.getItem('agent-task-intent')),
   skillsEnabled: localStorage.getItem('agent-skills-enabled') !== 'false',
@@ -446,6 +448,7 @@ export default function App() {
         access: loaded.access || 'ask',
         approvalMode: loaded.approval_mode === 'per-task' || loaded.approval_mode === 'per-session' ? loaded.approval_mode : 'per-action',
         reasoning: loaded.reasoning ?? null,
+        reasoningBudgetTokens: isReasoningBudgetValid(loaded.reasoning_budget_tokens) ? loaded.reasoning_budget_tokens : initialOptions.reasoningBudgetTokens,
         harnessProfile: loaded.harness_profile === 'small-model' ? 'small-model' : (localStorage.getItem('agent-harness-profile') === 'small-model' ? 'small-model' : 'standard'),
         taskIntent: normalizeTaskIntent(loaded.task_intent ?? localStorage.getItem('agent-task-intent')),
         skillsEnabled: loaded.skills_enabled ?? initialOptions.skillsEnabled,
@@ -509,6 +512,7 @@ export default function App() {
       access: recovered.state.access || 'ask', approvalMode: recovered.state.approval_mode === 'per-task' || recovered.state.approval_mode === 'per-session' ? recovered.state.approval_mode : 'per-action',
       keepAlive: recovered.state.keep_alive || '30m',
       reasoning: (settings.reasoning ?? recovered.state.reasoning ?? null) as boolean | string | null,
+      reasoningBudgetTokens: isReasoningBudgetValid(settings.reasoning_budget_tokens) ? settings.reasoning_budget_tokens : initialOptions.reasoningBudgetTokens,
       harnessProfile: settings.harness_profile === 'small-model' || recovered.state.harness_profile === 'small-model' ? 'small-model' : 'standard',
       taskIntent: normalizeTaskIntent(settings.task_intent ?? recovered.state.task_intent),
       skillsEnabled: typeof settings.skills_enabled === 'boolean' ? settings.skills_enabled : (recovered.state.skills_enabled ?? initialOptions.skillsEnabled),
@@ -755,7 +759,7 @@ export default function App() {
       });
       if (event.type === 'inference_settings') {
         const estimatedInput = Number(event.estimated_input_tokens);
-        setAppliedSettings({ model: String(event.model), context: Number(event.requested_context), maxOutput: Number(event.max_output_tokens), reasoning: event.reasoning_override == null ? null : event.reasoning_override as boolean | string, estimatedInput: Number.isFinite(estimatedInput) ? estimatedInput : null });
+        setAppliedSettings({ model: String(event.model), provider: String(event.provider || ''), context: Number(event.requested_context), maxOutput: Number(event.max_output_tokens), reasoning: event.reasoning_override == null ? null : event.reasoning_override as boolean | string, reasoningBudgetTokens: typeof event.reasoning_budget_tokens === 'number' ? event.reasoning_budget_tokens : null, estimatedInput: Number.isFinite(estimatedInput) ? estimatedInput : null });
         setRunMetrics((current) => recordInputEstimate(current, event.estimated_input_tokens));
       }
       if (event.type === 'complete') {
@@ -1035,7 +1039,8 @@ export default function App() {
       setRunMetrics(emptyRunMetrics());
       setFirstOperationSeconds(null);
       setFirstFileWriteSeconds(null);
-      setOptions((old) => ({ ...old, context: created.context, maxTokens: tokenPreferences.maxTokens, approvalMode: 'per-action', reasoning: null }));
+      setOptions((old) => ({ ...old, context: created.context, maxTokens: tokenPreferences.maxTokens, approvalMode: 'per-action', reasoning: null,
+        reasoningBudgetTokens: readReasoningBudgetPreference(localStorage.getItem('agent-reasoning-budget-tokens')) }));
       void refreshWorkspace(workspace);
       window.setTimeout(() => promptRef.current?.focus(), 60);
     } catch (error) { notify(`Could not start a session: ${(error as Error).message}`, 'bad'); }
@@ -1061,6 +1066,7 @@ export default function App() {
       context: options.context, maxTokens: options.maxTokens, temperature: options.temperature,
       access: options.access, approvalMode: options.approvalMode, keepAlive: options.keepAlive,
       reasoning: normalizeReasoningChoice(options.reasoning, modelInfo?.reasoning ?? null),
+      reasoningBudgetTokens: options.reasoningBudgetTokens,
       harnessProfile: options.harnessProfile,
       taskIntent: options.taskIntent,
       skillsEnabled: options.skillsEnabled, skillSources: options.skillSources,
@@ -1288,8 +1294,8 @@ export default function App() {
 
   async function saveSettings() {
     if (running) { notify('Run settings cannot be applied to the saved session while its task is active.', 'warn'); return; }
-    if (!Number.isSafeInteger(options.context) || options.context < 1024 || !Number.isSafeInteger(options.maxTokens) || options.maxTokens < 1 || options.temperature < 0 || options.temperature > 2) {
-      notify('Context and output must be exact whole numbers (context at least 1,024, output at least 1); temperature must be between 0 and 2.', 'bad'); return;
+    if (!Number.isSafeInteger(options.context) || options.context < 1024 || !Number.isSafeInteger(options.maxTokens) || options.maxTokens < 1 || options.temperature < 0 || options.temperature > 2 || !isReasoningBudgetValid(options.reasoningBudgetTokens)) {
+      notify('Context and output must be exact whole numbers (context at least 1,024, output at least 1); temperature must be between 0 and 2; thinking budget must be an integer from 0 through 2,147,483,647 or unlimited.', 'bad'); return;
     }
     localStorage.setItem('agent-activity-default', activityDefault);
     localStorage.setItem('agent-ask-activity', String(askActivityChoice));
@@ -1298,6 +1304,7 @@ export default function App() {
     localStorage.setItem('agent-skills-enabled', String(options.skillsEnabled));
     localStorage.setItem('agent-skill-sources', JSON.stringify(options.skillSources));
     localStorage.setItem('agent-run-token-preferences', JSON.stringify({ context: options.context, maxTokens: options.maxTokens }));
+    localStorage.setItem('agent-reasoning-budget-tokens', options.reasoningBudgetTokens === null ? '' : String(options.reasoningBudgetTokens));
     sessionStorage.setItem('agent-activity-mode', activityMode);
     setSettingsOpen(false);
     if (session) {
@@ -1306,6 +1313,7 @@ export default function App() {
           model, context: options.context, maxTokens: options.maxTokens, temperature: options.temperature,
           access: options.access, approvalMode: options.approvalMode, keepAlive: options.keepAlive,
           reasoning: options.reasoning, harnessProfile: options.harnessProfile,
+          reasoningBudgetTokens: options.reasoningBudgetTokens,
           taskIntent: options.taskIntent,
           skillsEnabled: options.skillsEnabled, skillSources: options.skillSources,
         } });
@@ -1652,7 +1660,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
         <div className="run-sheet-heading"><div><span className="eyebrow-line">LIVE WORK SHEET</span><h2>Task signals</h2></div><Button kind="outline" className="sheet-inspect" onClick={onDiff}><Icon name="branch"/> Inspect changes</Button><span className={`run-lamp ${running ? 'active' : ''}`}/></div>
         <section className="sheet-panel" style={panelStyle('signals')} aria-label="Run signals and generation metrics">
           <div className="sheet-panel-heading"><span>MODEL &amp; GENERATION</span><SheetPanelControls panel="signals" layout={sheetLayout} onMove={movePanel} onResize={resizePanel}/></div>
-          <div className="signal-matrix"><div className={`signal-card signal-wide ${telemetry.contextMismatch ? 'signal-warning' : ''}`}><small>MODEL / CONTEXT</small><strong title={model}>{shortModel(model)}</strong><span>{telemetry.loadedContext ? `RUNTIME ${fmt(telemetry.loadedContext)} / ${fmt(options.context)} REQUESTED TOKENS` : `${fmt(options.context)} REQUESTED · NOT CURRENTLY LOADED`}</span></div><div className="signal-card"><small>REQUEST SENT</small><strong>{appliedSettings && appliedSettings.model === model ? `${fmt(appliedSettings.context)} / ${fmt(appliedSettings.maxOutput)}` : '—'}</strong><span>CONTEXT / OUTPUT TOKENS</span></div><div className="signal-card"><small>REASONING OVERRIDE</small><strong>{appliedSettings && appliedSettings.model === model ? appliedSettings.reasoning == null ? 'DEFAULT' : String(appliedSettings.reasoning).toUpperCase() : '—'}</strong><span>EXACT SELECTED VALUE</span></div><div className="signal-card"><small>ELAPSED</small><strong>{running ? secs(elapsed) : '—'}</strong><span>{running ? phase.toUpperCase() : 'NO ACTIVE RUN'}</span></div><div className="signal-card" title="Elapsed time from task start to the first structured tool call other than update_plan. Reads and searches count; this does not mean files were changed."><small>FIRST TOOL</small><strong>{firstOperationSeconds == null ? running ? 'WAITING' : '—' : tokenDelay(firstOperationSeconds * 1000)}</strong><span>FROM TASK START</span></div><div className="signal-card" title="Elapsed time until the first successful structured write_file, append_file, edit_file, or apply_patch result. Commands are not counted because their file effects are not fully attributable."><small>FIRST FILE WRITE</small><strong>{firstFileWriteSeconds == null ? running ? 'NONE YET' : '—' : tokenDelay(firstFileWriteSeconds * 1000)}</strong><span>SUCCESSFUL STRUCTURED WRITE</span></div><div className="signal-card"><small>FILES IN VIEW</small><strong>{files.length}</strong><span>INDEXED / IGNORE AWARE</span></div></div>
+          <div className="signal-matrix"><div className={`signal-card signal-wide ${telemetry.contextMismatch ? 'signal-warning' : ''}`}><small>MODEL / CONTEXT</small><strong title={model}>{shortModel(model)}</strong><span>{telemetry.loadedContext ? `RUNTIME ${fmt(telemetry.loadedContext)} / ${fmt(options.context)} REQUESTED TOKENS` : `${fmt(options.context)} REQUESTED · NOT CURRENTLY LOADED`}</span></div><div className="signal-card"><small>REQUEST SENT</small><strong>{appliedSettings && appliedSettings.model === model ? `${fmt(appliedSettings.context)} / ${fmt(appliedSettings.maxOutput)}` : '—'}</strong><span>CONTEXT / OUTPUT TOKENS</span></div><div className="signal-card"><small>REASONING OVERRIDE</small><strong>{appliedSettings && appliedSettings.model === model ? appliedSettings.reasoning == null ? 'DEFAULT' : String(appliedSettings.reasoning).toUpperCase() : '—'}</strong><span>EXACT SELECTED VALUE</span></div><div className="signal-card"><small>THINKING BUDGET</small><strong>{appliedSettings && appliedSettings.model === model ? appliedSettings.provider === 'ollama' ? 'NOT SUPPORTED' : appliedSettings.reasoningBudgetTokens === null ? 'UNLIMITED' : `${fmt(appliedSettings.reasoningBudgetTokens)} REQUESTED` : '—'}</strong><span>{appliedSettings?.provider === 'ollama' ? 'OLLAMA HAS NO PER-REQUEST TOKEN BUDGET' : 'RUNTIME ENFORCEMENT NOT REPORTED'}</span></div><div className="signal-card"><small>ELAPSED</small><strong>{running ? secs(elapsed) : '—'}</strong><span>{running ? phase.toUpperCase() : 'NO ACTIVE RUN'}</span></div><div className="signal-card" title="Elapsed time from task start to the first structured tool call other than update_plan. Reads and searches count; this does not mean files were changed."><small>FIRST TOOL</small><strong>{firstOperationSeconds == null ? running ? 'WAITING' : '—' : tokenDelay(firstOperationSeconds * 1000)}</strong><span>FROM TASK START</span></div><div className="signal-card" title="Elapsed time until the first successful structured write_file, append_file, edit_file, or apply_patch result. Commands are not counted because their file effects are not fully attributable."><small>FIRST FILE WRITE</small><strong>{firstFileWriteSeconds == null ? running ? 'NONE YET' : '—' : tokenDelay(firstFileWriteSeconds * 1000)}</strong><span>SUCCESSFUL STRUCTURED WRITE</span></div><div className="signal-card"><small>FILES IN VIEW</small><strong>{files.length}</strong><span>INDEXED / IGNORE AWARE</span></div></div>
           <div className="run-metrics" aria-label="Model generation and prompt-cache statistics"><div><small>FIRST TOKEN</small><strong>{tokenDelay(runMetrics.firstTokenMs)}</strong></div><div title={outputTokensAreEstimated(runMetrics) ? 'Live estimate from streamed text; replaced by the provider’s exact rate after generation.' : 'Exact rate reported by the provider.'}><small>OUTPUT / SEC{outputTokensAreEstimated(runMetrics) ? ' · LIVE' : ''}</small><strong>{liveOutputTokensPerSecond(runMetrics)?.toFixed(1).replace(/^/, outputTokensAreEstimated(runMetrics) ? '~' : '') ?? '—'}</strong></div><div title={outputTokensAreEstimated(runMetrics) ? 'Live estimate from streamed text; replaced by the provider’s exact token count after generation.' : 'Exact output token count reported by the provider.'}><small>OUTPUT TOKENS{outputTokensAreEstimated(runMetrics) ? ' · LIVE' : ''}</small><strong>{outputTokensAreEstimated(runMetrics) ? '~' : ''}{fmt(estimateOutputTokens(runMetrics))}</strong></div><div title={promptCacheComplete ? `Provider-reported prompt reuse: ${fmt(runMetrics.cachedPromptTokens)} of ${fmt(runMetrics.promptTokens)} prompt tokens.` : `Prompt-cache counters reported for ${runMetrics.cachedPromptReports} of ${runMetrics.usageResponses} responses; no missing values are treated as zero.`}><small>PROMPT REUSE{runMetrics.cachedPromptReports > 0 && !promptCacheComplete ? ' · PARTIAL' : ''}</small><strong>{promptCacheComplete && runMetrics.promptTokens ? `${Math.round(runMetrics.cachedPromptTokens / runMetrics.promptTokens * 100)}%` : runMetrics.cachedPromptReports ? `${runMetrics.cachedPromptReports}/${runMetrics.usageResponses} REPORTED` : 'UNKNOWN'}</strong></div></div>
           <div className="kv-cache-panel" aria-label="KV cache, prompt input, and reuse details">
             <div className="kv-cache-heading"><span>PROMPT REUSE &amp; KV TELEMETRY</span><small>{model.startsWith('gguf::') ? 'LLAMA.CPP' : 'OLLAMA'}</small></div>
@@ -1855,6 +1863,9 @@ function SettingsModal({ model, modelLabel, modelInfo, options, setOptions, acti
     <div className="settings-fields"><label className="settings-field"><span>Context window preset{tokenPresets.contextLimitKnown ? '' : ' · model maximum unknown'}</span><select value={tokenPresets.context.some((preset) => preset.value === options.context) ? String(options.context) : 'custom'} onChange={(e) => { if (e.target.value !== 'custom') setOptions((old) => ({ ...old, context: Number(e.target.value) })); }}><option value="custom">Custom value</option>{tokenPresets.context.map((preset) => <option key={preset.value} value={preset.value} disabled={preset.disabled}>{preset.label}{preset.disabled ? ' · exceeds model limit' : ''}</option>)}</select></label>{field('Context tokens · custom', options.context, 'context')}{<label className="settings-field"><span>Maximum output preset{tokenPresets.outputLimitKnown ? '' : ' · provider maximum unknown'}</span><select value={tokenPresets.output.some((preset) => preset.value === options.maxTokens) ? String(options.maxTokens) : 'custom'} onChange={(e) => { if (e.target.value !== 'custom') setOptions((old) => ({ ...old, maxTokens: Number(e.target.value) })); }}><option value="custom">Custom value</option>{tokenPresets.output.map((preset) => <option key={preset.value} value={preset.value} disabled={preset.disabled}>{preset.label}{preset.disabled ? ' · exceeds supported limit' : ''}</option>)}</select></label>}{field('Maximum output tokens · custom', options.maxTokens, 'maxTokens')}{field('Temperature', options.temperature, 'temperature')}</div>
     <small className="token-controls-note">Preset values are shortcuts, not a maximum. Custom context and output values are preserved as entered and are not silently lowered.</small>
     <label className="settings-field"><span>Reasoning</span><select value={String(selectedReasoningIndex)} onChange={(e) => { const value = reasoningValues[Number(e.target.value)] ?? null; setOptions((old) => ({ ...old, reasoning: normalizeReasoningChoice(value, reasoning ?? null) })); }}><option value="0">Model default</option>{reasoningValues.slice(1).map((value, index) => <option key={`${typeof value}-${String(value)}-${index}`} value={index + 1}>{typeof value === 'boolean' ? value ? 'On' : 'Off' : value}</option>)}</select><small>{reasoning ? `Model default: ${String(reasoning.default ?? 'not reported')}` : 'The model did not report reasoning controls; no override will be sent.'}</small></label>
+    {model.startsWith('gguf::')
+      ? <label className="settings-field"><span>Thinking-token budget · per request</span><input type="number" min="0" max={MAX_REASONING_BUDGET_TOKENS} step="1" value={options.reasoningBudgetTokens ?? ''} placeholder="Unlimited" onChange={(event) => setOptions((old) => ({ ...old, reasoningBudgetTokens: event.target.value === '' ? null : Number(event.target.value) }))}/><small>Blank means unlimited. 0 ends the reasoning section immediately; any positive value requests that many reasoning tokens, if the model/template and server enforce it. The reasoning mode above still decides whether reasoning is enabled. A smaller budget can reduce analysis quality; it does not change the output-token cap or impose a time limit.</small></label>
+      : <div className="settings-field"><span>Thinking-token budget</span><small>Ollama exposes only this model’s advertised reasoning modes and levels; its API does not provide a separate per-request thinking-token budget. Your current setting is retained for llama.cpp sessions and is not sent to Ollama.</small></div>}
     <div className="context-facts"><span>Advertised maximum <b>{modelInfo?.context_limit_known ? fmt(modelInfo.context ?? undefined) : 'Unknown'}</b></span><span>Runtime context <b>{modelInfo?.effective_context ? fmt(modelInfo.effective_context) : modelInfo?.provider === 'llama.cpp' ? 'Not loaded / allocation unverified' : 'Shown in the task signal panel'}</b></span></div>
     <label className="settings-field"><span>Keep model warm after a request</span><select value={options.keepAlive} onChange={(e) => setOptions((old) => ({ ...old, keepAlive: e.target.value }))}><option value="30m">30 minutes</option><option value="10m">10 minutes</option><option value="5m">5 minutes</option><option value="0">Unload when idle (Ollama setting)</option></select></label>
     <label className="settings-field"><span>Task intent</span><select value={options.taskIntent} onChange={(e) => setOptions((old) => ({ ...old, taskIntent: e.target.value as TaskIntent }))}><option value="auto">Automatic</option><option value="discuss">Discuss / investigate</option><option value="plan">Plan only</option><option value="implement">Implement</option></select><small>Automatic continues an agent's Plan phase into implementation and inspection. A plan explicitly requested without implementation is tracked separately. Choose Plan only or Discuss for a guaranteed non-mutating run. Implement seeds a visible checklist. File access and approval still independently limit changes.</small>{options.taskIntent === 'implement' && options.access === 'plan' && <small className="auto-approve-warning">Read-only File access prevents implementation edits. Choose Ask before writes or another access mode to let the agent change files.</small>}</label>

@@ -1,6 +1,6 @@
 # Proposed Model Runtime and Hugging Face Support
 
-**Status: Implementation authorized and underway. Automated tests pass; packaged visible acceptance of the expanded provider flows remains pending.**
+**Status: Implementation authorized and underway. Capability-based reasoning mode/effort and llama.cpp per-request thinking-budget controls are implemented in source with focused tests; packaged visible acceptance and live enforcement measurement remain pending.**
 
 ## Goal
 
@@ -8,7 +8,7 @@ Let the workbench use a wider set of local models and runtimes, including models
 
 ## Current boundary
 
-The workbench is currently runtime-limited to Ollama. It already runs many model architectures installed in Ollama, including the current Hugging Face GGUF-derived Ornith model; the model selector lists installed Ollama models. Hugging Face is a model hub and can host different weight formats. GGUF can be run by llama.cpp; Ollama documents importing local GGUF and Safetensors weights. A native Transformers runtime for arbitrary Hub checkpoints would be a separate, heavier runtime and is outside this first expansion.
+The workbench supports Ollama and has an optional app-managed llama.cpp path for GGUF. It already runs many model architectures installed in Ollama, including the current Hugging Face GGUF-derived Ornith model; the model selector lists installed Ollama models. Hugging Face is a model hub and can host different weight formats. GGUF can be run by llama.cpp; Ollama documents importing local GGUF and Safetensors weights. A native Transformers runtime for arbitrary Hub checkpoints would be a separate, heavier runtime and is outside this first expansion.
 
 ## Proposed V1.1 scope
 
@@ -42,6 +42,9 @@ The optional llama.cpp executable should be installed or selected through an exp
 - Other providers may report different controls or none. The UI must not invent a generic `low/medium/high` set when the backend did not advertise it.
 - Keep `default` as the initial reasoning selection. Send no provider override for that value.
 - Keep reasoning generation (`default`, enabled/disabled, or supported effort) separate from reasoning visibility in the transcript.
+- The model-specific `Reasoning` selector means the provider's advertised thinking mode/level; it does not promise a token or time limit. Ollama's `think` API accepts a boolean or model-defined level and does not document a separate per-request thinking-token budget. See [Ollama thinking controls](https://github.com/ollama/ollama/blob/main/docs/capabilities/thinking.mdx).
+- A separate optional llama.cpp `Thinking-token budget` is saved per session and sent as `thinking_budget_tokens` on each request. Blank is unlimited by default; integer values are preserved, including zero. llama.cpp supports the per-request field when no server-level reasoning budget overrides it; applicability also depends on a usable reasoning section in the selected chat template. See [llama.cpp server controls](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md) and its [per-request budget discussion](https://github.com/ggml-org/llama.cpp/discussions/21445).
+- The two controls are independent: reasoning mode selects whether/how the model reasons, while a supported budget limits reasoning-section tokens. The budget does not change `max_tokens`, impose a wall-clock deadline, or prove runtime enforcement. The UI labels it as requested because model/template/server behavior is not independently reported. A lower budget can reduce coding quality, so it remains unlimited unless the user chooses otherwise.
 - The context control is the requested total prompt window. Maximum response tokens remain a separate cap. Validate and explain provider-specific constraints without silently rewriting either user value.
 
 ## Non-goals for this proposal

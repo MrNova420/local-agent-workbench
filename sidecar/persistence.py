@@ -124,7 +124,7 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any], *,
             prompt["providerRequest"] = {
                 key: copy.deepcopy(event[key])
                 for key in ("provider", "request_api", "request_index", "model", "api_model", "stream", "tool_count", "tool_names", "deferred_tool_names", "requested_context",
-                            "runtime_context", "max_output_tokens", "reasoning_override", "runtime_reasoning",
+                            "runtime_context", "max_output_tokens", "reasoning_override", "runtime_reasoning", "reasoning_budget_tokens", "reasoning_budget_applied_by",
                             "reasoning_field_sent", "keep_alive", "request_options", "additional_fields",
                             "estimated_input_tokens", "input_estimate_method")
                 if key in event

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice, readRunTokenPreferences, type ReasoningCapability } from '../src/shared/model-controls';
+import { buildModelLabels, buildTokenPresets, chooseDefaultModel, isReasoningBudgetValid, normalizeReasoningChoice, readReasoningBudgetPreference, readRunTokenPreferences, type ReasoningCapability } from '../src/shared/model-controls';
 
 describe('model capability controls', () => {
   it('disambiguates installed models that share the same short display name', () => {
@@ -63,5 +63,17 @@ describe('model capability controls', () => {
   it('preserves custom token choices without silently clamping them', () => {
     expect(readRunTokenPreferences(JSON.stringify({ context: 300000, maxTokens: 12000 })))
       .toEqual({ context: 300000, maxTokens: 12000 });
+  });
+
+  it('preserves unlimited or exact custom thinking budgets and validates the server integer range', () => {
+    expect(readReasoningBudgetPreference(null)).toBeNull();
+    expect(readReasoningBudgetPreference('0')).toBe(0);
+    expect(readReasoningBudgetPreference('65536')).toBe(65536);
+    expect(isReasoningBudgetValid(2_147_483_647)).toBe(true);
+    expect(isReasoningBudgetValid(null)).toBe(true);
+    expect(isReasoningBudgetValid(-1)).toBe(false);
+    expect(isReasoningBudgetValid(1.5)).toBe(false);
+    expect(isReasoningBudgetValid(2_147_483_648)).toBe(false);
+    expect(isReasoningBudgetValid(true)).toBe(false);
   });
 });

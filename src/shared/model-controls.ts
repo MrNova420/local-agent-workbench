@@ -1,4 +1,16 @@
 export type ReasoningChoice = boolean | string | null;
+export const MAX_REASONING_BUDGET_TOKENS = 2_147_483_647;
+
+export function isReasoningBudgetValid(value: unknown): value is number | null {
+  return value === null || (typeof value === 'number' && Number.isSafeInteger(value)
+    && value >= 0 && value <= MAX_REASONING_BUDGET_TOKENS);
+}
+
+export function readReasoningBudgetPreference(raw: string | null): number | null {
+  if (raw === null || raw === '') return null;
+  const parsed = Number(raw);
+  return isReasoningBudgetValid(parsed) ? parsed : null;
+}
 
 export type ReasoningCapability = {
   support: 'toggle' | 'levels' | 'unknown' | 'none';

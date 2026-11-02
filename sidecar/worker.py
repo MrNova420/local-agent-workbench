@@ -445,7 +445,7 @@ class AgentService:
                     activity["providerRequest"] = {
                         key: copy.deepcopy(event[key])
                         for key in ("provider", "request_api", "request_index", "model", "api_model", "stream", "tool_count", "tool_names", "deferred_tool_names", "requested_context",
-                                    "runtime_context", "max_output_tokens", "reasoning_override", "runtime_reasoning",
+                                    "runtime_context", "max_output_tokens", "reasoning_override", "runtime_reasoning", "reasoning_budget_tokens", "reasoning_budget_applied_by",
                                     "reasoning_field_sent", "keep_alive", "request_options", "additional_fields",
                                     "estimated_input_tokens", "input_estimate_method")
                         if key in event
@@ -1160,6 +1160,10 @@ class AgentService:
                 capabilities = self.handle("model_info", {"model": model}).get("reasoning", {})
                 if reasoning not in capabilities.get("values", []):
                     raise ValueError("The selected model does not advertise that reasoning choice.")
+            reasoning_budget_tokens = settings.get("reasoningBudgetTokens")
+            if reasoning_budget_tokens is not None and (not isinstance(reasoning_budget_tokens, int) or isinstance(reasoning_budget_tokens, bool)
+                    or reasoning_budget_tokens < 0 or reasoning_budget_tokens > 2_147_483_647):
+                raise ValueError("Thinking budget must be an integer from 0 through 2,147,483,647 or unlimited.")
             state = self._load_session_state(str(message["sessionId"]))
             if approval_mode != "per-session":
                 state["session_approval_granted"] = False
@@ -1167,6 +1171,7 @@ class AgentService:
                          context=context, max_tokens=max_tokens, temperature=float(temperature), access=access,
                          approval_mode="per-action" if approval_mode == "auto" else approval_mode,
                          keep_alive=str(settings.get("keepAlive", "30m")), reasoning=reasoning,
+                         reasoning_budget_tokens=reasoning_budget_tokens,
                          harness_profile=harness_profile, task_intent=task_intent, skills_enabled=skills_enabled,
                          skill_sources=list(dict.fromkeys(skill_sources)))
             state["persistence"] = self.sessions.save(state)
@@ -1572,6 +1577,10 @@ class AgentService:
         if access not in {"copy", "plan", "ask", "edit"} or approval_mode not in {"per-action", "per-task", "per-session", "auto"}:
             raise ValueError("Invalid access or approval setting.")
         reasoning = options.get("reasoning")
+        reasoning_budget_tokens = options.get("reasoningBudgetTokens")
+        if reasoning_budget_tokens is not None and (not isinstance(reasoning_budget_tokens, int) or isinstance(reasoning_budget_tokens, bool)
+                or reasoning_budget_tokens < 0 or reasoning_budget_tokens > 2_147_483_647):
+            raise ValueError("Thinking budget must be an integer from 0 through 2,147,483,647 or unlimited.")
         harness_profile = str(options.get("harnessProfile", "standard"))
         if harness_profile not in {"standard", "small-model"}:
             raise ValueError("Invalid harness workflow profile.")
@@ -1606,6 +1615,7 @@ class AgentService:
             approval_mode="per-action" if approval_mode == "auto" else approval_mode, max_tokens=int(options["maxTokens"]),
             temperature=float(options["temperature"]), keep_alive=str(options.get("keepAlive", "30m")),
             reasoning=reasoning,
+            reasoning_budget_tokens=reasoning_budget_tokens,
             harness_profile=harness_profile,
             task_intent=task_intent,
             skills_enabled=skills_enabled, skill_sources=skill_sources,
@@ -1654,6 +1664,7 @@ class AgentService:
                 "model": model, "provider_id": provider.provider_id,
                 "context": state["context"], "max_tokens": state["max_tokens"],
                 "reasoning": reasoning, "temperature": state["temperature"],
+                "reasoning_budget_tokens": reasoning_budget_tokens,
                 "runtime_options": copy.deepcopy(state.get("runtime_options", {})),
                 "harness_profile": harness_profile, "access": access,
                 "approval_mode": approval_mode, "skills_enabled": skills_enabled,
@@ -1674,6 +1685,7 @@ class AgentService:
                              "settings": {"model": model, "provider_id": provider.provider_id,
                                  "context": state["context"], "max_tokens": state["max_tokens"],
                                  "reasoning": reasoning, "temperature": state["temperature"],
+                                 "reasoning_budget_tokens": reasoning_budget_tokens,
                                  "access": access, "effective_access": "plan" if task_intent in {"discuss", "plan"} else access,
                                  "approval_mode": approval_mode, "keep_alive": state.get("keep_alive", "30m"),
                                  "harness_profile": harness_profile, "task_intent": task_intent,
@@ -1687,6 +1699,7 @@ class AgentService:
             "partial_thinking": "", "active_operation": None, "active_operations": {}, "tool_batch": None,
             "completed_tool_results": {}, "workflow_outcome": None, "settings": {"model": model, "provider_id": provider.provider_id,
                 "context": state["context"], "max_tokens": state["max_tokens"], "reasoning": reasoning,
+                "reasoning_budget_tokens": reasoning_budget_tokens,
                 "harness_profile": harness_profile, "skills_enabled": skills_enabled,
                 "skill_sources": skill_sources, "task_intent": task_intent,
                 "requested_access": access, "effective_access": "plan" if task_intent in {"discuss", "plan"} else access,
@@ -1889,6 +1902,7 @@ class AgentService:
             chosen_runtime = self.providers.runtime_for(turn.model, engine.runtime, state.get("provider_id"))
             engine.runtime = RequestScopedOllama(chosen_runtime)
             engine.state["reasoning"] = state.get("reasoning")
+            engine.state["reasoning_budget_tokens"] = state.get("reasoning_budget_tokens")
             engine.state["keep_alive"] = state.get("keep_alive", "30m")
             controller["engine"] = engine
             if controller.get("stop_after_operation"):

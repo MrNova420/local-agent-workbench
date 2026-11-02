@@ -161,7 +161,8 @@ def test_session_run_settings_persist_skill_controls_and_inference_values(servic
         "settings": {
             "model": "model-a:latest", "context": 65536, "maxTokens": 8192,
             "temperature": 0.2, "access": "ask", "approvalMode": "per-action",
-            "keepAlive": "30m", "reasoning": None, "harnessProfile": "small-model", "taskIntent": "implement",
+            "keepAlive": "30m", "reasoning": None, "reasoningBudgetTokens": 65536,
+            "harnessProfile": "small-model", "taskIntent": "implement",
             "skillsEnabled": False, "skillSources": ["project"],
         },
     })
@@ -170,6 +171,7 @@ def test_session_run_settings_persist_skill_controls_and_inference_values(servic
     assert saved["skill_sources"] == ["project"]
     assert saved["context"] == 65536
     assert saved["max_tokens"] == 8192
+    assert saved["reasoning_budget_tokens"] == 65536
     assert saved["task_intent"] == "implement"
     assert service.sessions.load(session["session_id"], str(workspace))["state"]["skills_enabled"] is False
 
@@ -262,6 +264,7 @@ def test_provider_request_settings_update_the_matching_prompt_activity_and_strea
                         "stream": True, "tool_count": 2, "tool_names": ["read_file", "load_tools"],
                         "deferred_tool_names": ["mcp__build__check"], "requested_context": 65536,
                         "max_output_tokens": 8192, "reasoning_override": None,
+                        "reasoning_budget_tokens": 2048,
                         "reasoning_field_sent": True, "reasoning_override": "high", "keep_alive": "30m",
                         "request_options": {"num_ctx": 65536, "num_predict": 8192},
                         "additional_fields": {"think": "high"},
@@ -286,7 +289,7 @@ def test_provider_request_settings_update_the_matching_prompt_activity_and_strea
     service.handle("run_start", {"options": {
         "workspace": str(project), "prompt": "hello", "model": "model-a:latest",
         "context": 65536, "maxTokens": 8192, "temperature": 0.2,
-        "access": "ask", "approvalMode": "per-action", "reasoning": None,
+        "access": "ask", "approvalMode": "per-action", "reasoning": None, "reasoningBudgetTokens": 2048,
     }})
     controller = service.active
     assert controller is not None
@@ -298,6 +301,8 @@ def test_provider_request_settings_update_the_matching_prompt_activity_and_strea
     assert prompt["providerRequest"]["reasoning_field_sent"] is True
     assert prompt["providerRequest"]["additional_fields"] == {"think": "high"}
     assert prompt["providerRequest"]["api_model"] == "model-a:latest"
+    assert prompt["providerRequest"]["reasoning_budget_tokens"] == 2048
+    assert saved["reasoning_budget_tokens"] == 2048
     assert prompt["providerRequest"]["tool_count"] == 2
     assert prompt["providerUsage"] == {"prompt_eval_count": 580, "prompt_eval_cached_count": 120, "eval_count": 45}
     assert prompt["status"] == "response_stream_ended"

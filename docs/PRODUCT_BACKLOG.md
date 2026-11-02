@@ -2,7 +2,9 @@
 
 The product target is full 1:1 user-facing feature and workflow parity with Codex and OpenCode, as tracked in [CORE_HARNESS_READINESS.md](CORE_HARNESS_READINESS.md). The authoritative cross-repository order and release state is [MASTER_ROADMAP.md](MASTER_ROADMAP.md). The current implementation sequence starts with stabilizing the core agent harness and full-project workflow; deferred parity items remain required and are not dropped scope. Existing runtime and model-support requirements remain in [MODEL_RUNTIME_EXPANSION.md](MODEL_RUNTIME_EXPANSION.md).
 
-- **Current source pairing (2026-11-02):** app `core-revision.txt` targets engine `b1981571c9a7680646cb1cef587fe4c384fae869`. Plan-only tool loops now stop with explicit blocked, incomplete, or missing-response outcomes across access modes, and the chat has a Workbench-authored blocked explanation with checkpoint continuation. Focused engine suites pass (79) and focused renderer tests pass (6). This does not close full harness, packaged UI, long-run model, or release verification.
+- **Current reasoning controls:** model-advertised thinking mode/levels remain distinct from an optional llama.cpp `thinking_budget_tokens` cap. The latter is unlimited by default, custom per request, saved in sessions, and does not reduce the output cap. Ollama has no documented reasoning-token budget field. Source tests and typecheck pass; visible packaged control and actual llama.cpp enforcement remain final-gate items.
+
+- **Previous source pairing (2026-11-02):** app `core-revision.txt` advanced from engine `b1981571c9a7680646cb1cef587fe4c384fae869` to add the reasoning budget summarized above. The plan-only loop correction remains in the current engine pin. Focused loop tests passed (79) and focused terminal-status tests passed (6); the current source pairing has separate tests and evidence recorded above. Full harness, packaged UI, long-run model, and release verification remain open.
 
 ## Current evidence and this release batch
 

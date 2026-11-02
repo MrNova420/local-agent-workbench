@@ -23,6 +23,7 @@ export type RunOptions = {
   approvalMode: ApprovalMode;
   keepAlive: string;
   reasoning: ReasoningChoice;
+  reasoningBudgetTokens: number | null;
   harnessProfile: HarnessProfile;
   taskIntent: TaskIntent;
   skillsEnabled: boolean;
@@ -87,7 +88,7 @@ export type WorkerCommand =
   | { command: 'session_live_snapshot'; sessionId: string; workspace: string; afterActivityRevision?: number; afterTextRevision?: number }
   | { command: 'session_new'; workspace: string; model: string; context: number; activityMode?: ActivityMode }
   | { command: 'session_activity_mode'; sessionId: string; activityMode: ActivityMode }
-  | { command: 'session_run_settings'; sessionId: string; settings: { model: string; context: number; maxTokens: number; temperature: number; access: AccessMode; approvalMode: ApprovalMode; keepAlive: string; reasoning: ReasoningChoice; harnessProfile: HarnessProfile; taskIntent: TaskIntent; skillsEnabled: boolean; skillSources: SkillSource[] } }
+  | { command: 'session_run_settings'; sessionId: string; settings: { model: string; context: number; maxTokens: number; temperature: number; access: AccessMode; approvalMode: ApprovalMode; keepAlive: string; reasoning: ReasoningChoice; reasoningBudgetTokens: number | null; harnessProfile: HarnessProfile; taskIntent: TaskIntent; skillsEnabled: boolean; skillSources: SkillSource[] } }
   | { command: 'session_queue_prompt'; sessionId: string; workspace: string; prompt: string }
   | { command: 'session_steer'; sessionId: string; workspace: string; prompt: string }
   | { command: 'session_queue_remove'; sessionId: string; workspace: string; queuedPromptId: string }
