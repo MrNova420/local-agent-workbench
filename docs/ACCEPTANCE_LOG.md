@@ -3,7 +3,7 @@
 ## 2026-11-02 progressive project file scan activity
 
 - Engine `48e6218730effd253d94deee0cd4bafff39d4280` emits sampled progress for `list_files` and `search_files` without changing the result/paging contract or adding a scan cap. The sidecar updates the same operation activity record and journals/replays its latest scan counters. Chat and Activity Trace render the progress inline on the operation row, including after session restore.
-- Focused evidence: engine file tools **37 passed**; worker activity persistence **1 passed**; journal replay **1 passed**; renderer activity **20 passed**; paired source-pin check passed. The progress test verifies counts only; it does not expose search query text or file paths.
+- Focused evidence: engine file tools **37 passed**; worker activity persistence **1 passed**; journal replay **1 passed**; renderer activity **21 passed**; paired source-pin check passed. The progress test verifies counts only; it does not expose search query text or file paths. The activity UI exposes the full message on hover and the file/byte/match counters in operation details.
 - Full suites, package, live app/long-run acceptance, and Flint final model acceptance remain queued. No inference request or model-setting change was made.
 
 ## 2026-11-02 remote recursive reference discovery correction

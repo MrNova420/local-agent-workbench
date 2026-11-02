@@ -37,6 +37,14 @@ function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expande
   const firstFile = row.affectedFiles?.[0];
   const extraFiles = Math.max(0, (row.affectedFiles?.length || 0) - 1);
   const output = row.output || {};
+  const progressMetrics = row.progress ? [
+    typeof row.progress.filesScanned === 'number' && Number.isFinite(row.progress.filesScanned)
+      ? `${row.progress.filesScanned.toLocaleString()} file${row.progress.filesScanned === 1 ? '' : 's'} inspected` : null,
+    typeof row.progress.bytesRead === 'number' && Number.isFinite(row.progress.bytesRead)
+      ? `${row.progress.bytesRead.toLocaleString()} bytes read` : null,
+    typeof row.progress.matches === 'number' && Number.isFinite(row.progress.matches)
+      ? `${row.progress.matches.toLocaleString()} match${row.progress.matches === 1 ? '' : 'es'}` : null,
+  ].filter((value): value is string => value !== null) : [];
   return <details className={`activity-card activity-${row.kind} activity-${row.status}`} open={expanded}>
     <summary className={`activity-summary activity-summary-${surface}`}>
       <span className={`activity-state-dot state-${row.status}`}/>
@@ -48,12 +56,13 @@ function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expande
       <span className="activity-status">{row.status.replaceAll('_', ' ')}</span>
       {row.status === 'uncertain' && <span className="activity-review-warning">inspect before retry</span>}
       {row.approvalStatus && <span className={`activity-approval activity-approval-${row.approvalStatus}`}>approval {row.approvalStatus.replaceAll('_', ' ')}</span>}
-      {row.progress?.message && <span className="activity-operation-progress">{row.progress.message}</span>}
+      {row.progress?.message && <span className="activity-operation-progress" title={row.progress.message}>{row.progress.message}</span>}
       {surface === 'sidebar' && row.affectedFiles?.length ? <span className="activity-file-count">{row.affectedFiles.length} file{row.affectedFiles.length === 1 ? '' : 's'}</span> : null}
     </summary>
     <div className="activity-card-details">
       {row.affectedFiles?.length ? <div className="activity-files">{row.affectedFiles.map((file) => <code key={file}>{file}</code>)}</div> : null}
       {row.arguments !== undefined && <details className="activity-subdetails"><summary>Arguments</summary><ProgressiveText value={JSON.stringify(row.arguments, null, 2)}/></details>}
+      {progressMetrics.length > 0 && <div className="activity-plan-item"><b>Latest operation progress</b><span>{progressMetrics.join(' · ')}</span></div>}
       {Object.entries(output).map(([stream, value]) => value ? <details className="activity-subdetails" key={stream}><summary>{stream} · {value.length.toLocaleString()} characters</summary><ProgressiveText value={value}/></details> : null)}
       {row.result ? <details className="activity-subdetails"><summary>Result · {row.result.length.toLocaleString()} characters</summary><ProgressiveText value={row.result}/></details> : null}
       {row.kind === 'question' && <div className="activity-question"><b>{row.question}</b>{row.options?.map((option, index) => <span key={`${row.id}-option-${index}`}>{option.label}{option.description ? ` · ${option.description}` : ''}</span>)}{row.answer && <p><strong>Answer:</strong> {row.answer}</p>}</div>}

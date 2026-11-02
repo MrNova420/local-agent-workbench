@@ -81,6 +81,19 @@ describe('durable live activity state', () => {
     expect(markup).toContain(progress.message);
     expect(mergeActivitySnapshot([], current)[0].progress?.filesScanned).toBe(256);
   });
+  it('keeps full scan progress inspectable when compact rows visually shorten it', () => {
+    const progress = { message: 'Searching files · 12,345 inspected · 98,765 bytes read · 432 matches on this page',
+      filesScanned: 12345, bytesRead: 98765, matches: 432, timestamp: 123 };
+    const markup = renderToStaticMarkup(createElement(ActivityFeed, { entries: [{
+      id: 'op-search', operationId: 'op-search', turnId: 'turn-1', sessionId: 'session-1',
+      kind: 'operation', name: 'search_files', status: 'completed', progress,
+    }], mode: 'compact', surface: 'sidebar' }));
+    expect(markup).toContain(`title="${progress.message}"`);
+    expect(markup).toContain('12,345 files inspected');
+    expect(markup).toContain('98,765 bytes read');
+    expect(markup).toContain('432 matches');
+    expect(markup).toContain(progress.message);
+  });
   it('progressively renders long activity histories without discarding older records', () => {
     const entries: ActivityRecord[] = Array.from({ length: 245 }, (_, index) => ({
       id: `activity-${index}`, sessionId: 'session-long', turnId: 'turn-long', kind: 'operation',
