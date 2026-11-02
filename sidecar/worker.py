@@ -1923,7 +1923,7 @@ class AgentService:
                 return
             read_only_access = turn.access == "plan"
             mcp_tools = [] if read_only_access else list(turn.mcp_tools)
-            if not read_only_access and self.mcp.servers and not self.mcp.discovered:
+            if not read_only_access and self.mcp.servers and self.mcp.needs_discovery:
                 mcp_tools = self.mcp.run(self.mcp.discover(), cancel_event=controller["cancel"])
                 self.mcp_tools = mcp_tools
                 failed = ", ".join(self.mcp.errors.values())

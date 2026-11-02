@@ -1,3 +1,4 @@
+import asyncio
 import io
 import json
 import threading
@@ -1508,6 +1509,56 @@ def test_tool_catalog_exposes_mcp_schema_capability_warning(service):
     assert "if" in row["description"]
     assert "does not support" in server["detail"]
     assert "1 discovered tool schema" in integration["detail"]
+
+
+def test_next_task_rediscovers_mcp_server_after_a_transient_call_failure(service, tmp_path, monkeypatch):
+    project = tmp_path / "mcp-reconnect-project"
+    project.mkdir()
+    service.mcp.servers = {"demo": {"command": "demo"}}
+    service.mcp.discovered = True
+    service.mcp.errors = {"demo": "ConnectionError: pipe failed"}
+    service.mcp.retryable_servers = {"demo"}
+    events = []
+    monkeypatch.setattr(service, "emit", events.append)
+    expected = [{"type": "function", "function": {"name": "mcp__demo__echo", "parameters": {"type": "object"}}}]
+    discovery_count = []
+
+    async def rediscover():
+        discovery_count.append(True)
+        service.mcp.errors.clear()
+        service.mcp.retryable_servers.clear()
+        return expected
+
+    monkeypatch.setattr(service.mcp, "discover", rediscover)
+    monkeypatch.setattr(service.mcp, "run", lambda awaitable, cancel_event=None: asyncio.run(awaitable))
+    captured = {}
+
+    class CapturingEngine:
+        def __init__(self, *args, **kwargs):
+            captured["mcp_tools"] = kwargs["mcp_tools"]
+            self.event = args[5]
+            self.runtime = object()
+
+        def run(self, prompt, messages):
+            self.event({"type": "complete", "workflowOutcome": "discussion"})
+            return messages
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(worker, "AgentEngine", CapturingEngine)
+    service.handle("run_start", {"options": {
+        "workspace": str(project), "prompt": "Check the project", "model": "model-a:latest",
+        "context": 4096, "maxTokens": 512, "temperature": 0.2,
+        "access": "edit", "approvalMode": "per-action",
+    }})
+    controller = service.active
+    assert controller is not None
+    controller["thread"].join(3)
+
+    assert not controller["thread"].is_alive()
+    assert discovery_count == [True]
+    assert captured["mcp_tools"] == expected
 
 
 def test_saved_operation_result_lookup_is_limited_to_captured_session_state():
