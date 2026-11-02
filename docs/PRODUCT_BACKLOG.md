@@ -148,6 +148,8 @@ Design the local-retention and export controls first. Record provider-exact coun
 
 ### B-010: Public beta repositories and installer releases — beta.3 draft-only after privacy scrub; updater acceptance pending
 
+- Build provenance is now enforced: CI/release workflows read the exact app engine pin; local packaging rejects a mismatched or dirty checkout. The pinned engine commit is reachable on public branch `workbench/app-pair-dcdf7fc` without moving engine `main`. Focused build-configuration tests pass (7). The local package and full release gates remain pending.
+
 The app and shared engine have independent public MIT-licensed Git repositories with separate histories. Public app release `v0.1.0-beta.2` remains available; beta.3 is draft-only after the privacy correction, with old public ZIP access returning HTTP 404. Beta.3's local source/package/worker checks passed; its new UI was not launched because the existing beta.2 window had an active task. The update service returned the beta.3 Setup URL for a beta.2 client, but installed update/restart/data recovery remains unverified. GitHub Actions failed before runner steps; local evidence is recorded in `ACCEPTANCE_LOG.md`. A user-reported long website task completed successfully in 2–3 hours. Production dependencies audit clean; 18 moderate development dependency findings remain for separate review.
 
 ### B-014: GitHub-release updater and first-run recovery

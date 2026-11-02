@@ -55,11 +55,16 @@ For a clean Windows machine, install the app first, then install Ollama only if 
 
 ## Build from source
 
-Requirements: Windows 10/11 x64, Node.js 24, Python 3.12, and the paired [`local-agent-workbench-core`](https://github.com/MrNova420/local-agent-workbench-core) repository checked out next to this repository as `local-9b-dev-app`.
+Requirements: Windows 10/11 x64, Node.js 24, Python 3.12, and the paired [`local-agent-workbench-core`](https://github.com/MrNova420/local-agent-workbench-core) repository checked out next to this repository as `local-9b-dev-app`. Builds require a clean engine checkout at the exact revision recorded in `core-revision.txt`; the build fails clearly if the engine branch or files differ.
 
 ```powershell
 npm ci
-$env:LOCAL_AGENT_CORE_PATH = "..\local-9b-dev-app"
+$engineRepo = "..\local-9b-dev-app"
+$pinnedEngine = "..\local-9b-dev-app-pinned"
+$revision = (Get-Content core-revision.txt -Raw).Trim()
+git -C $engineRepo fetch origin
+if (-not (Test-Path $pinnedEngine)) { git -C $engineRepo worktree add --detach $pinnedEngine $revision }
+$env:LOCAL_AGENT_CORE_PATH = $pinnedEngine
 npm run typecheck
 npm test
 npm run make

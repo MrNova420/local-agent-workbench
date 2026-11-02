@@ -5,7 +5,12 @@ if (-not $CorePath) {
     if ($env:LOCAL_AGENT_CORE_PATH) { $CorePath = $env:LOCAL_AGENT_CORE_PATH }
     else { $CorePath = Join-Path (Split-Path -Parent $AppRoot) 'local-9b-dev-app' }
 }
+if (-not [IO.Path]::IsPathRooted($CorePath)) { $CorePath = Join-Path $AppRoot $CorePath }
 $CorePath = (Resolve-Path -LiteralPath $CorePath).Path
+$VerifiedCorePath = & python (Join-Path $AppRoot 'scripts\verify_core_checkout.py') `
+    --app-root $AppRoot --core-path $CorePath
+if ($LASTEXITCODE -ne 0) { throw 'The agent engine checkout does not match the app source pin.' }
+$CorePath = $VerifiedCorePath.Trim()
 foreach ($RequiredCoreFile in @(
     'desktop_engine.py', 'permission_policy.py', 'task_checkpoint.py',
     'project_knowledge.py', 'project_walk.py', 'mcp_support.py',

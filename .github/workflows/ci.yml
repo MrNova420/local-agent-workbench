@@ -10,10 +10,17 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Read paired engine revision
+        id: engine-pin
+        shell: pwsh
+        run: |
+          $revision = (Get-Content core-revision.txt -Raw).Trim()
+          if ($revision -notmatch '^(?:[0-9a-f]{40}|[0-9a-f]{64})$') { throw 'core-revision.txt must contain a full Git object ID.' }
+          "revision=$revision" >> $env:GITHUB_OUTPUT
       - uses: actions/checkout@v4
         with:
           repository: MrNova420/local-agent-workbench-core
-          ref: 39ff5495256e12f5f7e43232f269e5ace8d1ff88
+          ref: ${{ steps.engine-pin.outputs.revision }}
           path: engine
       - uses: actions/setup-node@v4
         with:
