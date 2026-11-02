@@ -893,4 +893,6 @@ Engine commit `878ff68eba9720186945fb4ed2b728ee16ae3771` keeps an open plan's co
 
 Engine commit `dcdf7fc2c3b1ca61bfd44cb2449e4e77b7e69c59` changes budgeted plan compaction to retain the first open action in plan order rather than the last. The full saved plan remains unchanged and recoverable. The checkpoint suite passes: **25 passed**, including a regression that exposed the previous wrong-step behavior. App pin synchronized; full suites, package, and live long-run acceptance remain open.
 
+App commit `e399d86c71dcc64a5fc6bac58055dd5bc97a591d` records and pins that exact engine revision. This documentation synchronization does not add verification: packaged, visible, full-suite, and live-model acceptance remain pending.
+
 \r\n
