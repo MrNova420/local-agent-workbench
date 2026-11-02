@@ -33,6 +33,8 @@
 **Last reconciled:** 2026-11-02
 **Current public release:** `v0.1.0-beta.2`. `v0.1.0-beta.3` is draft-only after the Home privacy correction; its former public ZIP URL returns HTTP 404. Beta.3 must be rebuilt from scrubbed source and pass the existing acceptance/update gates before republishing.
 
+**Live-model test constraint:** use Flint only for future live-model acceptance. Resolve its exact installed ID when that final gate begins; do not substitute another model. Source development does not require starting or switching a model.
+
 This is the cross-repository execution order. It preserves the full approved product scope while separating core harness readiness from later parity and quality-of-life work. “Implemented in source” is not the same as tested, packaged, or accepted in a visible workflow.
 
 ## Current state

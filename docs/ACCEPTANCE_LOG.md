@@ -925,3 +925,8 @@ The remote `main` and published beta tags were force-updated to rewritten commit
 A source audit found both GitHub workflows checking out an old fixed engine SHA instead of the app's `core-revision.txt`, and the local PyInstaller spec contained developer-worktree absolute paths. The app now reads the same full engine pin for CI and release checkouts. The local sidecar build rejects missing, dirty, nested, or mismatched engine checkouts before packaging; its paths are derived from the app location or `LOCAL_AGENT_CORE_PATH`. README setup now creates a detached worktree at the selected pin without moving the engine's main branch.
 
 Focused `tests/test_build_config.py` passed **7 tests**; Python compilation, PowerShell parsing, and `git diff --check` passed. The complete app/engine suites and an actual packaged build remain queued. The Desktop engine checkout is currently at a different revision than this app's pin, so the new guard correctly prevents using it until the documented pinned worktree is selected. The pinned commit is now reachable from the public engine repository through branch `workbench/app-pair-dcdf7fc`; public engine `main` was not moved.
+
+
+### Live-model acceptance constraint
+
+Per the user’s latest instruction, the eventual live model workflow check must use Flint only. Resolve the exact installed tag at test time and preserve any model already active; do not substitute another model. No model was started or switched during this source-only development pass.
