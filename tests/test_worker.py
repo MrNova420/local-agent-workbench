@@ -421,6 +421,36 @@ def test_session_live_snapshot_returns_full_active_state_for_the_captured_worksp
     assert snapshot["runState"]["phase"] == "reasoning"
     assert snapshot["liveAssistant"]["thinking"] == "working through the next step"
 
+
+def test_first_non_plan_tool_timing_is_saved_once_and_included_in_live_snapshot(service, tmp_path, monkeypatch):
+    workspace = tmp_path / "first-operation-project"
+    workspace.mkdir()
+    session = service.sessions.create(str(workspace), "model-a:latest", 4096)
+    session["run_state"] = {"status": "running", "turn_id": "turn-first-operation", "started_at": 1000.0,
+                            "phase": "reasoning", "first_operation_seconds": None}
+    service.sessions.save(session)
+    controller = {"session": session, "source": workspace, "turn_id": "turn-first-operation",
+                  "checkpoint_lock": threading.RLock(), "last_checkpoint": time.monotonic() - 20,
+                  "last_journal_flush": time.monotonic(), "journal_pending": [], "activity_revision": 0,
+                  "text_revision": 0, "live_content": "", "live_thinking": ""}
+    service.active = controller
+    events = []
+    monkeypatch.setattr(service, "emit", events.append)
+    turn = SimpleNamespace(workspace=workspace)
+
+    service._publish_run_event(controller, turn, {"type": "tool_start", "operationId": "plan-op",
+                                 "toolCallId": "plan-call", "name": "update_plan", "startedAt": 1005.0})
+    assert session["run_state"].get("first_operation_seconds") is None
+    service._publish_run_event(controller, turn, {"type": "tool_start", "operationId": "read-op",
+                                 "toolCallId": "read-call", "name": "read_file", "startedAt": 1042.0})
+    service._publish_run_event(controller, turn, {"type": "tool_start", "operationId": "search-op",
+                                 "toolCallId": "search-call", "name": "search_files", "startedAt": 1090.0})
+
+    assert session["run_state"]["first_operation_seconds"] == 42.0
+    assert any(event.get("type") == "activity_event" and event.get("firstOperationSeconds") == 42.0 for event in events)
+    snapshot = service.handle("session_live_snapshot", {"sessionId": session["session_id"], "workspace": str(workspace)})
+    assert snapshot["runState"]["first_operation_seconds"] == 42.0
+
     other_workspace = tmp_path / "different-project"
     other_workspace.mkdir()
     mismatch = service.handle("session_live_snapshot", {

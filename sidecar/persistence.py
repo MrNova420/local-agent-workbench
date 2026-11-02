@@ -190,6 +190,14 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any], *,
                              "base_messages": copy.deepcopy(run.get("safe_messages", []))}
         run["completed_tool_results"] = {}
     elif kind == "tool_start":
+        if (str(event.get("name", "")) != "update_plan"
+                and run.get("first_operation_seconds") is None):
+            try:
+                operation_started = float(event.get("startedAt", event.get("timestamp", time.time())))
+                run_started = float(run.get("started_at", operation_started))
+                run["first_operation_seconds"] = max(0.0, operation_started - run_started)
+            except (TypeError, ValueError, OverflowError):
+                pass
         operation = {key: event.get(key) for key in ("operationId", "toolCallId", "name", "arguments", "startedAt")}
         operation["status"] = "running"
         active_operations = run.setdefault("active_operations", {})

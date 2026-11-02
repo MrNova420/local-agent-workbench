@@ -235,6 +235,15 @@ class AgentService:
                     run_state["completed_tool_results"] = {}
                 elif event.get("type") == "tool_start":
                     controller["current_operation_id"] = event.get("operationId")
+                    if (str(event.get("name", "")) != "update_plan"
+                            and run_state.get("first_operation_seconds") is None):
+                        try:
+                            operation_started = float(event.get("startedAt", time.time()))
+                            run_started = float(run_state.get("started_at", operation_started))
+                            run_state["first_operation_seconds"] = max(0.0, operation_started - run_started)
+                            enriched["firstOperationSeconds"] = run_state["first_operation_seconds"]
+                        except (TypeError, ValueError, OverflowError):
+                            pass
                     operation = {key: event.get(key) for key in ("operationId", "toolCallId", "name", "arguments", "startedAt")}
                     operation["status"] = "running"
                     active_operations = run_state.setdefault("active_operations", {})
@@ -1047,7 +1056,7 @@ class AgentService:
                     "activityRevision": activity_revision,
                     "textRevision": text_revision,
                     "runState": {key: copy.deepcopy(run_state.get(key)) for key in (
-                        "status", "started_at", "phase", "request_first_token_seconds",
+                        "status", "started_at", "phase", "request_first_token_seconds", "first_operation_seconds",
                         "estimated_input_tokens", "partial_content", "partial_thinking",
                         "active_operation", "active_operations", "uncertain_operation",
                     )},

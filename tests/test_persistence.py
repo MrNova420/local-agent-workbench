@@ -7,6 +7,19 @@ from sidecar.persistence import MirroredSessionStore, WorkspaceHistory, _replay_
 
 
 class MirroredSessionStoreTests(unittest.TestCase):
+    def test_event_recovery_derives_first_non_plan_operation_timing(self):
+        state = {"session_id": "s-first-operation", "workspace": "C:/project",
+                 "run_state": {"turn_id": "turn-first-operation", "started_at": 100.0},
+                 "activity_events": []}
+        _replay_run_event(state, {"type": "tool_start", "turnId": "turn-first-operation",
+                                  "operationId": "plan-op", "name": "update_plan", "startedAt": 105.0})
+        self.assertNotIn("first_operation_seconds", state["run_state"])
+        _replay_run_event(state, {"type": "tool_start", "turnId": "turn-first-operation",
+                                  "operationId": "read-op", "name": "read_file", "startedAt": 112.5})
+        _replay_run_event(state, {"type": "tool_start", "turnId": "turn-first-operation",
+                                  "operationId": "search-op", "name": "search_files", "startedAt": 140.0})
+        self.assertEqual(state["run_state"]["first_operation_seconds"], 12.5)
+
     def test_recovery_retains_checkpoint_and_in_task_compaction_metadata(self):
         state = {"session_id": "s-context", "workspace": "C:/project",
                  "run_state": {"turn_id": "turn-context"}, "activity_events": []}
