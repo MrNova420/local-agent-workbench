@@ -836,3 +836,9 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - App commit `978832f` adds a compact request row in chat/activity showing request index and provider-reported total duration, generated-token count, and finish reason when available. `npx vitest run tests/activity.test.ts -t "summarizes each completed model request"` passed: 1 test, 18 skipped. No broad renderer suite, typecheck, build, app launch, or model request was run.
 - Engine commit `75ca8bddee5e10e9ac4c801d5a8b1a580996f13c` replaces the previous host continuation instruction with the latest one instead of permanently appending each continuation to the system prompt. A focused unit test and the existing plan-to-implementation integration test passed: 2 passed, 49 deselected. Full engine tests and packaged acceptance remain queued.
 - Updated `core-revision.txt` to pin the paired app to `75ca8bddee5e10e9ac4c801d5a8b1a580996f13c`. No inference settings changed and the canceled Flint task was not resumed.
+
+## 2026-11-02 Automatic no-action outcome and chat intent control
+
+- Engine commit `e487e8dd10e75de290a0042213e6a6b3a88d0f3c` records `no_action` when Automatic mode receives no structured plan declaration or project operation and no implementation obligation exists; explicit discussion and plan outcomes remain distinct. The focused pytest passed: 1 passed, 22 deselected.
+- The app pins that exact engine revision. The composer now exposes persisted Auto/Discuss/Plan/Implement intent choices; selection is disabled during a run, preserving captured run settings. A `no_action` result explains how to submit an explicit implementation follow-up without bypassing access or approval. `npm run typecheck` passed. `git diff --check` passed in both repositories.
+- No full suite, package/build, visible UI acceptance, model request, model load/unload, or runtime setting change occurred. The broader verification batch remains queued.
