@@ -380,3 +380,9 @@ The section above records an earlier checkpoint and its evidence; it is not the 
 - Regression coverage was added but deliberately not run. Full tests, typecheck, package, visible UI flow, and exact live-model acceptance remain queued until implementation is complete.
 
 - The paired Ollama runtime rejects EOF without `done: true` as a streaming failure, preventing incomplete reasoning from being fed back as a completed turn. Received partial content remains visible and checkpointed. Source regression added; execution is queued.
+
+## 2026-11-01 live Flint acceptance checkpoint
+
+- The current visible acceptance uses `hf.co/unsloth/flint-GGUF:UD-IQ2_XXS` at 65,536 context and 8,192 output with reasoning left at model default. The request manifest recorded 26,084 estimated input tokens. The runtime process was actively consuming CPU; later events confirmed reasoning, stream completion, and a started `update_plan` operation. No file writes were present at the latest checkpoint.
+- The packaged app's accessibility state lagged behind the durable session/event journal: it still showed the earlier wait state and empty plan. Root-cause and a corrected visible re-test are required before calling live activity/plan UX accepted. This observation does not establish a model stall.
+- Engine prompt-manifest checkpoint provenance fix is pinned in `core-revision.txt` at `48403b4822f5218c3e3a168b72854ee470029601`; its focused regression passes. Full engine/sidecar/renderer suites and the rebuilt packaged-app acceptance remain open.
