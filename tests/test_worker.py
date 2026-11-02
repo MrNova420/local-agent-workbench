@@ -116,6 +116,41 @@ def test_followup_prompt_queue_updates_only_its_active_session(service, tmp_path
         })
 
 
+def test_active_task_steering_is_saved_to_the_captured_session_and_waits_for_boundary(service, tmp_path, monkeypatch):
+    project = tmp_path / "active-steering-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    state["task_checkpoint"] = worker.begin_task(None, prompt="Build the feature", turn_id="turn-1",
+                                                workspace=str(project), settings={})
+    state["run_state"] = {"status": "running", "turn_id": "turn-1", "safe_messages": []}
+    controller = {"session": state, "checkpoint_lock": threading.RLock(), "accepting_steering": True,
+                  "pending_steers": [], "turn_id": "turn-1"}
+    service.active = controller
+    emitted = []
+    monkeypatch.setattr(service, "emit", emitted.append)
+
+    result = service.handle("session_steer", {
+        "sessionId": state["session_id"], "workspace": str(project), "prompt": "Preserve the current layout",
+    })
+
+    assert result["accepted"] is True
+    assert result["status"] == "pending"
+    assert len(controller["pending_steers"]) == 1
+    update = controller["pending_steers"][0]
+    saved = service.sessions.load(state["session_id"])
+    assert saved["task_checkpoint"]["current"]["user_updates"][-1]["id"] == update["id"]
+    assert saved["task_checkpoint"]["current"]["user_updates"][-1]["status"] == "pending"
+    assert saved["task_checkpoint"]["current"]["task_id"] == "turn-1"
+    assert emitted[-1]["type"] == "steering_update"
+    assert emitted[-1]["status"] == "accepted"
+    assert not state["run_state"]["safe_messages"]
+
+    with pytest.raises(ValueError, match="different project"):
+        service.handle("session_steer", {
+            "sessionId": state["session_id"], "workspace": str(tmp_path), "prompt": "Wrong project",
+        })
+
+
 def test_session_run_settings_persist_skill_controls_and_inference_values(service, tmp_path):
     workspace = tmp_path / "skill-settings-project"
     workspace.mkdir()

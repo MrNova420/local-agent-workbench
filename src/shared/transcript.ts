@@ -2,6 +2,9 @@ export type PersistedTranscriptRow = {
   role: string;
   content?: string;
   thinking?: unknown;
+  turn_id?: string;
+  steering_id?: string;
+  steering_status?: 'pending' | 'delivered' | 'undelivered';
 };
 
 export type PersistedTranscriptTurn = { turn_id?: string; transcript_saved?: boolean };
@@ -11,6 +14,8 @@ export type TranscriptMessage = {
   content: string;
   thinking?: string;
   turnId?: string;
+  steeringId?: string;
+  steeringStatus?: 'pending' | 'delivered' | 'undelivered';
 };
 
 export function appendTranscriptSegment(previous: string, chunk: string, separatedByTool: boolean): string {
@@ -25,12 +30,17 @@ export function restoreTranscriptMessages(rows: PersistedTranscriptRow[], turns:
   const restored: TranscriptMessage[] = [];
   for (const row of rows) {
     if ((row.role !== 'user' && row.role !== 'assistant') || typeof row.content !== 'string' || row.content.length === 0) continue;
-    const turnId = row.role === 'user' ? savedTurns[userTurnIndex++]?.turn_id : undefined;
+    const explicitTurnId = typeof row.turn_id === 'string' ? row.turn_id : undefined;
+    const turnId = row.role === 'user' ? explicitTurnId || savedTurns[userTurnIndex++]?.turn_id : undefined;
+    const steeringId = typeof row.steering_id === 'string' ? row.steering_id : undefined;
+    const steeringStatus = row.steering_status === 'pending' || row.steering_status === 'undelivered' ? row.steering_status : steeringId ? 'delivered' : undefined;
     restored.push({
       role: row.role,
       content: row.content,
       thinking: typeof row.thinking === 'string' ? row.thinking : undefined,
       turnId,
+      ...(steeringId ? { steeringId } : {}),
+      ...(steeringStatus ? { steeringStatus } : {}),
     });
   }
   return restored;

@@ -4,6 +4,7 @@ All notable user-facing changes are recorded here. This project is in unstable b
 
 ## Unreleased
 
+- Enter during an active task now steers the same chat/task at a safe model/tool boundary; Queue next remains a separate action. Delivery status is saved in the task checkpoint. Regression and packaged-app acceptance remain queued.
 - Kept the current task plan and acceptance criteria visible during same-task continuation until the sidecar publishes its authoritative update.
 - Made active-run follow-up drafting and durable queueing clearer, prevented duplicate submissions, and preserved Shift+Enter and IME composition behavior.
 - Added a live run-status line that distinguishes model reasoning from a structured tool call and reports elapsed time and the labeled prompt-size estimate.

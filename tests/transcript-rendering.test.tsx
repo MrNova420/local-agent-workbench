@@ -62,4 +62,17 @@ describe('resumed transcript rendering', () => {
 
     expect(restored.filter((message) => message.role === 'user').map((message) => message.turnId)).toEqual(['turn-one', 'turn-two']);
   });
+
+  it('restores same-turn steering without consuming a separate turn identity', () => {
+    const restored = restoreTranscriptMessages([
+      { role: 'user', content: 'Build the page' },
+      { role: 'assistant', content: 'I am working.' },
+      { role: 'user', content: 'Keep the current layout', turn_id: 'turn-one', steering_id: 'steer-one', steering_status: 'delivered' },
+      { role: 'assistant', content: 'Done.' },
+      { role: 'user', content: 'A separate follow-up' },
+    ], [{ turn_id: 'turn-one' }, { turn_id: 'turn-two' }]);
+
+    expect(restored.filter((message) => message.role === 'user').map((message) => message.turnId)).toEqual(['turn-one', 'turn-one', 'turn-two']);
+    expect(restored[2]).toMatchObject({ steeringId: 'steer-one', steeringStatus: 'delivered' });
+  });
 });

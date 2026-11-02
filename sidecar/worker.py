@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from desktop_engine import AgentEngine, OllamaRuntime, RequestCancelled, ToolRegistry, Workspace  # noqa: E402
 from permission_policy import validate_permission_rules  # noqa: E402
-from task_checkpoint import begin_task, finish_task, initial_task_plan, record_plan  # noqa: E402
+from task_checkpoint import begin_task, finish_task, initial_task_plan, record_plan, record_user_update  # noqa: E402
 from disposable_workspace import (  # noqa: E402
     apply_reviewed_changes,
     capture_manifest,
@@ -713,6 +713,53 @@ class AgentService:
                    "queuedPrompts": copy.deepcopy(result["queuedPrompts"])})
         return result
 
+    def _accept_session_steer(self, message: dict[str, Any]) -> dict[str, Any]:
+        prompt = message.get("prompt")
+        clean = prompt.strip() if isinstance(prompt, str) else ""
+        if not clean:
+            raise ValueError("Steering input must contain text.")
+        session_id = str(message.get("sessionId", ""))
+        selected_workspace = validate_selected_workspace(True, str(message.get("workspace", "")))
+        with self.active_lock:
+            controller = self.active
+        if controller is None:
+            raise RuntimeError("There is no active task to steer. Use the composer to start a task or queue a follow-up.")
+        state = controller["session"]
+        if state.get("session_id") != session_id:
+            raise RuntimeError("Steering is limited to the task's captured chat session.")
+        if Path(state["workspace"]).resolve(strict=True) != selected_workspace:
+            raise ValueError("The active task belongs to a different project.")
+        update = {"id": uuid.uuid4().hex, "turn_id": controller["turn_id"], "instruction": clean,
+                  "status": "pending", "created_at": time.time()}
+        with controller["checkpoint_lock"]:
+            if not controller.get("accepting_steering", False):
+                raise RuntimeError("This task is finishing; use the saved message as a follow-up after it completes.")
+            checkpoint = state.setdefault("task_checkpoint", {})
+            record_user_update(checkpoint, update)
+            pending = controller.setdefault("pending_steers", [])
+            pending.append(copy.deepcopy(update))
+            run_state = state.get("run_state")
+            if isinstance(run_state, dict):
+                run_state["pending_steers"] = copy.deepcopy(pending)
+            saved = self.sessions.save(state)
+            if not (saved.get("app_saved") or saved.get("project_saved")):
+                pending.pop()
+                current = checkpoint.get("current") if isinstance(checkpoint, dict) else None
+                if isinstance(current, dict):
+                    current["user_updates"] = [row for row in current.get("user_updates", [])
+                                                if not isinstance(row, dict) or row.get("id") != update["id"]]
+                if isinstance(run_state, dict):
+                    run_state["pending_steers"] = copy.deepcopy(pending)
+                raise RuntimeError(saved.get("error") or "Steering input could not be saved to either session mirror.")
+            self.emit({"type": "steering_update", "status": "accepted", "updateId": update["id"],
+                       "prompt": clean, "sessionId": session_id, "turnId": controller["turn_id"],
+                       "workspace": str(selected_workspace), "createdAt": update["created_at"]})
+            if not (saved.get("app_saved") and saved.get("project_saved")):
+                self.emit({"type": "session_mirror_error", "sessionId": session_id,
+                           "appSaved": saved.get("app_saved", False), "projectSaved": saved.get("project_saved", False),
+                           "error": saved.get("error") or "Steering was saved to only one session mirror."})
+        return {"accepted": True, "updateId": update["id"], "status": "pending", "persistence": saved}
+
     def _load_session_state(self, session_id: str) -> dict[str, Any]:
         loaded = self.sessions.load(session_id)
         if loaded.get("conflict"):
@@ -1020,6 +1067,8 @@ class AgentService:
             if not isinstance(prompt, str):
                 raise ValueError("Follow-up prompt must be text.")
             return self._edit_session_queue(message, add_prompt=prompt)
+        if command == "session_steer":
+            return self._accept_session_steer(message)
         if command == "session_queue_remove":
             return self._edit_session_queue(message, remove_id=str(message.get("queuedPromptId", "")))
         if command == "session_new":
@@ -1621,7 +1670,8 @@ class AgentService:
                      "turn_id": turn_id, "checkpoint_lock": threading.RLock(), "last_checkpoint": time.monotonic(),
                      "last_journal_flush": time.monotonic(), "journal_pending": [], "current_operation_id": None,
                      "activity_revision": 0, "text_revision": 0, "live_content": "", "live_thinking": "",
-                     "stop_after_operation": False, "accepting_queue": True, "approval_mode": approval_mode}
+                     "stop_after_operation": False, "accepting_queue": True, "accepting_steering": True,
+                     "pending_steers": [], "approval_mode": approval_mode}
         with self.active_lock:
             self.active = controller
         saved = self.sessions.save(controller["session"])
@@ -1741,6 +1791,50 @@ class AgentService:
 
             current_run_state = state.get("run_state")
             run_permission_rules = copy.deepcopy(current_run_state.get("settings", {}).get("permission_rules", [])) if isinstance(current_run_state, dict) else []
+
+            def apply_steering(messages: list[dict[str, Any]], finishing: bool = False) -> bool:
+                with controller["checkpoint_lock"]:
+                    pending = copy.deepcopy(controller.get("pending_steers", []))
+                    if not pending:
+                        if finishing:
+                            controller["accepting_steering"] = False
+                        return False
+                    checkpoint = state.setdefault("task_checkpoint", {})
+                    prior_messages = len(messages)
+                    for update in pending:
+                        messages.append({"role": "user", "content": update["instruction"],
+                                         "turn_id": controller["turn_id"], "steering_id": update["id"]})
+                        record_user_update(checkpoint, {**update, "status": "delivered", "delivered_at": time.time()})
+                    run_state = state.get("run_state")
+                    if isinstance(run_state, dict):
+                        run_state["safe_messages"] = copy.deepcopy(messages)
+                        run_state["pending_steers"] = []
+                    saved = self.sessions.save(state)
+                    if not (saved.get("app_saved") or saved.get("project_saved")):
+                        del messages[prior_messages:]
+                        for update in pending:
+                            record_user_update(checkpoint, {**update, "status": "pending"})
+                        if isinstance(run_state, dict):
+                            run_state["safe_messages"] = copy.deepcopy(messages)
+                            run_state["pending_steers"] = copy.deepcopy(pending)
+                        raise RuntimeError(saved.get("error") or "Steering could not be durably saved before delivery.")
+                    controller["pending_steers"] = [
+                        item for item in controller.get("pending_steers", [])
+                        if item.get("id") not in {row.get("id") for row in pending}
+                    ]
+                    if isinstance(run_state, dict):
+                        run_state["pending_steers"] = copy.deepcopy(controller["pending_steers"])
+                    for update in pending:
+                        self.emit({"type": "steering_update", "status": "delivered", "updateId": update["id"],
+                                   "prompt": update["instruction"], "sessionId": state["session_id"],
+                                   "turnId": controller["turn_id"], "workspace": str(turn.workspace),
+                                   "deliveredAt": time.time()})
+                    if not (saved.get("app_saved") and saved.get("project_saved")):
+                        self.emit({"type": "session_mirror_error", "sessionId": state["session_id"],
+                                   "appSaved": saved.get("app_saved", False), "projectSaved": saved.get("project_saved", False),
+                                   "error": saved.get("error") or "Steering delivery was saved to only one session mirror."})
+                    return True
+
             engine = AgentEngine(
                 turn.workspace, turn.model, turn.context, turn.access, turn.approval_mode,
                 relay, approve, runtime_options=turn.runtime_options,
@@ -1755,6 +1849,7 @@ class AgentService:
                 permission_rules=run_permission_rules,
                 ask_user=lambda args: self._ask_user(controller, turn, args),
                 session_approval_granted=bool(state.get("session_approval_granted", False)),
+                steering_handler=apply_steering,
             )
             chosen_runtime = self.providers.runtime_for(turn.model, engine.runtime, state.get("provider_id"))
             engine.runtime = RequestScopedOllama(chosen_runtime)
@@ -1850,6 +1945,24 @@ class AgentService:
                 pass
             self.emit(error_event)
         finally:
+            with controller["checkpoint_lock"]:
+                controller["accepting_steering"] = False
+                undelivered = copy.deepcopy(controller.get("pending_steers", []))
+                if undelivered:
+                    for update in undelivered:
+                        record_user_update(state.setdefault("task_checkpoint", {}),
+                                           {**update, "status": "undelivered", "run_finished_at": time.time()})
+                        self.emit({"type": "steering_update", "status": "undelivered", "updateId": update["id"],
+                                   "prompt": update["instruction"], "sessionId": state["session_id"],
+                                   "turnId": controller["turn_id"], "workspace": state["workspace"]})
+                    run_state = state.get("run_state")
+                    if isinstance(run_state, dict):
+                        run_state["pending_steers"] = copy.deepcopy(undelivered)
+                    saved = self.sessions.save(state)
+                    if not (saved.get("app_saved") and saved.get("project_saved")):
+                        self.emit({"type": "session_mirror_error", "sessionId": state["session_id"],
+                                   "appSaved": saved.get("app_saved", False), "projectSaved": saved.get("project_saved", False),
+                                   "error": saved.get("error") or "Undelivered steering state could not be saved to both session mirrors."})
             with self.active_lock:
                 if self.active is controller:
                     self.active = None

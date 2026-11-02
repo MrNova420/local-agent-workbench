@@ -17,7 +17,7 @@ import { readVerificationEvidence, verificationEvidenceLabel, type VerificationE
 import { readPlanAcceptanceCriteria, restorePlanItems } from '../shared/plan-criteria';
 import { parsePermissionCommandPrefix } from '../shared/permission-rules';
 
-type ChatMessage = { role: 'user' | 'assistant'; content: string; turnId?: string; thinking?: string; streaming?: boolean; recoveredPartial?: boolean };
+type ChatMessage = { role: 'user' | 'assistant'; content: string; turnId?: string; thinking?: string; streaming?: boolean; recoveredPartial?: boolean; steeringId?: string; steeringStatus?: 'pending' | 'delivered' | 'undelivered' };
 type PlanItem = { title?: string; text?: string; status?: string; source?: 'workbench' | 'agent'; group?: string };
 type PermissionRule = { tool: string; decision: 'allow' | 'ask' | 'deny'; path_glob?: string; command_prefix?: string | string[] };
 type PermissionRuleDraft = { tool: string; decision: PermissionRule['decision']; scope: 'tool' | 'path' | 'command'; value: string };
@@ -51,6 +51,7 @@ type Session = {
   skills_enabled?: boolean;
   skill_sources?: SkillSource[];
   run_state?: Record<string, unknown> | null;
+  task_checkpoint?: { current?: { user_updates?: Array<{ id?: string; turn_id?: string; instruction?: string; status?: string }> } };
 };
 type TraceRow = { id: string; title: string; description?: string; kind: 'tool' | 'status' | 'plan' | 'error'; time: number };
 type Approval = { actionId: string; name: string; arguments: unknown; workspace: string; mode: ApprovalMode };
@@ -203,6 +204,7 @@ export default function App() {
   const [selectedChanges, setSelectedChanges] = useState<string[]>([]);
   const [prompt, setPrompt] = useState('');
   const [queueSubmitting, setQueueSubmitting] = useState(false);
+  const [steeringSubmitting, setSteeringSubmitting] = useState(false);
   const [installed, setInstalled] = useState(false);
   const [modelPreloading, setModelPreloading] = useState(false);
   const [connected, setConnected] = useState<'checking' | 'yes' | 'no'>('checking');
@@ -392,6 +394,12 @@ export default function App() {
       const fileRequestId = ++projectFileRequestId.current;
       setModel(loaded.model);
       const rows: ChatMessage[] = restoreTranscriptMessages(loaded.messages, loaded.turns);
+      for (const update of loaded.task_checkpoint?.current?.user_updates || []) {
+        if (!update.id || !update.instruction || !['pending', 'undelivered'].includes(String(update.status))) continue;
+        if (rows.some((row) => row.steeringId === update.id)) continue;
+        rows.push({ role: 'user', content: update.instruction, turnId: update.turn_id,
+          steeringId: update.id, steeringStatus: update.status === 'undelivered' ? 'undelivered' : 'pending' });
+      }
       setWorkspace(root);
       setFiles([]);
       localStorage.setItem('agent-workspace', root);
@@ -469,6 +477,12 @@ export default function App() {
     setWorkflowOutcome(typeof recovered.state.run_state?.workflow_outcome === 'string' ? recovered.state.run_state.workflow_outcome : null);
     setVerificationEvidence(readVerificationEvidence(recovered.state.run_state?.verification));
     const restored: ChatMessage[] = restoreTranscriptMessages(recovered.state.messages, recovered.state.turns);
+    for (const update of recovered.state.task_checkpoint?.current?.user_updates || []) {
+      if (!update.id || !update.instruction || !['pending', 'undelivered'].includes(String(update.status))) continue;
+      if (restored.some((row) => row.steeringId === update.id)) continue;
+      restored.push({ role: 'user', content: update.instruction, turnId: update.turn_id,
+        steeringId: update.id, steeringStatus: update.status === 'undelivered' ? 'undelivered' : 'pending' });
+    }
     const partial = typeof recovered.state.run_state?.partial_content === 'string' ? recovered.state.run_state.partial_content : '';
     const partialThinking = typeof recovered.state.run_state?.partial_thinking === 'string' ? recovered.state.run_state.partial_thinking : '';
     if (action !== 'restore' && recovered.prompt) restored.push({ role: 'user', content: recovered.prompt });
@@ -601,6 +615,19 @@ export default function App() {
           const next = current.slice();
           next[index] = { ...next[index], turnId: event.turnId as string };
           return next;
+        });
+      }
+      if (event.type === 'steering_update' && typeof event.updateId === 'string' && typeof event.prompt === 'string') {
+        const updateId = event.updateId;
+        const capturedSessionId = liveSnapshotCursorRef.current.sessionId;
+        if (typeof event.sessionId === 'string' && capturedSessionId && event.sessionId !== capturedSessionId) return;
+        const accepted = event.status === 'accepted';
+        const status = event.status === 'delivered' ? 'delivered' : event.status === 'undelivered' ? 'undelivered' : 'pending';
+        const turnId = typeof event.turnId === 'string' ? event.turnId : undefined;
+        setMessages((current) => {
+          const existing = current.findIndex((row) => row.steeringId === updateId);
+          if (existing >= 0) return current.map((row, index) => index === existing ? { ...row, steeringStatus: status } : row);
+          return accepted ? [...current, { role: 'user', content: event.prompt as string, turnId, steeringId: updateId, steeringStatus: status }] : current;
         });
       }
       if (event.type === 'session_queue_update' && Array.isArray(event.queuedPrompts)) {
@@ -1050,6 +1077,16 @@ export default function App() {
     finally { setQueueSubmitting(false); }
   }
 
+  async function steerActiveTask() {
+    if (!running || steeringSubmitting || !session || !workspace || !prompt.trim()) return;
+    setSteeringSubmitting(true);
+    try {
+      await request({ command: 'session_steer', sessionId: session.session_id, workspace, prompt: prompt.trim() });
+      setPrompt('');
+    } catch (error) { notify(`Could not steer the active task: ${(error as Error).message}`, 'bad'); }
+    finally { setSteeringSubmitting(false); }
+  }
+
   async function removeQueuedPrompt(queuedPromptId: string) {
     if (!session || !workspace) return;
     try {
@@ -1304,7 +1341,7 @@ export default function App() {
       {view === 'session' && <SessionRoom
         root={workspace} session={session} messages={messages} activities={activities} activityMode={activityMode} plan={plan} acceptanceCriteria={acceptanceCriteria} phase={phase} workflowOutcome={workflowOutcome} verificationEvidence={verificationEvidence} toolCallProgress={toolCallProgress}
         elapsed={elapsed} running={running} prompt={prompt} setPrompt={setPrompt} promptRef={promptRef}
-        queuedPrompts={session?.queued_prompts || []} onQueue={queueFollowupPrompt} onRemoveQueued={removeQueuedPrompt} queueSubmitting={queueSubmitting}
+        queuedPrompts={session?.queued_prompts || []} onQueue={queueFollowupPrompt} onSteer={steerActiveTask} onRemoveQueued={removeQueuedPrompt} queueSubmitting={queueSubmitting} steeringSubmitting={steeringSubmitting}
         options={options} setOptions={setOptions} files={availableFiles} telemetry={telemetry}
         runMetrics={runMetrics} onRun={() => void startRun()} onRunQueued={(item) => void startRun(item)} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
         onDiff={showDiff} onMcp={openMcp} onTools={openTools} onEnter={enter} endRef={endRef} model={model} modelInfo={modelInfo} appliedSettings={appliedSettings} onToggleHarnessProfile={() => void toggleHarnessProfile()}
@@ -1483,10 +1520,10 @@ function ProjectHome({ root, tab, setTab, files, sessions, sessionHistoryStatus,
   </section>;
 }
 
-function SessionRoom({ root, session, messages, activities, activityMode, plan, acceptanceCriteria, phase, workflowOutcome, verificationEvidence, toolCallProgress, elapsed, running, prompt, setPrompt, promptRef, queuedPrompts, onQueue, onRemoveQueued, queueSubmitting, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onRunQueued, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
+function SessionRoom({ root, session, messages, activities, activityMode, plan, acceptanceCriteria, phase, workflowOutcome, verificationEvidence, toolCallProgress, elapsed, running, prompt, setPrompt, promptRef, queuedPrompts, onQueue, onSteer, onRemoveQueued, queueSubmitting, steeringSubmitting, options, setOptions, files, telemetry, runMetrics, appliedSettings, onRun, onRunQueued, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
   root: string; session: Session | null; messages: ChatMessage[]; activities: ActivityRecord[]; activityMode: ActivityMode; plan: PlanItem[]; acceptanceCriteria: string[];
   phase: string; elapsed: number; running: boolean; prompt: string; setPrompt: (value: string) => void;
-  queuedPrompts: QueuedPrompt[]; onQueue: () => void; onRemoveQueued: (id: string) => void; queueSubmitting: boolean;
+  queuedPrompts: QueuedPrompt[]; onQueue: () => void; onSteer: () => void; onRemoveQueued: (id: string) => void; queueSubmitting: boolean; steeringSubmitting: boolean;
   toolCallProgress: ToolCallProgress[];
   workflowOutcome: string | null; verificationEvidence: VerificationEvidence | null; promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
   setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>; files: ProjectFile[];
@@ -1544,15 +1581,15 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
     {workflowOutcome && <div className={`workflow-outcome outcome-${workflowOutcome}`} role="status"><span>OBSERVED OUTCOME</span><strong>{workflowOutcomeLabel(workflowOutcome)}</strong><small>{workflowOutcome === 'command_completed' ? 'Command exit was successful; this does not alone prove tests passed.' : workflowOutcome === 'changed' ? 'Project changes exist without a recorded post-change inspection.' : workflowOutcome === 'inspected' ? 'A post-change inspection completed; semantic correctness is not implied.' : workflowOutcome === 'implementation_incomplete' ? 'The agent stopped after repeating a state with no new observable progress. Review the saved plan, checkpoint, and workspace before resuming.' : workflowOutcome === 'response_missing' ? 'The model returned no user-visible completion after a follow-up. Saved tool effects are preserved; review them before resuming.' : workflowOutcome === 'implementation_unverified' ? 'A command may have changed files, but the host did not observe a structured project change. Review the inspection evidence.' : 'Based on the host-observed tools and terminal status.'}</small>{verificationEvidenceLabel(verificationEvidence) && <small className="verification-evidence">{verificationEvidenceLabel(verificationEvidence)}</small>}</div>}
     <div className="session-main-grid">
       <section className="transcript-plane" aria-label="Conversation transcript">
-        {!messages.length ? <div className="transcript-empty"><div className="empty-symbol"><Icon name="spark"/></div><span className="eyebrow-line">NEW WORK UNIT / {shortPath(root).toUpperCase()}</span><h2>What should we<br/>work through?</h2><p>The model sees selected, relevant project files as needed. You control any action that can change the workspace.</p><div className="starter-prompts"><button onClick={() => setPrompt('Inspect this project and explain its architecture and how to run it.')}>Map the project <Icon name="arrow"/></button><button onClick={() => setPrompt('Review this project for the highest-priority bug and propose a fix.')}>Find a bug <Icon name="arrow"/></button><button onClick={() => setPrompt('Add a focused feature to this project and verify it with the existing tests.')}>Build a feature <Icon name="arrow"/></button></div></div> : <div className="message-list" ref={transcriptRef} onScroll={updateTranscriptFollow}>{messages.map((message, index) => <Fragment key={`${message.turnId || 'legacy'}-${index}-${message.role}`}><article className={`message-card message-${message.role}`}>
-          <div className="message-meta"><span className={`speaker-mark ${message.role}`}>{message.role === 'user' ? 'YOU' : <Icon name="spark"/>}</span><strong>{message.role === 'user' ? 'Task brief' : 'Local agent'}</strong><span>{message.recoveredPartial ? 'PARTIAL · INTERRUPTED' : message.role === 'user' ? 'INPUT' : message.streaming ? 'LIVE OUTPUT' : 'RESPONSE'}</span>{message.streaming && <i className="stream-pulse"/>}</div>
-          <div className="message-content"><Markdown content={message.content}/></div>
+        {!messages.length ? <div className="transcript-empty"><div className="empty-symbol"><Icon name="spark"/></div><span className="eyebrow-line">NEW WORK UNIT / {shortPath(root).toUpperCase()}</span><h2>What should we<br/>work through?</h2><p>The model sees selected, relevant project files as needed. You control any action that can change the workspace.</p><div className="starter-prompts"><button onClick={() => setPrompt('Inspect this project and explain its architecture and how to run it.')}>Map the project <Icon name="arrow"/></button><button onClick={() => setPrompt('Review this project for the highest-priority bug and propose a fix.')}>Find a bug <Icon name="arrow"/></button><button onClick={() => setPrompt('Add a focused feature to this project and verify it with the existing tests.')}>Build a feature <Icon name="arrow"/></button></div></div> : <div className="message-list" ref={transcriptRef} onScroll={updateTranscriptFollow}>{messages.map((message, index) => <Fragment key={`${message.turnId || 'legacy'}-${message.steeringId || index}-${message.role}`}><article className={`message-card message-${message.role}`}>
+          <div className="message-meta"><span className={`speaker-mark ${message.role}`}>{message.role === 'user' ? 'YOU' : <Icon name="spark"/>}</span><strong>{message.role === 'user' ? message.steeringId ? 'Task update' : 'Task brief' : 'Local agent'}</strong><span>{message.recoveredPartial ? 'PARTIAL · INTERRUPTED' : message.steeringStatus === 'pending' ? running ? 'WAITING FOR SAFE BOUNDARY' : 'NOT DELIVERED' : message.steeringStatus === 'delivered' ? 'DELIVERED TO ACTIVE TASK' : message.steeringStatus === 'undelivered' ? 'NOT APPLIED' : message.role === 'user' ? 'INPUT' : message.streaming ? 'LIVE OUTPUT' : 'RESPONSE'}</span>{message.streaming && <i className="stream-pulse"/>}</div>
+          <div className="message-content"><Markdown content={message.content}/></div>{(message.steeringStatus === 'pending' || message.steeringStatus === 'undelivered') && !running && <button className="activity-show-more" type="button" onClick={() => setPrompt(message.content)}>Use this update as a follow-up</button>}
           {message.thinking && <details className="reasoning-trace"><summary>Model reasoning · {message.thinking.length.toLocaleString()} characters</summary><div>{message.thinking}</div></details>}
-        </article>{message.role === 'user' && message.turnId && <ActivityFeed entries={activitiesByTurn.get(message.turnId) || []} mode={activityMode} surface="chat"/>}</Fragment>)}<div ref={endRef}/>{!followTranscript && <button className="jump-latest" onClick={() => { followTranscriptRef.current = true; setFollowTranscript(true); if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight; }} aria-label="Jump to latest message">↓ Latest</button>}</div>}
+        </article>{message.role === 'user' && message.turnId && messages.findIndex((row) => row.role === 'user' && row.turnId === message.turnId) === index && <ActivityFeed entries={activitiesByTurn.get(message.turnId) || []} mode={activityMode} surface="chat"/>}</Fragment>)}<div ref={endRef}/>{!followTranscript && <button className="jump-latest" onClick={() => { followTranscriptRef.current = true; setFollowTranscript(true); if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight; }} aria-label="Jump to latest message">↓ Latest</button>}</div>}
         <div className="composer-shell">
           <div className="composer-profile"><span className={`profile-chip access-${options.access}`}>{options.access.toUpperCase()}</span><span className="profile-chip approval-chip">{options.approvalMode === 'auto' ? 'AUTO APPROVE · THIS RUN' : options.approvalMode === 'per-session' ? session?.session_approval_granted ? 'SESSION APPROVED' : 'APPROVAL · THIS CHAT' : options.approvalMode === 'per-task' ? 'PER TASK' : 'PER ACTION'}</span><span className="profile-chip capability-chip" title="Capability reported by the selected local runtime; support metadata may be unknown">TOOLS {modelInfo?.tool_support === 'supported' ? 'SUPPORTED' : modelInfo?.tool_support === 'unsupported' ? 'UNSUPPORTED' : 'UNKNOWN'}</span><span className="profile-chip intent-chip" title="Task intent guides the agent; file access and approval remain separate">INTENT {options.taskIntent.toUpperCase()}</span><button className={`profile-toggle ${options.harnessProfile === 'small-model' ? 'is-active' : ''}`} type="button" aria-pressed={options.harnessProfile === 'small-model'} title="Changes agent workflow guidance only; model settings and token limits stay unchanged" onClick={onToggleHarnessProfile} disabled={running}>Small-model {options.harnessProfile === 'small-model' ? 'on' : 'off'}</button><span className="profile-hint">{fmt(options.context)} context · {fmt(options.maxTokens)} output</span><button onClick={onSettings}>Adjust run</button></div>
-          <textarea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={running ? (event) => { if (shouldQueuePromptOnEnter(event.key, event.shiftKey, event.nativeEvent.isComposing)) { event.preventDefault(); onQueue(); } } : onEnter} placeholder={running ? 'Draft a follow-up while the current task continues…' : 'Describe the work. Use Shift + Enter to add detail…'} rows={3} aria-label={running ? 'Follow-up prompt; the current run continues while you draft' : 'Task prompt'} aria-describedby={running ? 'follow-up-help' : undefined}/>
-          <div className="composer-bottom"><span id={running ? 'follow-up-help' : undefined}>{running ? <><kbd>ENTER</kbd> to save for later <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> queued prompts never interrupt this run</> : <><kbd>ENTER</kbd> to run <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> reasoning {options.reasoning == null ? 'model default' : String(options.reasoning)}</>}</span>{running ? <><Button kind="outline" onClick={onQueue} disabled={!prompt.trim() || queueSubmitting}><Icon name={queueSubmitting ? 'clock' : 'plus'}/>{queueSubmitting ? 'Saving…' : 'Queue follow-up'}</Button><Button kind="danger" onClick={onCancel}><Icon name="stop"/> Cancel request</Button></> : <Button kind="bright" onClick={onRun} disabled={!prompt.trim()}><Icon name="play"/> Run task</Button>}</div>
+          <textarea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={running ? (event) => { if (shouldQueuePromptOnEnter(event.key, event.shiftKey, event.nativeEvent.isComposing)) { event.preventDefault(); onSteer(); } } : onEnter} placeholder={running ? 'Steer the current task at its next safe boundary…' : 'Describe the work. Use Shift + Enter to add detail…'} rows={3} aria-label={running ? 'Steer the active task; delivery occurs at the next safe boundary' : 'Task prompt'} aria-describedby={running ? 'follow-up-help' : undefined}/>
+          <div className="composer-bottom"><span id={running ? 'follow-up-help' : undefined}>{running ? <><kbd>ENTER</kbd> to steer this task <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> queue next is separate</> : <><kbd>ENTER</kbd> to run <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> reasoning {options.reasoning == null ? 'model default' : String(options.reasoning)}</>}</span>{running ? <><Button kind="bright" onClick={onSteer} disabled={!prompt.trim() || steeringSubmitting}><Icon name={steeringSubmitting ? 'clock' : 'arrow'}/>{steeringSubmitting ? 'Sending' : 'Steer current task'}</Button><Button kind="outline" onClick={onQueue} disabled={!prompt.trim() || queueSubmitting}><Icon name={queueSubmitting ? 'clock' : 'plus'}/>{queueSubmitting ? 'Saving…' : 'Queue next'}</Button><Button kind="danger" onClick={onCancel}><Icon name="stop"/> Cancel request</Button></> : <Button kind="bright" onClick={onRun} disabled={!prompt.trim()}><Icon name="play"/> Run task</Button>}</div>
           {queuedPrompts.length > 0 && <section className="queued-prompt-list" aria-label="Saved follow-up prompts"><div className="queued-prompt-heading"><b>FOLLOW-UPS</b><span>{queuedPrompts.length} saved · starts only when selected</span></div>{queuedPrompts.map((item, index) => <article className="queued-prompt-row" key={item.id}><div><small>#{index + 1} · {new Date(item.queued_at * 1000).toLocaleString()}</small><p>{item.prompt}</p></div><div className="queued-prompt-actions"><Button kind="bright" disabled={running} onClick={() => onRunQueued(item)}><Icon name="play"/> Start next</Button><Button kind="quiet" onClick={() => onRemoveQueued(item.id)}>Remove</Button></div></article>)}</section>}
         </div>
       </section>
