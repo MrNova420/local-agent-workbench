@@ -6,6 +6,10 @@ export function shouldQueuePromptOnEnter(key: string, shiftKey: boolean, isCompo
   return key === 'Enter' && !shiftKey && !isComposing;
 }
 
+export function shouldApplySessionEvent(eventSessionId: unknown, activeSessionId: string): boolean {
+  return typeof eventSessionId !== 'string' || eventSessionId.length === 0 || eventSessionId === activeSessionId;
+}
+
 export function applyToolCallProgress(current: ToolCallProgress[], event: WorkerEvent): ToolCallProgress[] {
   if (event.type !== 'tool_call_progress') return current;
   const requestIndex = Number(event.request_index ?? 0);

@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
 import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, QueuedPrompt, RunOptions, SessionLiveSnapshot, SessionSummary, SkillSource, TaskIntent, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
-import { applyToolCallProgress, nextRunPhase, restoredRunPhase, runStepProgress, shouldQueuePromptOnEnter, type ToolCallProgress } from '../shared/run-state';
+import { applyToolCallProgress, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter, type ToolCallProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordInputEstimate, recordStreamedText, restoreRunMetrics, type RunMetrics } from '../shared/run-metrics';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, isReasoningBudgetValid, MAX_REASONING_BUDGET_TOKENS, normalizeReasoningChoice, readReasoningBudgetPreference, readRunTokenPreferences } from '../shared/model-controls';
 import { featuredInstalledModels } from '../shared/model-recommendations';
@@ -355,6 +355,7 @@ export default function App() {
       setSessions([]);
       setProjectSessionHistoryStatus('loading');
       const sessionRequestId = ++projectSessionRequestId.current;
+      liveSnapshotCursorRef.current.sessionId = '';
       setSession(null);
       setMessages([]);
       setWorkflowOutcome(null);
@@ -391,6 +392,7 @@ export default function App() {
       }
       const loaded = response as Session;
       setSessionConflict(null);
+      liveSnapshotCursorRef.current.sessionId = loaded.session_id;
       setPhase(restoredRunPhase(loaded.run_state?.status));
       setFirstOperationSeconds(typeof loaded.run_state?.first_operation_seconds === 'number' ? loaded.run_state.first_operation_seconds : null);
       setFirstFileWriteSeconds(typeof loaded.run_state?.first_file_write_seconds === 'number' ? loaded.run_state.first_file_write_seconds : null);
@@ -481,6 +483,7 @@ export default function App() {
     if (!recoverySession) return;
     const recovered = await request<{ state: Session; prompt?: string; action: string }>({ command: 'session_recover', sessionId: recoverySession.session_id, action });
     setRecoverySession(null);
+    liveSnapshotCursorRef.current.sessionId = recovered.state.session_id;
     setSession(recovered.state);
     setWorkflowOutcome(typeof recovered.state.run_state?.workflow_outcome === 'string' ? recovered.state.run_state.workflow_outcome : null);
     setVerificationEvidence(readVerificationEvidence(recovered.state.run_state?.verification));
@@ -530,6 +533,7 @@ export default function App() {
     void refreshHome().catch((error) => notify(`Could not load saved workspace history: ${(error as Error).message}`, 'warn'));
     void request({ command: 'ping' }).then(() => setInstalled(true)).catch(() => setInstalled(false));
     const unsubscribe = window.agent.onEvent((event) => {
+      if (!shouldApplySessionEvent(event.sessionId, liveSnapshotCursorRef.current.sessionId)) return;
       if ((event.type === 'text' || event.type === 'thinking') && typeof event.textRevision === 'number') {
         const cursor = liveSnapshotCursorRef.current;
         if ((typeof event.sessionId === 'string' && cursor.sessionId && event.sessionId !== cursor.sessionId)
@@ -1044,6 +1048,7 @@ export default function App() {
       const tokenPreferences = readRunTokenPreferences(localStorage.getItem('agent-run-token-preferences'));
       const chosenMode = selectedActivityMode || activityDefault;
       const created = await request<Session>({ command: 'session_new', workspace, model: selectedModel, context: tokenPreferences.context, activityMode: chosenMode });
+      liveSnapshotCursorRef.current = { sessionId: created.session_id, activityRevision: 0, textRevision: 0, busy: false };
       setSession(created); setMessages([]); setTrace([]); setPlan([]); setAcceptanceCriteria([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setElapsed(0); setPhase('Ready'); setView('session');
       setActivities([]); setActivityMode(chosenMode); sessionStorage.setItem('agent-activity-mode', chosenMode);
       setRunMetrics(emptyRunMetrics());

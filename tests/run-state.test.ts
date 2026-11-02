@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { applyToolCallProgress, nextRunPhase, restoredRunPhase, runStepProgress, shouldQueuePromptOnEnter } from '../src/shared/run-state';
+import { applyToolCallProgress, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter } from '../src/shared/run-state';
+
+describe('session event isolation', () => {
+  it('rejects events from a previous or unselected session while allowing unscoped service events', () => {
+    expect(shouldApplySessionEvent('session-a', 'session-a')).toBe(true);
+    expect(shouldApplySessionEvent('session-a', 'session-b')).toBe(false);
+    expect(shouldApplySessionEvent('session-a', '')).toBe(false);
+    expect(shouldApplySessionEvent(undefined, 'session-b')).toBe(true);
+  });
+});
 
 describe('streamed tool-call preview', () => {
   it('updates one request preview by index without exposing partial arguments', () => {
