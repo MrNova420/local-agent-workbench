@@ -1,5 +1,10 @@
 # Visible Acceptance Log
 
+## 2026-11-02 remote recursive reference discovery correction
+
+- Follow-up audit found Draft 2019-09 `$recursiveRef` was blocked by the empty local-only resolver at execution, but discovery did not identify a remote URI as unsupported. Discovery now reports it alongside `$ref` and `$dynamicRef`, so the model sees the restriction before use.
+- Engine `60a286f23b1dfed9e2e910220d268f03ddadf246`; focused schema/MCP checks: **20 passed**; Python compilation and `git diff --check` passed. App pin updated to this exact engine commit. No live model or user runtime settings were changed.
+
 ## 2026-11-02 dialect-aware MCP schema validation
 
 - Engine `a30e883` replaces the hand-written schema subset with dialect-aware JSON Schema validation for Draft 3/4/6/7/2019-09/2020-12. Remote references and unknown required vocabularies fail closed; `format` stays annotation-only. `jsonschema>=4.26,<5` is now a sidecar dependency as well as an engine dependency.
