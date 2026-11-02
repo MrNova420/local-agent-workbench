@@ -1,12 +1,42 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 
-from sidecar.persistence import MirroredSessionStore, WorkspaceHistory, _replay_run_event
+from sidecar.persistence import MirroredSessionStore, WorkspaceHistory, _atomic_json, _replay_run_event
 
 
 class MirroredSessionStoreTests(unittest.TestCase):
+    def test_atomic_json_retries_a_windows_sharing_lock_longer_than_old_burst(self):
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root, "session.json")
+            path.write_text('{"old":true}', encoding="utf-8")
+            real_replace = os.replace
+            attempts = []
+            clock = [0.0]
+
+            def replace_after_extended_lock(source, destination):
+                attempts.append(1)
+                if len(attempts) <= 9:
+                    raise PermissionError("temporary Windows sharing violation")
+                return real_replace(source, destination)
+
+            def advance_clock(delay):
+                clock[0] += delay
+
+            with patch("sidecar.persistence.os.replace", side_effect=replace_after_extended_lock), \
+                 patch("sidecar.persistence.time.monotonic", side_effect=lambda: clock[0]), \
+                 patch("sidecar.persistence.time.sleep", side_effect=advance_clock):
+                _atomic_json(path, {"new": "saved"})
+
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {"new": "saved"})
+            self.assertEqual(len(attempts), 10)
+            self.assertGreaterEqual(clock[0], 2.0)
+            self.assertEqual(list(Path(root).glob("*.tmp")), [])
+
     def test_event_recovery_derives_first_non_plan_operation_timing(self):
         state = {"session_id": "s-first-operation", "workspace": "C:/project",
                  "run_state": {"turn_id": "turn-first-operation", "started_at": 100.0},

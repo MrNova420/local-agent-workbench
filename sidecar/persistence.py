@@ -32,18 +32,25 @@ def _atomic_json(path: Path, value: Any) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         delay = 0.05
-        for attempt in range(7):
+        deadline = time.monotonic() + 30.0
+        while True:
             try:
                 os.replace(temporary, path)
                 break
             except PermissionError:
-                if attempt == 6:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
                     raise
-                time.sleep(delay)
-                delay = min(delay * 2, 0.4)
+                time.sleep(min(delay, remaining))
+                delay = min(delay * 2, 0.75)
     finally:
         if temporary is not None:
-            temporary.unlink(missing_ok=True)
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                # Preserve the original replace/write failure. An orphaned
+                # uniquely named temp is safer than masking the save error.
+                pass
 
 
 def _append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
