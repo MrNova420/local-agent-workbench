@@ -1300,13 +1300,33 @@ class AgentService:
             state["persistence"] = self.sessions.save(state)
             return state
         if command == "session_resume":
+            session_id = str(message["sessionId"])
+            with self.active_lock:
+                active_controller = (self.active if self.active and
+                                     self.active["session"].get("session_id") == session_id else None)
+            if active_controller is not None:
+                captured_source = Path(active_controller["source"]).resolve(strict=True)
+                requested_workspace = validate_selected_workspace(
+                    True, str(message.get("workspace") or captured_source))
+                if requested_workspace != captured_source:
+                    raise ValueError("The active task belongs to a different project.")
+                # Reattach to the process-owned state. Disk may lag while a
+                # checkpoint is being mirrored; treating its running marker as
+                # crash recovery here would overwrite live work and mislabel a
+                # task that is still executing.
+                with active_controller["checkpoint_lock"]:
+                    state = copy.deepcopy(active_controller["session"])
+                state["workspace"] = str(captured_source)
+                state["activity_events"] = state.get("activity_events", []) if isinstance(state.get("activity_events", []), list) else []
+                state["plan"] = state.get("plan", []) if isinstance(state.get("plan", []), list) else []
+                return state
             selected_workspace = str(message.get("workspace", "")) or None
             if not selected_workspace:
-                initial = self.sessions.load(str(message["sessionId"]))
+                initial = self.sessions.load(session_id)
                 if initial.get("conflict"):
                     return initial
                 selected_workspace = str(initial["workspace"])
-            loaded = self.sessions.load(str(message["sessionId"]), selected_workspace, message.get("source"))
+            loaded = self.sessions.load(session_id, selected_workspace, message.get("source"))
             if loaded.get("conflict"):
                 return loaded
             state = loaded["state"]

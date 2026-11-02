@@ -1318,6 +1318,33 @@ def test_session_recovery_returns_every_uncertain_concurrent_operation(service, 
     assert '"operationId": "op-b"' in recovered["prompt"]
 
 
+def test_resuming_the_live_session_reattaches_without_marking_it_interrupted(service, tmp_path):
+    project = tmp_path / "resume-current-live-session"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 8192)
+    state["run_state"] = {"status": "running", "turn_id": "turn-live", "partial_content": "saved baseline"}
+    service.sessions.save(state)
+    state["messages"].append({"role": "assistant", "content": "new live output"})
+    state["run_state"]["partial_content"] = "new live output"
+    controller = {"session": state, "source": project.resolve(), "working": project.resolve(),
+                  "turn_id": "turn-live", "checkpoint_lock": threading.RLock(), "cancel": threading.Event()}
+    service.active = controller
+
+    resumed = service.handle("session_resume", {"sessionId": state["session_id"], "workspace": str(project)})
+
+    assert resumed["run_state"]["status"] == "running"
+    assert resumed["run_state"]["partial_content"] == "new live output"
+    assert resumed["messages"][-1]["content"] == "new live output"
+    assert service.active is controller
+    assert not controller["cancel"].is_set()
+    stored = service.sessions.load(state["session_id"], str(project))["state"]
+    assert stored["run_state"]["status"] == "running"
+    other_project = tmp_path / "resume-wrong-project"
+    other_project.mkdir()
+    with pytest.raises(ValueError, match="different project"):
+        service.handle("session_resume", {"sessionId": state["session_id"], "workspace": str(other_project)})
+
+
 def test_crash_while_waiting_for_user_marks_question_interrupted_without_fake_uncertain_side_effect(service, tmp_path):
     project = tmp_path / "question-recovery-project"
     project.mkdir()
