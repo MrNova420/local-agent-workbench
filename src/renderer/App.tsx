@@ -216,6 +216,7 @@ export default function App() {
   const [startedAt, setStartedAt] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [firstOperationSeconds, setFirstOperationSeconds] = useState<number | null>(null);
+  const [firstFileWriteSeconds, setFirstFileWriteSeconds] = useState<number | null>(null);
   const [runMetrics, setRunMetrics] = useState<RunMetrics>(emptyRunMetrics);
   const [snapshot, setSnapshot] = useState<Record<string, unknown>>({});
   const [appliedSettings, setAppliedSettings] = useState<AppliedSettings | null>(null);
@@ -389,6 +390,7 @@ export default function App() {
       setSessionConflict(null);
       setPhase(restoredRunPhase(loaded.run_state?.status));
       setFirstOperationSeconds(typeof loaded.run_state?.first_operation_seconds === 'number' ? loaded.run_state.first_operation_seconds : null);
+      setFirstFileWriteSeconds(typeof loaded.run_state?.first_file_write_seconds === 'number' ? loaded.run_state.first_file_write_seconds : null);
       setWorkflowOutcome(typeof loaded.run_state?.workflow_outcome === 'string' ? loaded.run_state.workflow_outcome : loaded.run_state?.status === 'interrupted' ? 'interrupted' : null);
       setVerificationEvidence(readVerificationEvidence(loaded.run_state?.verification));
       const root = loaded.workspace;
@@ -688,6 +690,9 @@ export default function App() {
       if (event.type === 'activity_event' && typeof event.firstOperationSeconds === 'number') {
         setFirstOperationSeconds((current) => current ?? event.firstOperationSeconds as number);
       }
+      if (event.type === 'activity_event' && typeof event.firstFileWriteSeconds === 'number') {
+        setFirstFileWriteSeconds((current) => current ?? event.firstFileWriteSeconds as number);
+      }
       if (event.type === 'request_dispatched' || event.type === 'request_headers'
           || event.type === 'request_complete' || event.type === 'request_error') {
         setPhase((current) => nextRunPhase(current, event));
@@ -927,6 +932,9 @@ export default function App() {
         if (typeof state.first_operation_seconds === 'number' && Number.isFinite(state.first_operation_seconds)) {
           setFirstOperationSeconds((current) => current ?? state.first_operation_seconds as number);
         }
+        if (typeof state.first_file_write_seconds === 'number' && Number.isFinite(state.first_file_write_seconds)) {
+          setFirstFileWriteSeconds((current) => current ?? state.first_file_write_seconds as number);
+        }
         const phases: Record<string, string> = {
           waiting_response_headers: 'Waiting for response headers', waiting: 'Waiting for first token',
           reasoning: 'Reasoning', generating: 'Generating', processing_response: 'Processing response',
@@ -1025,6 +1033,7 @@ export default function App() {
       setActivities([]); setActivityMode(chosenMode); sessionStorage.setItem('agent-activity-mode', chosenMode);
       setRunMetrics(emptyRunMetrics());
       setFirstOperationSeconds(null);
+      setFirstFileWriteSeconds(null);
       setOptions((old) => ({ ...old, context: created.context, maxTokens: tokenPreferences.maxTokens, approvalMode: 'per-action', reasoning: null }));
       void refreshWorkspace(workspace);
       window.setTimeout(() => promptRef.current?.focus(), 60);
@@ -1062,7 +1071,7 @@ export default function App() {
     // the captured task's authoritative plan. Same-task continuations do not emit
     // a new seed plan.
     setTrace([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setRunning(true); setPhase('Connecting to Ollama');
-    setStartedAt(Date.now()); setElapsed(0); setRunMetrics(emptyRunMetrics()); setFirstOperationSeconds(null);
+    setStartedAt(Date.now()); setElapsed(0); setRunMetrics(emptyRunMetrics()); setFirstOperationSeconds(null); setFirstFileWriteSeconds(null);
     try { await request({ command: 'run_start', options: run }); }
     catch (error) {
       setRunning(false); setPhase('Run failed'); setWorkflowOutcome('failed'); setPrompt(task);
@@ -1352,7 +1361,7 @@ export default function App() {
         elapsed={elapsed} running={running} prompt={prompt} setPrompt={setPrompt} promptRef={promptRef}
         queuedPrompts={session?.queued_prompts || []} onQueue={queueFollowupPrompt} onSteer={steerActiveTask} onRemoveQueued={removeQueuedPrompt} queueSubmitting={queueSubmitting} steeringSubmitting={steeringSubmitting}
         options={options} setOptions={setOptions} files={availableFiles} telemetry={telemetry}
-        runMetrics={runMetrics} firstOperationSeconds={firstOperationSeconds} onRun={() => void startRun()} onRunQueued={(item) => void startRun(item)} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
+        runMetrics={runMetrics} firstOperationSeconds={firstOperationSeconds} firstFileWriteSeconds={firstFileWriteSeconds} onRun={() => void startRun()} onRunQueued={(item) => void startRun(item)} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
         onDiff={showDiff} onMcp={openMcp} onTools={openTools} onEnter={enter} endRef={endRef} model={model} modelInfo={modelInfo} appliedSettings={appliedSettings} onToggleHarnessProfile={() => void toggleHarnessProfile()}
       />}
     </main>
@@ -1529,7 +1538,7 @@ function ProjectHome({ root, tab, setTab, files, sessions, sessionHistoryStatus,
   </section>;
 }
 
-function SessionRoom({ root, session, messages, activities, activityMode, plan, acceptanceCriteria, phase, workflowOutcome, verificationEvidence, toolCallProgress, elapsed, running, prompt, setPrompt, promptRef, queuedPrompts, onQueue, onSteer, onRemoveQueued, queueSubmitting, steeringSubmitting, options, setOptions, files, telemetry, runMetrics, firstOperationSeconds, appliedSettings, onRun, onRunQueued, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
+function SessionRoom({ root, session, messages, activities, activityMode, plan, acceptanceCriteria, phase, workflowOutcome, verificationEvidence, toolCallProgress, elapsed, running, prompt, setPrompt, promptRef, queuedPrompts, onQueue, onSteer, onRemoveQueued, queueSubmitting, steeringSubmitting, options, setOptions, files, telemetry, runMetrics, firstOperationSeconds, firstFileWriteSeconds, appliedSettings, onRun, onRunQueued, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
   root: string; session: Session | null; messages: ChatMessage[]; activities: ActivityRecord[]; activityMode: ActivityMode; plan: PlanItem[]; acceptanceCriteria: string[];
   phase: string; elapsed: number; running: boolean; prompt: string; setPrompt: (value: string) => void;
   queuedPrompts: QueuedPrompt[]; onQueue: () => void; onSteer: () => void; onRemoveQueued: (id: string) => void; queueSubmitting: boolean; steeringSubmitting: boolean;
@@ -1537,7 +1546,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
   workflowOutcome: string | null; verificationEvidence: VerificationEvidence | null; promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
   setOptions: React.Dispatch<React.SetStateAction<typeof initialOptions>>; files: ProjectFile[];
   telemetry: TelemetryView;
-  runMetrics: RunMetrics; firstOperationSeconds: number | null; appliedSettings: AppliedSettings | null;
+  runMetrics: RunMetrics; firstOperationSeconds: number | null; firstFileWriteSeconds: number | null; appliedSettings: AppliedSettings | null;
   onRun: () => void; onRunQueued: (prompt: QueuedPrompt) => void; onCancel: () => void; onSettings: () => void; onBack: () => void; onDiff: () => void; onMcp: () => void; onTools: () => void;
   onEnter: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void; endRef: React.RefObject<HTMLDivElement | null>; model: string; modelInfo: ModelInfo | null; onToggleHarnessProfile: () => void;
 }) {
@@ -1606,7 +1615,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
         <div className="run-sheet-heading"><div><span className="eyebrow-line">LIVE WORK SHEET</span><h2>Task signals</h2></div><Button kind="outline" className="sheet-inspect" onClick={onDiff}><Icon name="branch"/> Inspect changes</Button><span className={`run-lamp ${running ? 'active' : ''}`}/></div>
         <section className="sheet-panel" style={panelStyle('signals')} aria-label="Run signals and generation metrics">
           <div className="sheet-panel-heading"><span>MODEL &amp; GENERATION</span><SheetPanelControls panel="signals" layout={sheetLayout} onMove={movePanel} onResize={resizePanel}/></div>
-          <div className="signal-matrix"><div className={`signal-card signal-wide ${telemetry.contextMismatch ? 'signal-warning' : ''}`}><small>MODEL / CONTEXT</small><strong title={model}>{shortModel(model)}</strong><span>{telemetry.loadedContext ? `RUNTIME ${fmt(telemetry.loadedContext)} / ${fmt(options.context)} REQUESTED TOKENS` : `${fmt(options.context)} REQUESTED · NOT CURRENTLY LOADED`}</span></div><div className="signal-card"><small>REQUEST SENT</small><strong>{appliedSettings && appliedSettings.model === model ? `${fmt(appliedSettings.context)} / ${fmt(appliedSettings.maxOutput)}` : '—'}</strong><span>CONTEXT / OUTPUT TOKENS</span></div><div className="signal-card"><small>REASONING OVERRIDE</small><strong>{appliedSettings && appliedSettings.model === model ? appliedSettings.reasoning == null ? 'DEFAULT' : String(appliedSettings.reasoning).toUpperCase() : '—'}</strong><span>EXACT SELECTED VALUE</span></div><div className="signal-card"><small>ELAPSED</small><strong>{running ? secs(elapsed) : '—'}</strong><span>{running ? phase.toUpperCase() : 'NO ACTIVE RUN'}</span></div><div className="signal-card" title="Elapsed time from task start to the first structured tool call other than update_plan. This can be a read or search; it does not mean files were changed."><small>FIRST TOOL</small><strong>{firstOperationSeconds == null ? running ? 'WAITING' : '—' : tokenDelay(firstOperationSeconds * 1000)}</strong><span>FROM TASK START · NOT A FILE CHANGE</span></div><div className="signal-card"><small>FILES IN VIEW</small><strong>{files.length}</strong><span>INDEXED / IGNORE AWARE</span></div></div>
+          <div className="signal-matrix"><div className={`signal-card signal-wide ${telemetry.contextMismatch ? 'signal-warning' : ''}`}><small>MODEL / CONTEXT</small><strong title={model}>{shortModel(model)}</strong><span>{telemetry.loadedContext ? `RUNTIME ${fmt(telemetry.loadedContext)} / ${fmt(options.context)} REQUESTED TOKENS` : `${fmt(options.context)} REQUESTED · NOT CURRENTLY LOADED`}</span></div><div className="signal-card"><small>REQUEST SENT</small><strong>{appliedSettings && appliedSettings.model === model ? `${fmt(appliedSettings.context)} / ${fmt(appliedSettings.maxOutput)}` : '—'}</strong><span>CONTEXT / OUTPUT TOKENS</span></div><div className="signal-card"><small>REASONING OVERRIDE</small><strong>{appliedSettings && appliedSettings.model === model ? appliedSettings.reasoning == null ? 'DEFAULT' : String(appliedSettings.reasoning).toUpperCase() : '—'}</strong><span>EXACT SELECTED VALUE</span></div><div className="signal-card"><small>ELAPSED</small><strong>{running ? secs(elapsed) : '—'}</strong><span>{running ? phase.toUpperCase() : 'NO ACTIVE RUN'}</span></div><div className="signal-card" title="Elapsed time from task start to the first structured tool call other than update_plan. Reads and searches count; this does not mean files were changed."><small>FIRST TOOL</small><strong>{firstOperationSeconds == null ? running ? 'WAITING' : '—' : tokenDelay(firstOperationSeconds * 1000)}</strong><span>FROM TASK START</span></div><div className="signal-card" title="Elapsed time until the first successful structured write_file, append_file, edit_file, or apply_patch result. Commands are not counted because their file effects are not fully attributable."><small>FIRST FILE WRITE</small><strong>{firstFileWriteSeconds == null ? running ? 'NONE YET' : '—' : tokenDelay(firstFileWriteSeconds * 1000)}</strong><span>SUCCESSFUL STRUCTURED WRITE</span></div><div className="signal-card"><small>FILES IN VIEW</small><strong>{files.length}</strong><span>INDEXED / IGNORE AWARE</span></div></div>
           <div className="run-metrics" aria-label="Model generation and prompt-cache statistics"><div><small>FIRST TOKEN</small><strong>{tokenDelay(runMetrics.firstTokenMs)}</strong></div><div title={outputTokensAreEstimated(runMetrics) ? 'Live estimate from streamed text; replaced by the provider’s exact rate after generation.' : 'Exact rate reported by the provider.'}><small>OUTPUT / SEC{outputTokensAreEstimated(runMetrics) ? ' · LIVE' : ''}</small><strong>{liveOutputTokensPerSecond(runMetrics)?.toFixed(1).replace(/^/, outputTokensAreEstimated(runMetrics) ? '~' : '') ?? '—'}</strong></div><div title={outputTokensAreEstimated(runMetrics) ? 'Live estimate from streamed text; replaced by the provider’s exact token count after generation.' : 'Exact output token count reported by the provider.'}><small>OUTPUT TOKENS{outputTokensAreEstimated(runMetrics) ? ' · LIVE' : ''}</small><strong>{outputTokensAreEstimated(runMetrics) ? '~' : ''}{fmt(estimateOutputTokens(runMetrics))}</strong></div><div title={promptCacheComplete ? `Provider-reported prompt reuse: ${fmt(runMetrics.cachedPromptTokens)} of ${fmt(runMetrics.promptTokens)} prompt tokens.` : `Prompt-cache counters reported for ${runMetrics.cachedPromptReports} of ${runMetrics.usageResponses} responses; no missing values are treated as zero.`}><small>PROMPT REUSE{runMetrics.cachedPromptReports > 0 && !promptCacheComplete ? ' · PARTIAL' : ''}</small><strong>{promptCacheComplete && runMetrics.promptTokens ? `${Math.round(runMetrics.cachedPromptTokens / runMetrics.promptTokens * 100)}%` : runMetrics.cachedPromptReports ? `${runMetrics.cachedPromptReports}/${runMetrics.usageResponses} REPORTED` : 'UNKNOWN'}</strong></div></div>
           <div className="kv-cache-panel" aria-label="KV cache, prompt input, and reuse details">
             <div className="kv-cache-heading"><span>PROMPT REUSE &amp; KV TELEMETRY</span><small>{model.startsWith('gguf::') ? 'LLAMA.CPP' : 'OLLAMA'}</small></div>

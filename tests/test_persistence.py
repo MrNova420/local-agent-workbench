@@ -20,6 +20,22 @@ class MirroredSessionStoreTests(unittest.TestCase):
                                   "operationId": "search-op", "name": "search_files", "startedAt": 140.0})
         self.assertEqual(state["run_state"]["first_operation_seconds"], 12.5)
 
+    def test_event_recovery_records_first_successful_structured_file_write(self):
+        state = {"session_id": "s-first-write", "workspace": "C:/project",
+                 "run_state": {"turn_id": "turn-first-write", "started_at": 200.0},
+                 "activity_events": []}
+        _replay_run_event(state, {"type": "tool_done", "turnId": "turn-first-write",
+                                  "operationId": "failed-write", "name": "write_file",
+                                  "status": "failed", "completedAt": 205.0})
+        self.assertNotIn("first_file_write_seconds", state["run_state"])
+        _replay_run_event(state, {"type": "tool_done", "turnId": "turn-first-write",
+                                  "operationId": "write", "name": "write_file",
+                                  "status": "completed", "completedAt": 213.0})
+        _replay_run_event(state, {"type": "tool_done", "turnId": "turn-first-write",
+                                  "operationId": "later-edit", "name": "edit_file",
+                                  "status": "completed", "completedAt": 220.0})
+        self.assertEqual(state["run_state"]["first_file_write_seconds"], 13.0)
+
     def test_recovery_retains_checkpoint_and_in_task_compaction_metadata(self):
         state = {"session_id": "s-context", "workspace": "C:/project",
                  "run_state": {"turn_id": "turn-context"}, "activity_events": []}

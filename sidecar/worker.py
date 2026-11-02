@@ -258,6 +258,16 @@ class AgentService:
                         output[stream] = str(output.get(stream, "")) + str(event.get("text", ""))
                 elif event.get("type") == "tool_done":
                     operation_id = str(event.get("operationId", ""))
+                    if (str(event.get("name", "")) in {"write_file", "append_file", "edit_file", "apply_patch"}
+                            and str(event.get("status", "")) == "completed"
+                            and run_state.get("first_file_write_seconds") is None):
+                        try:
+                            write_completed = float(event.get("completedAt", time.time()))
+                            run_started = float(run_state.get("started_at", write_completed))
+                            run_state["first_file_write_seconds"] = max(0.0, write_completed - run_started)
+                            enriched["firstFileWriteSeconds"] = run_state["first_file_write_seconds"]
+                        except (TypeError, ValueError, OverflowError):
+                            pass
                     active_operations = run_state.setdefault("active_operations", {})
                     previous_operation = copy.deepcopy(active_operations.pop(operation_id, None))
                     current_active = run_state.get("active_operation")
@@ -1056,7 +1066,7 @@ class AgentService:
                     "activityRevision": activity_revision,
                     "textRevision": text_revision,
                     "runState": {key: copy.deepcopy(run_state.get(key)) for key in (
-                        "status", "started_at", "phase", "request_first_token_seconds", "first_operation_seconds",
+                        "status", "started_at", "phase", "request_first_token_seconds", "first_operation_seconds", "first_file_write_seconds",
                         "estimated_input_tokens", "partial_content", "partial_thinking",
                         "active_operation", "active_operations", "uncertain_operation",
                     )},

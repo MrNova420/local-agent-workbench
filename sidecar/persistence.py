@@ -233,6 +233,15 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any], *,
             output = row.setdefault("output", {})
             output[stream] = str(output.get(stream, "")) + str(event.get("text", ""))
     elif kind == "tool_done":
+        if (str(event.get("name", "")) in {"write_file", "append_file", "edit_file", "apply_patch"}
+                and str(event.get("status", "")) == "completed"
+                and run.get("first_file_write_seconds") is None):
+            try:
+                write_completed = float(event.get("completedAt", event.get("timestamp", time.time())))
+                run_started = float(run.get("started_at", write_completed))
+                run["first_file_write_seconds"] = max(0.0, write_completed - run_started)
+            except (TypeError, ValueError, OverflowError):
+                pass
         row = next((item for item in state.setdefault("activity_events", [])
                     if item.get("operationId") == event.get("operationId")), None)
         if row:

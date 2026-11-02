@@ -445,11 +445,20 @@ def test_first_non_plan_tool_timing_is_saved_once_and_included_in_live_snapshot(
                                  "toolCallId": "read-call", "name": "read_file", "startedAt": 1042.0})
     service._publish_run_event(controller, turn, {"type": "tool_start", "operationId": "search-op",
                                  "toolCallId": "search-call", "name": "search_files", "startedAt": 1090.0})
+    service._publish_run_event(controller, turn, {"type": "tool_start", "operationId": "write-op",
+                                 "toolCallId": "write-call", "name": "write_file", "startedAt": 1049.0})
+    service._publish_run_event(controller, turn, {"type": "tool_done", "operationId": "write-op",
+                                 "toolCallId": "write-call", "name": "write_file", "status": "completed",
+                                 "result": "Wrote src/app.tsx", "affectedFiles": ["src/app.tsx"],
+                                 "startedAt": 1049.0, "completedAt": 1054.0})
 
     assert session["run_state"]["first_operation_seconds"] == 42.0
+    assert session["run_state"]["first_file_write_seconds"] == 54.0
     assert any(event.get("type") == "activity_event" and event.get("firstOperationSeconds") == 42.0 for event in events)
+    assert any(event.get("type") == "activity_event" and event.get("firstFileWriteSeconds") == 54.0 for event in events)
     snapshot = service.handle("session_live_snapshot", {"sessionId": session["session_id"], "workspace": str(workspace)})
     assert snapshot["runState"]["first_operation_seconds"] == 42.0
+    assert snapshot["runState"]["first_file_write_seconds"] == 54.0
 
     other_workspace = tmp_path / "different-project"
     other_workspace.mkdir()
