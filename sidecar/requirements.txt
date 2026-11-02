@@ -1,3 +1,4 @@
 pathspec>=1.0,<2
+jsonschema>=4.26,<5
 mcp>=1.30,<2
 psutil>=6,<8

@@ -1,5 +1,11 @@
 # Visible Acceptance Log
 
+## 2026-11-02 dialect-aware MCP schema validation
+
+- Engine `a30e883` replaces the hand-written schema subset with dialect-aware JSON Schema validation for Draft 3/4/6/7/2019-09/2020-12. Remote references and unknown required vocabularies fail closed; `format` stays annotation-only. `jsonschema>=4.26,<5` is now a sidecar dependency as well as an engine dependency.
+- Focused engine schema and MCP discovery checks: **19 passed**; Python compilation and engine `git diff --check` passed. The MCP fixture was updated because `unevaluatedProperties` is now supported, and unknown extension keywords remain explicitly surfaced in discovery.
+- App source pin is synchronized to `a30e883`; `tests/test_build_config.py`: **8 passed** against the paired checkout, and `git diff --check` passed. Broad suites, PyInstaller/package smoke, visible app, and Flint live acceptance remain queued. No model was loaded or called; model/context/output/reasoning settings were untouched.
+
 ## 2026-11-02 Auto worksheet progress and planning-loop balance
 
 - Paired engine `10b818935d17179dd9e39bc877d0840df7e57c9f`; the app pin resolves to a clean matching checkout. Auto now emits one neutral, host-owned in-progress item before model inference, and completes it at the terminal boundary. It does not guess the request intent or change the reported workflow outcome. An agent `update_plan` still replaces the generic item and supports additions/revisions.
