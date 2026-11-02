@@ -257,3 +257,6 @@ Large tool outputs are now context-budgeted for inference while preserving the f
 
 - Core recovery follow-up: terminal failures now expose a same-chat, user-triggered continuation prefill from the saved checkpoint. It explicitly inspects completed and uncertain effects before continuing; focused tests (4) and renderer typecheck passed. Packaged resume/restore behavior remains queued.
 - Full-PC access follow-up: project file tools are root-confined; approved PowerShell/command processes run with host-user rights and are not contained. Add explicit external directory grants for built-in file tools and evaluate a real opt-in Windows containment backend. Do not silently widen project file access or call process approval a sandbox.
+
+- External file access is now scoped by concrete folder rules in the engine; UI includes an external-folder picker that defaults to Ask each action. Allow is a separate explicit persistent scope, Deny stays hard, and nested deny beats grants. External structured writes are blocked in Copy mode. Source-focused checks passed; packaged acceptance is pending.
+- Still open: meaningful real Windows containment for shell/MCP, packaged approval-modal verification, broader MCP/web/LSP/command capability parity, and full system/release acceptance. Shell approval and selected cwd are not a sandbox.
