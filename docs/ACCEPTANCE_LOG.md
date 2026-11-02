@@ -3,7 +3,7 @@
 ## 2026-11-02 MCP scheduler cleanup and paired source update
 
 - Engine `6c3a3f7a2a6ced364fe34aa0a25a8b169a269923` closes async MCP coroutines if event-loop startup or scheduling fails, preventing an unawaited coroutine leak; cleanup still attempts every client and transport when an exit raises.
-- Focused engine MCP checks: **9 passed**; app reconnect/adapter checks: **3 passed**; Python compile and engine diff check passed. App source pin and exact build pairing are being verified. Broad suites, packaging, visible workflow acceptance, and the final Flint run remain queued. No model was started and no inference settings changed.
+- Focused engine MCP checks: **9 passed**; app worker reconnect regressions: **2 passed**; sidecar MCP adapter plus build-pin configuration checks: **9 passed**. Exact app/engine SHA pairing, engine compile, and both repository diff checks passed. The Desktop source checkout was fast-forwarded to app commit `2b352f4`. The sidecar pytest run emitted one existing Starlette `python_multipart` deprecation warning. Broad suites, packaging, visible workflow acceptance, and the final Flint run remain queued. No model was started and no inference settings changed.
 
 ## 2026-11-02 progressive project file scan activity
 
