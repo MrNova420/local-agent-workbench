@@ -5,7 +5,7 @@ export function terminalWorkflowSummary(outcome: unknown): string | null {
     case 'response_truncated':
       return 'The provider repeatedly ended with the same partial response at the selected output-token limit. The setting was preserved; review the saved response and continue from the checkpoint.';
     case 'implementation_incomplete':
-      return 'The run ended without new observable project progress after a continuation request. Its plan and checkpoint are saved so you can review them and continue safely.';
+      return 'The run ended after the same response repeated without new observable project progress. Its plan and checkpoint are saved so you can review them and continue safely.';
     case 'blocked':
       return 'The run stopped because a project action was denied or the selected access policy is read-only. The Workbench preserved that boundary and did not bypass it; review the saved plan and choose an allowed next step.';
     case 'interrupted':

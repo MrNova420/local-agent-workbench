@@ -14,7 +14,8 @@ describe('terminal workflow summaries', () => {
   });
 
   it('explains an incomplete implementation using saved checkpoint state', () => {
-    expect(terminalWorkflowSummary('implementation_incomplete')).toContain('without new observable project progress');
+    expect(terminalWorkflowSummary('implementation_incomplete')).toContain('same response repeated');
+    expect(terminalWorkflowSummary('implementation_incomplete')).toContain('new observable project progress');
     expect(terminalWorkflowSummary('implementation_incomplete')).toContain('checkpoint are saved');
   });
 
