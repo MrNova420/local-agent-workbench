@@ -1089,3 +1089,7 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 ### 2026-11-02 live phase consistency during reattachment
 
 - Live snapshot polling now uses the same run-state mapper as session restore, so phases such as applying a steering update, continuing after a response, and finishing a turn do not go stale after the initial reattach. Added focused mapping assertions; `npx vitest run tests/run-state.test.ts`: **24 passed**; `npm run typecheck` passed. This is renderer source evidence; packaged live-reconnect remains pending.
+
+### 2026-11-02 Desktop source checkout and privacy check
+
+- The Desktop project checkout now tracks the current development branch on local branch `desktop/core-chat-activity`; it is synchronized with `origin/workbench/core-chat-activity` at `d1bd40e` and the pinned engine `48e6218730effd253d94deee0cd4bafff39d4280`. Review caught an uncommitted old UI change and historical screenshot containing private location text. They were excluded from the synchronized source; the public development branch was not modified by that Desktop delta. Searching all fetched refs for the location strings in the affected UI/screenshot paths returned **zero matching commits**. A fresh product screenshot is still needed for the README; the removed historical capture is not used.
