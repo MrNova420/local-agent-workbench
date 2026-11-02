@@ -899,4 +899,6 @@ Focused engine verification was then run against that pin: `tests/test_operation
 
 Focused renderer checks for resumed Markdown/code formatting, terminal recovery actions, and reasoning/token-budget controls also passed: `tests/transcript-rendering.test.tsx`, `tests/workflow-outcome.test.ts`, and `tests/model-controls.test.ts` — **20 tests**. Server/runtime enforcement and packaged session-reopen rendering remain unverified.
 
+Additional focused checks passed on the same paired source: engine `tests/test_llama_cpp_runtime.py`, `tests/test_operation_stream.py`, and `tests/test_task_checkpoint.py` — **75 passed**; sidecar settings/request-provenance checks — **2 passed** with `LOCAL_AGENT_CORE_PATH` set to the pinned engine; renderer `tests/activity.test.ts` and `tests/run-sheet-layout.test.ts` — **23 passed**. The focused checks are now 120 passing cases across engine, sidecar, and renderer paths; this is not the full suite or a packaged app acceptance.
+
 \r\n
