@@ -1,5 +1,9 @@
 # Product roadmap and release state
 
+## 2026-11-02 loaded-template reasoning discovery
+
+- Current app `e14a154` pins engine `88f158e48d85e5647f9431590b9c6a2b14e84786`. llama.cpp reasoning levels are read from the loaded model's chat-template capabilities; unloaded or unreported values remain unknown rather than using generic levels. The app refreshes the selected GGUF's model metadata after load. Focused runtime tests pass (13), full sidecar worker tests pass (66), reasoning/workflow renderer tests pass (15), and typecheck passes. Broad suites, package, visible app acceptance, and actual template/budget enforcement remain pending.
+
 ## 2026-11-02 model reasoning control update
 
 - Current app `core-revision.txt` pins engine `9f0af2756f08d46c3246d99ee76c6da10c1a043b`. Existing model-advertised reasoning controls remain exact and model-specific. Added a separate llama.cpp per-request thinking-token budget, default unlimited, persisted with sessions and reported as requested (not falsely claimed as enforced); Ollama receives no unsupported budget field. Output-token cap is unchanged. Focused tests pass: engine 90; app renderer 15, sidecar 2; TypeScript typecheck passes. Actual enforcement, packaged UI, complete suites, and long-run acceptance remain unverified.

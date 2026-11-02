@@ -4,6 +4,10 @@
 
 ## Current verification update (2026-11-02)
 
+- **Current paired source:** app `e14a154` pins engine `88f158e48d85e5647f9431590b9c6a2b14e84786`. GGUF reasoning choices are discovered from the loaded llama.cpp template; unreported capabilities remain unknown. The separate reasoning budget stays unlimited by default and does not change output tokens or impose a time limit. Focused engine runtime tests pass (13), full sidecar worker tests pass (66), renderer model/workflow tests pass (15), and TypeScript typecheck passes. Full test suites, package, visible controls, and real template/budget enforcement remain pending.
+
+## Current verification update (2026-11-02)
+
 - **Current paired source:** `core-revision.txt` now targets engine `9f0af2756f08d46c3246d99ee76c6da10c1a043b`. Added a separate per-request llama.cpp thinking-token budget, default unlimited, stored in session/run/checkpoint settings, shown in run signals, and sent without changing the selected output cap. Ollama's advertised `think` mode/levels remain the control for that provider; no pretend token cap is sent. Focused engine coverage passes (90 tests across runtime/operation/context/checkpoint modules); app focused tests pass (model/workflow controls 15, sidecar integration 2), and TypeScript typecheck passes. Runtime enforcement depends on the server build and model template, so the UI reports the value as requested rather than confirmed effective. Package, visible UI, exact-runtime budget enforcement, full suites, and live-model checks remain pending.
 
 - **Previous paired source:** `core-revision.txt` advanced from engine `b1981571c9a7680646cb1cef587fe4c384fae869` to add the reasoning budget summarized above. The engine loop correction gives repeated `update_plan`-only calls explicit outcomes across implementation, read-only, denied-action, and planning flows. Focused engine context, operation-stream, and checkpoint suites passed (79); focused renderer terminal-status tests passed (6), including same-checkpoint continuation for blocked outcomes.
