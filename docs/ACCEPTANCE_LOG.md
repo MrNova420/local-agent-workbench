@@ -808,3 +808,8 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 - Added provider finish-reason capture for Ollama and llama.cpp, storage through sidecar journal/snapshot recovery, and an Activity Trace display. This will show provider-reported reasons such as `length` where available, helping diagnose when generated reasoning uses the selected output budget. Token settings remain unchanged. Engine/sidecar/renderer regression cases are authored but unrun.
 - The cancelled Flint acceptance preserved its 23,477-character partial reasoning message but had no tool calls, final answer, approval request, or project write. Because the user cancelled while taking a break, it is recorded as interrupted rather than a completed-quality verdict. Current UI acceptance still must be rerun with the new engine pin after the user resumes model work and queued tests pass.
 - The app source pin, CI checkout, and Windows release workflow now all point to engine commit `3d52c35c52ff7071e70d9b4ebb86211c12b7f415`; this source pair has not yet passed the queued app/engine regression suites or a rebuilt visible acceptance.
+
+## 2026-11-01 explicit next-action handoff
+
+- The engine continuation now supplies the saved next open plan item to the model and asks it to execute that step with a suitable structured tool, avoiding generic “continue implementation” guidance. Shared prompt guidance also asks for the first useful operation after adequate scoping. It does not alter reasoning, context/output, approval, or runtime settings.
+- The app pin now targets engine `ff09ab97e9d0d4c8d3ebeb63d1dd1a299b2e90fd` so the next sidecar build includes this source. New mocked regressions are queued and have not been run. No package, app UI, or model request was started.

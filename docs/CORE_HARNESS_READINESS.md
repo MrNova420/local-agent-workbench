@@ -4,6 +4,8 @@
 
 ## Current verification update (2026-11-01)
 
+- Latest engine source pin: `ff09ab9` adds an exact saved-next-action handoff after a completed planning-only response and strengthens the shared prompt to start the next open step with structured tools. Its regression cases are queued and unrun; app/engine source verification, sidecar rebuild, and visible model acceptance are still required. No model request was resumed.
+
 - The current app source now pins engine `488a2b38495306c7594e55690ebd625bf7bcb6f6`, which keeps compaction's task checkpoint inside the single leading system message required by the selected Ornith Ollama chat template. The regression failed before the fix and the full engine suite passes: **251 passed**.
 - First visible acceptance attempt used the exact selected model in an empty disposable project with unchanged settings: 65,536 requested context, 8,192 output, model-default reasoning, Small-model guidance off. Ollama returned HTTP 500 before any model token or workspace change because compaction added a second system message. The Ollama server log confirmed the template error. This is now fixed in source; the currently open package still contains the previous engine and must be rebuilt before retrying.
 - The full packaged hello → project implementation → approvals → command/test → cancellation/save/resume acceptance remains in progress. No context/output/reasoning or runtime-placement setting was changed to make the request fit.
