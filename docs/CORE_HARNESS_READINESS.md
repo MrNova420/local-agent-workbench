@@ -4,7 +4,7 @@
 
 ## Current verification update (2026-11-02)
 
-- Latest engine source pin: `39ff5495256e12f5f7e43232f269e5ace8d1ff88` adds durable same-task steering at safe request boundaries. Automatic intent continues to advance an actionable plan to implementation; explicit Plan-only remains read-only. Regression tests are authored and queued, not run. App pin and CI/release engine checkouts now match this revision. No model request was resumed.
+- Latest engine source pin: `75ca8bddee5e10e9ac4c801d5a8b1a580996f13c` adds replacement of stale host continuation guidance instead of accumulating it in the system prompt; the app pin now references it. Focused continuation and plan-to-implementation tests passed (2); the full engine suite, app CI/build, and visible acceptance remain queued. No model request was resumed.
 
 - The earlier `488a2b38495306c7594e55690ebd625bf7bcb6f6` engine revision fixed compaction's second-system-message failure for the selected Ornith Ollama chat template; its regression failed before the fix and its full suite passed: **251 passed**. That result predates the current engine pin and does not verify the new steering changes.
 - First visible acceptance attempt used the exact selected model in an empty disposable project with unchanged settings: 65,536 requested context, 8,192 output, model-default reasoning, Small-model guidance off. Ollama returned HTTP 500 before any model token or workspace change because compaction added a second system message. The Ollama server log confirmed the template error. This is now fixed in source; the currently open package still contains the previous engine and must be rebuilt before retrying.
