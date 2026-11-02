@@ -2,7 +2,7 @@
 
 ## Current paired development checkpoint (2026-11-02)
 
-The active app worktree is `workbench/core-chat-activity` at `ec1cb93` and pins engine `6ef1b3f5fbd29c94fa19d263ec868208563aa4c1`. The paired source hardens transient Windows sharing-lock retries on project writes and app-wide/project-mirrored session snapshots and journal appends. Engine operation/session suites pass **54 tests** and operation-stream passes **41**; app persistence passes **25**, with paired worker (**4**), transcript-render (**6**), source-pin and typecheck checks. These are focused source checks. Full suites, fault injection, packaged installer, visible app workflow, long-run Flint acceptance, updater recovery and public release gates remain open. Historical entries below describe their named checkpoints and may cite superseded pins.
+The active app worktree `workbench/core-chat-activity` is paired to engine `6ef1b3f5fbd29c94fa19d263ec868208563aa4c1` in `core-revision.txt`. The paired source hardens transient Windows sharing-lock retries on project writes and app-wide/project-mirrored session snapshots and journal appends. Engine operation/session suites pass **54 tests** and operation-stream passes **41**; app persistence passes **25**, with paired worker (**4**), transcript-render (**6**), source-pin and typecheck checks. These are focused source checks. Full suites, fault injection, packaged installer, visible app workflow, long-run Flint acceptance, updater recovery and public release gates remain open. Historical entries below describe their named checkpoints and may cite superseded pins.
 
 ## 2026-11-02 source-startup integrity
 
