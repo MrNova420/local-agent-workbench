@@ -889,3 +889,4 @@ App commit `026265ce442667fccb5d84b7b482998016a85483` pins engine `ab2d682593097
 
 Engine commit `878ff68eba9720186945fb4ed2b728ee16ae3771` keeps an open plan's concrete next step in the compaction checkpoint after tool operations. The previous implementation replaced it with a generic review reminder, which could misdirect model continuation. Unplanned tasks still get a result-review fallback. Focused task-checkpoint suite: **25 passed**. App pin synchronized; complete engine/renderer suites, packaging, and long-run model acceptance remain pending.
 
+\r\n
