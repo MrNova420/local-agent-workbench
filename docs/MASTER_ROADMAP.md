@@ -2,7 +2,11 @@
 
 ## 2026-11-02 source-startup integrity
 
-- Current app source includes commit `b778410` and remains pinned to engine `dcdf7fc2c3b1ca61bfd44cb2449e4e77b7e69c59`. Unpackaged startup now rejects an engine checkout that does not exactly match that pin before engine modules are imported, and Electron reports the mismatch immediately. Focused build-config tests pass (8) and TypeScript typecheck passes. Full suites, package, visible startup, model workflow, and release readiness remain open.
+- App commit `b778410` added the source-mode guard: unbundled startup rejects an engine checkout that differs from the app pin before engine modules are imported, and Electron reports the mismatch immediately. The guard remains in current source, now pinned to engine `8551c4070fb3441f63fc4a42cb733cadb55d4303`. Focused build-config tests pass (8) and TypeScript typecheck passes. Full suites, package, visible startup, model workflow, and release readiness remain open.
+
+## 2026-11-02 output-limit continuation
+
+- The app now pairs with engine `8551c4070fb3441f63fc4a42cb733cadb55d4303`. A provider response that ends at its output-token limit is continued in the same task with the same settings and saved tool results. Repeating the same truncated response becomes an explicit recoverable `response_truncated` outcome, rather than a success or a silent hang. Engine operation-stream tests pass (39), workflow-outcome tests pass (7), app typecheck passes, and source-pin verification passes. Broad suites, package, visible flow, and actual Flint acceptance remain pending; no model was started and token/reasoning settings were unchanged.
 
 ## 2026-11-02 loaded-template reasoning discovery
 

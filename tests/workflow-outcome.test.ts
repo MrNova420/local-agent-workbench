@@ -7,6 +7,12 @@ describe('terminal workflow summaries', () => {
     expect(terminalWorkflowSummary('response_missing')).toContain('not replayed automatically');
   });
 
+  it('explains a response repeatedly truncated by the selected output limit', () => {
+    expect(terminalWorkflowSummary('response_truncated')).toContain('selected output-token limit');
+    expect(terminalWorkflowSummary('response_truncated')).toContain('saved');
+    expect(canContinueFromOutcome('response_truncated')).toBe(true);
+  });
+
   it('explains an incomplete implementation using saved checkpoint state', () => {
     expect(terminalWorkflowSummary('implementation_incomplete')).toContain('without new observable project progress');
     expect(terminalWorkflowSummary('implementation_incomplete')).toContain('checkpoint are saved');

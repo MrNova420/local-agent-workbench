@@ -519,7 +519,7 @@ class AgentService:
             elif kind == "error":
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
                             "workspace": str(turn.workspace), "kind": "error",
-                            "name": "Final response missing" if event.get("workflowOutcome") == "response_missing" else "Run failed",
+                            "name": "Final response missing" if event.get("workflowOutcome") == "response_missing" else "Response truncated" if event.get("workflowOutcome") == "response_truncated" else "Run failed",
                             "status": "failed",
                             "result": str(event.get("error", "The run failed.")), "timestamp": time.time()}
                 rows.append(activity)
