@@ -216,7 +216,8 @@ def test_provider_request_settings_update_the_matching_prompt_activity_and_strea
                         "http_reason": "OK", "header_wait_seconds": 0.75})
             self.event({"type": "generation_usage", "request_index": 1,
                         "usage": {"prompt_eval_count": 580, "prompt_eval_cached_count": 120, "eval_count": 45}})
-            self.event({"type": "request_complete", "request_index": 1, "provider_done": True})
+            self.event({"type": "request_complete", "request_index": 1, "provider_done": True,
+                        "provider_done_reason": "length"})
             self.event({"type": "generation_complete", "workflowOutcome": "discussion",
                         "verification": {"status": "not_verified", "steps": []}})
             return messages
@@ -247,6 +248,7 @@ def test_provider_request_settings_update_the_matching_prompt_activity_and_strea
     assert prompt["status"] == "response_stream_ended"
     assert prompt["providerRequest"]["http_status"] == 200
     assert prompt["providerRequest"]["header_wait_seconds"] == 0.75
+    assert prompt["providerRequest"]["provider_done_reason"] == "length"
     assert any(event.get("type") == "inference_settings" for event in events)
     prompt_activity = next(item for item in controller["session"]["activity_events"] if item.get("kind") == "prompt")
     assert prompt_activity["providerRequest"]["tool_names"] == ["read_file", "load_tools"]

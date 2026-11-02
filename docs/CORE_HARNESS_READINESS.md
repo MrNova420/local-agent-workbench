@@ -417,3 +417,7 @@ Ollama 0.40.13's runner log for the active `hf.co/unsloth/flint-GGUF:UD-IQ2_XXS`
 ### 2026-11-01 interrupted Flint acceptance and implementation pace
 
 The user intentionally cancelled the visible Flint request while taking a break and asked source work to continue in the background. The exact session records the cancelled request and preserves its partial reasoning; no website writes occurred. The source now adds an implementation-pacing preference to act after a sufficient initial plan and reuse the last authoritative checkpoint, while keeping scope, planning, tools, iterations, and runtime uncapped. Its regression and final source/package acceptance are still pending.
+
+### 2026-11-01 plan-to-action and output stop diagnostics
+
+The engine now returns authoritative plan-change state, next open item, and access/intent-aware structured-operation guidance after plan updates. The selected model retains full freedom to extend plans and work; no fixed pass or runtime limit was added. Ollama and llama.cpp completion reasons are also retained through session storage and shown in request activity. Regression cases are authored but remain unrun pending the requested final verification batch. The current Flint task was intentionally cancelled by the user before any project write and does not count as full visible acceptance.

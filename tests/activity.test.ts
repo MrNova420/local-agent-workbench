@@ -208,7 +208,7 @@ describe('durable live activity state', () => {
       promptManifest: { request_index: 1, configured_context: 65536, maximum_output_tokens: 8192, messages: [] },
       providerRequest: {
         provider: 'ollama', model: 'ornith:latest', request_api: '/api/chat', request_index: 1,
-        dispatch_status: 'response_stream_ended', provider_done: true,
+        dispatch_status: 'response_stream_ended', provider_done: true, provider_done_reason: 'length',
         requested_context: 65536, max_output_tokens: 8192, reasoning_override: 'high',
         reasoning_field_sent: false, keep_alive: '30m', request_options: { num_ctx: 65536, num_predict: 8192 }, additional_fields: {},
         estimated_input_tokens: 4096,
@@ -219,6 +219,8 @@ describe('durable live activity state', () => {
 
     expect(trace).toContain('Provider request settings and dispatch');
     expect(trace).toContain('Response stream ended');
+    expect(trace).toContain('Provider finish reason');
+    expect(trace).toContain('length');
     expect(trace).toContain('ollama');
     expect(trace).toContain('ornith:latest');
     expect(trace).toContain('Reasoning override');

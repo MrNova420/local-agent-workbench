@@ -441,7 +441,8 @@ class AgentService:
                     elif kind == "request_complete":
                         activity["status"] = "response_stream_ended"
                         provider_request.update(dispatch_status="response_stream_ended",
-                                                provider_done=event.get("provider_done"))
+                                                provider_done=event.get("provider_done"),
+                                                provider_done_reason=event.get("provider_done_reason"))
                     else:
                         activity["status"] = "cancelled_during_request" if event.get("cancelled") else "request_failed"
                         provider_request.update(dispatch_status=activity["status"],

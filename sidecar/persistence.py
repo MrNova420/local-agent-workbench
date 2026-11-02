@@ -151,7 +151,8 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any], *,
             elif kind == "request_complete":
                 prompt["status"] = "response_stream_ended"
                 provider_request.update(dispatch_status="response_stream_ended",
-                                        provider_done=event.get("provider_done"))
+                                        provider_done=event.get("provider_done"),
+                                        provider_done_reason=event.get("provider_done_reason"))
             else:
                 prompt["status"] = "cancelled_during_request" if event.get("cancelled") else "request_failed"
                 provider_request.update(dispatch_status=prompt["status"], failure_phase=event.get("phase"),

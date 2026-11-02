@@ -113,7 +113,7 @@ class MirroredSessionStoreTests(unittest.TestCase):
         _replay_run_event(state, {"type": "request_headers", "turnId": "turn-provider", "request_index": 2,
                                   "http_status": 200, "http_reason": "OK", "header_wait_seconds": 1.25})
         _replay_run_event(state, {"type": "request_complete", "turnId": "turn-provider", "request_index": 2,
-                                  "provider_done": True})
+                                  "provider_done": True, "provider_done_reason": "length"})
         _replay_run_event(state, {"type": "generation_usage", "turnId": "turn-provider",
                                   "request_index": 2, "usage": {"prompt_eval_count": 4000,
                                                                      "prompt_eval_cached_count": 3200,
@@ -134,6 +134,7 @@ class MirroredSessionStoreTests(unittest.TestCase):
         self.assertEqual(prompt["status"], "response_stream_ended")
         self.assertEqual(prompt["providerRequest"]["http_status"], 200)
         self.assertEqual(prompt["providerRequest"]["header_wait_seconds"], 1.25)
+        self.assertEqual(prompt["providerRequest"]["provider_done_reason"], "length")
 
     def test_new_task_plan_snapshot_clears_prior_acceptance_criteria_on_replay(self):
         state = {
