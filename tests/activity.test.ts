@@ -286,4 +286,19 @@ describe('durable live activity state', () => {
     expect(markup).toContain('0 earlier turns and 6 in-task exchange groups omitted');
     expect(markup).toContain('57,344 input budget');
   });
+
+  it('summarizes each completed model request in the collapsed activity row', () => {
+    const record: ActivityRecord = {
+      id: 'prompt-2', sessionId: 's-1', turnId: 't-1', kind: 'prompt', status: 'response_stream_ended',
+      promptManifest: { request_index: 2 },
+      providerRequest: { dispatch_status: 'response_stream_ended', provider_done_reason: 'tool_calls' },
+      providerUsage: { total_duration: 90_000_000_000, eval_count: 600 },
+    };
+    const markup = renderToStaticMarkup(createElement(ActivityFeed, { entries: [record], mode: 'compact', surface: 'sidebar' }));
+    const summary = markup.slice(markup.indexOf('<summary'), markup.indexOf('</summary>'));
+    expect(summary).toContain('Model request 2');
+    expect(summary).toContain('90.0 s');
+    expect(summary).toContain('600 output tokens');
+    expect(summary).toContain('tool calls returned');
+  });
 });

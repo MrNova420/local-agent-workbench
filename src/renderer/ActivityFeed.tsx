@@ -12,8 +12,27 @@ function ProgressiveText({ value }: { value: string }) {
   return <div className="activity-output-block"><pre>{shown}</pre>{remaining > 0 && <button className="activity-show-more" onClick={() => setVisible((count) => count + 16_000)}>Show next {Math.min(16_000, remaining).toLocaleString()} characters · {remaining.toLocaleString()} remaining</button>}</div>;
 }
 
+function promptRequestSummary(row: ActivityRecord): string[] {
+  const request = row.promptManifest?.request_index ?? row.providerRequest?.request_index;
+  const parts = [request == null ? 'Model request' : `Model request ${String(request)}`];
+  const duration = row.providerUsage?.total_duration;
+  if (typeof duration === 'number' && Number.isFinite(duration) && duration >= 0) {
+    parts.push(`${(duration / 1_000_000_000).toFixed(1)} s`);
+  }
+  const outputTokens = row.providerUsage?.eval_count;
+  if (typeof outputTokens === 'number' && Number.isFinite(outputTokens) && outputTokens >= 0) {
+    parts.push(`${outputTokens.toLocaleString()} output tokens`);
+  }
+  const finishReason = row.providerRequest?.provider_done_reason;
+  if (finishReason === 'tool_calls') parts.push('tool calls returned');
+  else if (finishReason === 'length') parts.push('output limit finish');
+  else if (finishReason != null && String(finishReason).trim()) parts.push(`finish: ${String(finishReason)}`);
+  return parts;
+}
+
 function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expanded: boolean; surface: 'chat' | 'sidebar' }) {
-  const title = row.name?.replaceAll('_', ' ') || (row.kind === 'plan' ? 'Plan updated' : row.kind === 'approval' ? 'Action approval' : row.kind === 'question' ? row.title || 'Question for you' : row.kind === 'context' ? 'Request context compacted' : row.kind === 'prompt' ? 'Model prompt sources' : 'Activity');
+  const promptSummary = row.kind === 'prompt' ? promptRequestSummary(row) : [];
+  const title = row.name?.replaceAll('_', ' ') || (row.kind === 'plan' ? 'Plan updated' : row.kind === 'approval' ? 'Action approval' : row.kind === 'question' ? row.title || 'Question for you' : row.kind === 'context' ? 'Request context compacted' : row.kind === 'prompt' ? promptSummary[0] : 'Activity');
   const chatTitle = row.kind === 'operation' ? title.replace(/\bfile\b/gi, '').trim() : title;
   const firstFile = row.affectedFiles?.[0];
   const extraFiles = Math.max(0, (row.affectedFiles?.length || 0) - 1);
@@ -25,6 +44,7 @@ function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expande
         <span className="activity-chat-title">{chatTitle}</span>
         {firstFile && <code className="activity-chat-file">{firstFile}{extraFiles > 0 ? ` +${extraFiles}` : ''}</code>}
       </> : <strong>{title}</strong>}
+      {row.kind === 'prompt' && promptSummary.length > 1 && <span className="activity-prompt-summary">{promptSummary.slice(1).join(' · ')}</span>}
       <span className="activity-status">{row.status.replaceAll('_', ' ')}</span>
       {row.status === 'uncertain' && <span className="activity-review-warning">inspect before retry</span>}
       {row.approvalStatus && <span className={`activity-approval activity-approval-${row.approvalStatus}`}>approval {row.approvalStatus.replaceAll('_', ' ')}</span>}
