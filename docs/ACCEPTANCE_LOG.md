@@ -903,4 +903,6 @@ Additional focused checks passed on the same paired source: engine `tests/test_l
 
 The reasoning-control design is now recorded in `CORE_HARNESS_READINESS.md`: preserve each model's advertised effort choices and default; keep llama.cpp's optional token budget unlimited unless the user selects a value and label it as requested, not guaranteed; do not invent an Ollama token-budget field. Improve action cadence through the existing multi-request tool cycle and safe-boundary same-task steering, without cutting off an active stream or adding arbitrary time/turn limits.
 
+Focused sidecar checks for cancel acknowledgment and durable tool-call progress passed (**2 passed**). Together, the targeted checks recorded in this section total **122 passed** across engine, sidecar, and renderer layers. The cancellation chooser's behavior in a running packaged window is still an acceptance gate, not established by these unit tests.
+
 \r\n
