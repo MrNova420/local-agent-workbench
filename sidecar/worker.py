@@ -1924,13 +1924,21 @@ class AgentService:
             read_only_access = turn.access == "plan"
             mcp_tools = [] if read_only_access else list(turn.mcp_tools)
             if not read_only_access and self.mcp.servers and self.mcp.needs_discovery:
-                mcp_tools = self.mcp.run(self.mcp.discover(), cancel_event=controller["cancel"])
-                self.mcp_tools = mcp_tools
-                failed = ", ".join(self.mcp.errors.values())
-                schema_warnings = len(self.mcp.schema_warnings)
-                if schema_warnings:
-                    self.emit({"type": "mcp_status", "text": f"MCP schema warning: {schema_warnings} tool schema(s) use unsupported validation features; review affected tool descriptions in Tool Catalog."})
-                self.emit({"type": "mcp_status", "text": f"{len(mcp_tools)} MCP tools ready" + (f" · {failed}" if failed else "")})
+                try:
+                    mcp_tools = self.mcp.run(self.mcp.discover(), cancel_event=controller["cancel"])
+                except Exception as exc:
+                    # Do not fail unrelated project work or expose stale
+                    # schemas after their client connections were cleared.
+                    mcp_tools = []
+                    self.mcp_tools = []
+                    self.emit({"type": "mcp_status", "text": f"MCP unavailable for this task: {type(exc).__name__}: {exc}"})
+                else:
+                    self.mcp_tools = mcp_tools
+                    failed = ", ".join(self.mcp.errors.values())
+                    schema_warnings = len(self.mcp.schema_warnings)
+                    if schema_warnings:
+                        self.emit({"type": "mcp_status", "text": f"MCP schema warning: {schema_warnings} tool schema(s) use unsupported validation features; review affected tool descriptions in Tool Catalog."})
+                    self.emit({"type": "mcp_status", "text": f"{len(mcp_tools)} MCP tools ready" + (f" · {failed}" if failed else "")})
 
             knowledge = ProjectKnowledge(turn.workspace)
 

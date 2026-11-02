@@ -1561,6 +1561,49 @@ def test_next_task_rediscovers_mcp_server_after_a_transient_call_failure(service
     assert captured["mcp_tools"] == expected
 
 
+def test_mcp_reconnect_failure_does_not_send_stale_tool_schemas_to_model(service, tmp_path, monkeypatch):
+    project = tmp_path / "mcp-reconnect-failure-project"
+    project.mkdir()
+    stale = [{"type": "function", "function": {"name": "mcp__demo__echo", "parameters": {"type": "object"}}}]
+    service.mcp.servers = {"demo": {"command": "demo"}}
+    service.mcp.discovered = True
+    service.mcp.errors = {"demo": "ConnectionError: pipe failed"}
+    service.mcp.retryable_servers = {"demo"}
+    service.mcp_tools = stale
+    def fail_reconnect(awaitable, **_kwargs):
+        awaitable.close()
+        raise RuntimeError("cleanup failed")
+
+    monkeypatch.setattr(service.mcp, "run", fail_reconnect)
+    captured = {}
+
+    class CapturingEngine:
+        def __init__(self, *args, **kwargs):
+            captured["mcp_tools"] = kwargs["mcp_tools"]
+            self.event = args[5]
+            self.runtime = object()
+
+        def run(self, prompt, messages):
+            self.event({"type": "complete", "workflowOutcome": "discussion"})
+            return messages
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(worker, "AgentEngine", CapturingEngine)
+    service.handle("run_start", {"options": {
+        "workspace": str(project), "prompt": "Check the project", "model": "model-a:latest",
+        "context": 4096, "maxTokens": 512, "temperature": 0.2,
+        "access": "edit", "approvalMode": "per-action",
+    }})
+    controller = service.active
+    assert controller is not None
+    controller["thread"].join(3)
+
+    assert not controller["thread"].is_alive()
+    assert captured["mcp_tools"] == []
+
+
 def test_saved_operation_result_lookup_is_limited_to_captured_session_state():
     captured = {"activity_events": [
         {"operationId": "op-current", "result": "saved output"},
