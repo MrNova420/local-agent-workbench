@@ -2,11 +2,15 @@
 
 ## 2026-11-02 source-startup integrity
 
-- App commit `b778410` added the source-mode guard: unbundled startup rejects an engine checkout that differs from the app pin before engine modules are imported, and Electron reports the mismatch immediately. The guard remains in current source, now pinned to engine `8551c4070fb3441f63fc4a42cb733cadb55d4303`. Focused build-config tests pass (8) and TypeScript typecheck passes. Full suites, package, visible startup, model workflow, and release readiness remain open.
+- App commit `b778410` added the source-mode guard: unbundled startup rejects an engine checkout that differs from the app pin before engine modules are imported, and Electron reports the mismatch immediately. The guard remains in current source, now pinned to engine `613bca01a4054c52548ab1071dbe9ee694c3177b`. Focused build-config tests pass (8) and TypeScript typecheck passes. Full suites, package, visible startup, model workflow, and release readiness remain open.
 
 ## 2026-11-02 output-limit continuation
 
-- The app now pairs with engine `8551c4070fb3441f63fc4a42cb733cadb55d4303`. A provider response that ends at its output-token limit is continued in the same task with the same settings and saved tool results. Repeating the same truncated response becomes an explicit recoverable `response_truncated` outcome, rather than a success or a silent hang. Engine operation-stream tests pass (39), workflow-outcome tests pass (7), app typecheck passes, and source-pin verification passes. Broad suites, package, visible flow, and actual Flint acceptance remain pending; no model was started and token/reasoning settings were unchanged.
+- The app now pairs with engine `613bca01a4054c52548ab1071dbe9ee694c3177b`. A provider response that ends at its output-token limit is continued in the same task with the same settings and saved tool results. Repeating the same truncated response becomes an explicit recoverable `response_truncated` outcome, rather than a success or a silent hang. Engine operation-stream tests pass (39), workflow-outcome tests pass (7), app typecheck passes, and source-pin verification passes. Broad suites, package, visible flow, and actual Flint acceptance remain pending; no model was started and token/reasoning settings were unchanged.
+
+## 2026-11-02 inference-timeout audit
+
+- Current Ollama source bounds only connection establishment (10 seconds); after connect it sets the socket timeout to `None`, so response-header and token-stream waits have no client deadline. New fake-provider coverage verifies the socket remains unbounded while headers are delayed and separately verifies Cancel can interrupt that wait. `tests/test_cancel.py`: 5 passed. The reported timeout string was not found in this app/engine source, so its origin in the separate OpenCode session remains undetermined. This is not a live-model result and did not change runtime settings.
 
 ## 2026-11-02 loaded-template reasoning discovery
 
