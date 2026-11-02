@@ -835,6 +835,99 @@ def test_active_session_saves_cannot_overwrite_a_newer_snapshot(service, tmp_pat
     assert saved["messages"][-1]["content"] == "revision-2"
 
 
+def test_slow_steering_save_does_not_hold_checkpoint_lock(service, tmp_path, monkeypatch):
+    workspace = tmp_path / "slow-steering-project"
+    workspace.mkdir()
+    session = service.sessions.create(str(workspace), "model-a:latest", 65536)
+    checkpoint_lock = threading.RLock()
+    controller = {"session": session, "source": workspace, "turn_id": "turn-steer-save",
+                  "checkpoint_lock": checkpoint_lock, "accepting_steering": True,
+                  "pending_steers": [], "steering_interrupt": threading.Event(), "inference_active": True}
+    service.active = controller
+    save_started = threading.Event()
+    release_save = threading.Event()
+    original_save = service.sessions.save
+
+    def slow_save(snapshot):
+        save_started.set()
+        assert release_save.wait(2)
+        return original_save(snapshot)
+
+    monkeypatch.setattr(service.sessions, "save", slow_save)
+    result: list[dict] = []
+    steer = threading.Thread(target=lambda: result.append(service._accept_session_steer({
+        "sessionId": session["session_id"], "workspace": str(workspace), "prompt": "Keep the existing plan and implement the next step.",
+    })))
+    steer.start()
+    try:
+        assert save_started.wait(2)
+        assert checkpoint_lock.acquire(blocking=False), "slow steering persistence held the active task lock"
+        checkpoint_lock.release()
+    finally:
+        release_save.set()
+        steer.join(2)
+
+    assert not steer.is_alive()
+    assert result[0]["accepted"] is True
+    assert controller["steering_interrupt"].is_set()
+
+
+def test_waiting_request_does_not_interrupt_before_steering_is_durable(service, tmp_path, monkeypatch):
+    workspace = tmp_path / "steering-durability-project"
+    workspace.mkdir()
+    session = service.sessions.create(str(workspace), "model-a:latest", 65536)
+    interrupt = threading.Event()
+    controller = {"session": session, "source": workspace, "turn_id": "turn-steer-durable",
+                  "checkpoint_lock": threading.RLock(), "last_checkpoint": time.monotonic(),
+                  "last_journal_flush": time.monotonic(), "journal_pending": [],
+                  "activity_revision": 0, "text_revision": 0, "live_content": "", "live_thinking": "",
+                  "steering_interrupt": interrupt, "steering_persisting": True,
+                  "pending_steers": [{"id": "pending", "instruction": "continue"}]}
+    monkeypatch.setattr(service, "emit", lambda _event: None)
+    service._publish_run_event(controller, SimpleNamespace(workspace=workspace), {"type": "phase", "phase": "waiting"})
+    assert not interrupt.is_set(), "the provider request was interrupted before the steering update was durable"
+
+
+def test_steering_dispatch_does_not_block_cancel_from_sidecar_input(service, monkeypatch):
+    save_started = threading.Event()
+    release_save = threading.Event()
+    original_dispatch = service.dispatch
+    cancel_processed = threading.Event()
+    responses = []
+
+    def slow_steer(_message):
+        save_started.set()
+        assert release_save.wait(2)
+        responses.append("steer")
+        return False
+
+    def dispatch(message):
+        if message.get("command") == "session_steer":
+            return slow_steer(message)
+        if message.get("command") == "run_cancel":
+            responses.append("cancel")
+            cancel_processed.set()
+            return False
+        return original_dispatch(message)
+
+    monkeypatch.setattr(service, "dispatch", dispatch)
+    monkeypatch.setattr(worker, "AgentService", lambda: service)
+    monkeypatch.setattr(worker.sys, "stdin", io.StringIO(
+        '{"command":"session_steer"}\n{"command":"run_cancel"}\n'))
+    output = io.StringIO()
+    monkeypatch.setattr(worker.sys, "stdout", output)
+
+    main_thread = threading.Thread(target=worker.main)
+    main_thread.start()
+    try:
+        assert save_started.wait(2)
+        assert cancel_processed.wait(0.25), "the sidecar input loop waited for session steering persistence before reading Cancel"
+    finally:
+        release_save.set()
+        main_thread.join(2)
+    assert not main_thread.is_alive()
+
+
 def test_ollama_preload_uses_requested_context_and_keep_alive_without_starting_inference(service):
     events = []
     service.emit = events.append

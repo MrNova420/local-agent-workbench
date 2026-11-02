@@ -227,7 +227,8 @@ class AgentService:
             steering_interrupt = controller.get("steering_interrupt")
             if event_kind == "phase" and event.get("phase") == "waiting":
                 controller["inference_active"] = True
-                if controller.get("pending_steers") and steering_interrupt is not None:
+                if (controller.get("pending_steers") and steering_interrupt is not None
+                        and not controller.get("steering_persisting", False)):
                     steering_interrupt.set()
             elif event_kind in {"request_complete", "request_error"}:
                 controller["inference_active"] = False
@@ -790,15 +791,15 @@ class AgentService:
                 raise RuntimeError("Follow-up prompts can only be queued for the active session while a run is in progress.")
             if Path(state["workspace"]).resolve(strict=True) != selected_workspace:
                 raise ValueError("The selected session belongs to a different project.")
-            lock = controller["checkpoint_lock"]
-            with lock:
-                if not controller.get("accepting_queue", True):
-                    raise RuntimeError("This run is finishing; try queuing the prompt again after it saves.")
-                prompts = _validated_queued_prompts(state)
-                state["queued_prompts"] = prompts
-                result = self._mutate_queue(prompts, add_prompt=add_prompt, remove_id=remove_id)
-                state["queued_prompts"] = result["queuedPrompts"]
-            saved = self._save_active_session(controller)
+            with controller.setdefault("session_queue_lock", threading.Lock()):
+                with controller["checkpoint_lock"]:
+                    if not controller.get("accepting_queue", True):
+                        raise RuntimeError("This run is finishing; try queuing the prompt again after it saves.")
+                    prompts = _validated_queued_prompts(state)
+                    state["queued_prompts"] = prompts
+                    result = self._mutate_queue(prompts, add_prompt=add_prompt, remove_id=remove_id)
+                    state["queued_prompts"] = result["queuedPrompts"]
+                saved = self._save_active_session(controller)
         else:
             if not self.run_lock.acquire(blocking=False):
                 raise RuntimeError("A run is starting; retry the follow-up after it is ready.")
@@ -839,40 +840,51 @@ class AgentService:
             raise ValueError("The active task belongs to a different project.")
         update = {"id": uuid.uuid4().hex, "turn_id": controller["turn_id"], "instruction": clean,
                   "status": "pending", "created_at": time.time()}
-        with controller["checkpoint_lock"]:
-            if not controller.get("accepting_steering", False):
-                raise RuntimeError("This task is finishing; use the saved message as a follow-up after it completes.")
-            checkpoint = state.setdefault("task_checkpoint", {})
-            record_user_update(checkpoint, update)
-            pending = controller.setdefault("pending_steers", [])
-            pending.append(copy.deepcopy(update))
-            run_state = state.get("run_state")
-            if isinstance(run_state, dict):
-                run_state["pending_steers"] = copy.deepcopy(pending)
-            # Keep this transaction under the checkpoint lock: the model thread
-            # consumes pending steering from this shared state, so it must not
-            # observe a steering update before at least one durable save exists.
-            saved = self.sessions.save(state)
-            if not (saved.get("app_saved") or saved.get("project_saved")):
-                pending.pop()
-                current = checkpoint.get("current") if isinstance(checkpoint, dict) else None
-                if isinstance(current, dict):
-                    current["user_updates"] = [row for row in current.get("user_updates", [])
-                                                if not isinstance(row, dict) or row.get("id") != update["id"]]
+        with controller.setdefault("steering_persist_lock", threading.Lock()):
+            with controller["checkpoint_lock"]:
+                if not controller.get("accepting_steering", False):
+                    raise RuntimeError("This task is finishing; use the saved message as a follow-up after it completes.")
+                checkpoint = state.setdefault("task_checkpoint", {})
+                record_user_update(checkpoint, update)
+                pending = controller.setdefault("pending_steers", [])
+                pending.append(copy.deepcopy(update))
+                run_state = state.get("run_state")
                 if isinstance(run_state, dict):
                     run_state["pending_steers"] = copy.deepcopy(pending)
-                raise RuntimeError(saved.get("error") or "Steering input could not be saved to either session mirror.")
-            steering_interrupt = controller.get("steering_interrupt")
-            interrupting = bool(controller.get("inference_active", False) and steering_interrupt is not None)
-            if interrupting:
-                steering_interrupt.set()
-            self.emit({"type": "steering_update", "status": "interrupting" if interrupting else "accepted", "updateId": update["id"],
-                       "prompt": clean, "sessionId": session_id, "turnId": controller["turn_id"],
-                       "workspace": str(selected_workspace), "createdAt": update["created_at"]})
-            if not (saved.get("app_saved") and saved.get("project_saved")):
-                self.emit({"type": "session_mirror_error", "sessionId": session_id,
-                           "appSaved": saved.get("app_saved", False), "projectSaved": saved.get("project_saved", False),
-                           "error": saved.get("error") or "Steering was saved to only one session mirror."})
+                controller["steering_persisting"] = True
+            # The provider event loop must stay responsive while Windows retries
+            # a locked mirror. The model thread waits at its safe boundary below.
+            try:
+                saved = self._save_active_session(controller)
+            except Exception as exc:
+                saved = {"app_saved": False, "project_saved": False,
+                         "error": f"{type(exc).__name__}: {exc}"}
+            with controller["checkpoint_lock"]:
+                controller["steering_persisting"] = False
+                condition = controller.get("steering_condition")
+                if condition is not None:
+                    condition.notify_all()
+                if not (saved.get("app_saved") or saved.get("project_saved")):
+                    controller["pending_steers"] = [row for row in controller.get("pending_steers", [])
+                                                     if row.get("id") != update["id"]]
+                    current = checkpoint.get("current") if isinstance(checkpoint, dict) else None
+                    if isinstance(current, dict):
+                        current["user_updates"] = [row for row in current.get("user_updates", [])
+                                                    if not isinstance(row, dict) or row.get("id") != update["id"]]
+                    if isinstance(run_state, dict):
+                        run_state["pending_steers"] = copy.deepcopy(controller["pending_steers"])
+                    raise RuntimeError(saved.get("error") or "Steering input could not be saved to either session mirror.")
+                steering_interrupt = controller.get("steering_interrupt")
+                interrupting = bool(controller.get("inference_active", False) and steering_interrupt is not None)
+                if interrupting:
+                    steering_interrupt.set()
+                self.emit({"type": "steering_update", "status": "interrupting" if interrupting else "accepted", "updateId": update["id"],
+                           "prompt": clean, "sessionId": session_id, "turnId": controller["turn_id"],
+                           "workspace": str(selected_workspace), "createdAt": update["created_at"]})
+                if not (saved.get("app_saved") and saved.get("project_saved")):
+                    self.emit({"type": "session_mirror_error", "sessionId": session_id,
+                               "appSaved": saved.get("app_saved", False), "projectSaved": saved.get("project_saved", False),
+                               "error": saved.get("error") or "Steering was saved to only one session mirror."})
         return {"accepted": True, "updateId": update["id"], "status": "interrupting" if interrupting else "pending", "persistence": saved}
 
     def _load_session_state(self, session_id: str) -> dict[str, Any]:
@@ -1800,12 +1812,15 @@ class AgentService:
             temperature=state["temperature"], runtime_options=state.get("runtime_options", {}),
             prompt=prompt, session=state, mcp_tools=list(self.mcp_tools),
         )
+        checkpoint_lock = threading.RLock()
         controller = {"cancel": threading.Event(), "engine": None, "pending": {}, "pending_questions": {}, "session": turn.session, "source": source, "working": working,
-                     "turn_id": turn_id, "checkpoint_lock": threading.RLock(), "last_checkpoint": time.monotonic(),
+                     "turn_id": turn_id, "checkpoint_lock": checkpoint_lock, "last_checkpoint": time.monotonic(),
                      "last_journal_flush": time.monotonic(), "journal_pending": [], "current_operation_id": None,
                      "activity_revision": 0, "text_revision": 0, "live_content": "", "live_thinking": "",
                      "stop_after_operation": False, "accepting_queue": True, "accepting_steering": True,
-                     "pending_steers": [], "steering_interrupt": threading.Event(),
+                     "pending_steers": [], "steering_interrupt": threading.Event(), "steering_persisting": False,
+                     "steering_persist_lock": threading.Lock(),
+                     "steering_condition": threading.Condition(checkpoint_lock),
                      "inference_active": False, "approval_mode": approval_mode}
         with self.active_lock:
             self.active = controller
@@ -1928,7 +1943,13 @@ class AgentService:
             run_permission_rules = copy.deepcopy(current_run_state.get("settings", {}).get("permission_rules", [])) if isinstance(current_run_state, dict) else []
 
             def apply_steering(messages: list[dict[str, Any]], finishing: bool = False) -> bool:
-                with controller["checkpoint_lock"]:
+                steering_condition = controller.setdefault(
+                    "steering_condition", threading.Condition(controller["checkpoint_lock"]))
+                with steering_condition:
+                    while controller.get("steering_persisting") and not controller["cancel"].is_set():
+                        steering_condition.wait(0.1)
+                    if controller["cancel"].is_set():
+                        return False
                     pending = copy.deepcopy(controller.get("pending_steers", []))
                     if not pending:
                         if finishing:
@@ -2213,6 +2234,23 @@ def main() -> None:
     warnings = [service.permission_rules_warning] if service.permission_rules_warning else []
     sys.stdout.write(json.dumps({"type": "ready", "version": "0.1.0", "warnings": warnings}) + "\n")
     sys.stdout.flush()
+    background_commands = {"session_steer", "session_queue_prompt", "session_queue_remove", "approval_reply"}
+    request_threads: set[threading.Thread] = set()
+    request_threads_lock = threading.Lock()
+
+    def dispatch_background(message: dict[str, Any]) -> None:
+        def run_request() -> None:
+            try:
+                service.dispatch(message)
+            finally:
+                with request_threads_lock:
+                    request_threads.discard(threading.current_thread())
+
+        thread = threading.Thread(target=run_request, name=f"sidecar-{message.get('command', 'request')}", daemon=True)
+        with request_threads_lock:
+            request_threads.add(thread)
+        thread.start()
+
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -2221,11 +2259,20 @@ def main() -> None:
             message = json.loads(line)
             if not isinstance(message, dict):
                 raise ValueError("Request must be a JSON object.")
-            if service.dispatch(message):
-                return
+            if message.get("command") in background_commands:
+                dispatch_background(message)
+            elif service.dispatch(message):
+                break
         except Exception as exc:
             service.respond("", False, error=f"{type(exc).__name__}: {exc}")
     service.cancel()
+    while True:
+        with request_threads_lock:
+            active_requests = list(request_threads)
+        if not active_requests:
+            break
+        for thread in active_requests:
+            thread.join()
     service.mcp.shutdown()
 
 
