@@ -14,7 +14,7 @@
 
 ### Correction: cancellation polling (2026-11-02)
 
-The original delayed-header regression did not assert that the request ended before releasing the fake server; the corrected assertion showed the `CancelSynchronousIo` attempt in `b40f082` still left the read blocked. Engine `cef092f` now polls the socket every 250 ms for request cancellation using a small HTTP/1.x streaming reader. This is not a response or generation deadline. Header and token waits remain unbounded. The reader handles content-length and chunked streaming; 25 focused engine cancellation/runtime tests pass. The preceding entry records historical investigation, not the current mechanism.
+The original delayed-header regression did not assert that the request ended before releasing the fake server; the corrected assertion showed the `CancelSynchronousIo` attempt in `b40f082` still left the read blocked. Engine `cef092f` now polls the socket every 250 ms for request cancellation using a small HTTP/1.x streaming reader. This is not a response or generation deadline. Header and token waits remain unbounded. The reader handles content-length and chunked streaming; 25 focused engine cancellation/runtime tests pass, and a follow-up chunked-body/trailer parser case passes in the cancellation module (9 passed total). The paired engine was advanced to `45d6291d84f61c579b25419e758d0eb3c88d935e`. The preceding entry records historical investigation, not the current mechanism.
 
 ## 2026-11-02 partial inference recovery
 
