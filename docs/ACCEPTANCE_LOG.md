@@ -6,6 +6,11 @@
 - Focused evidence: engine file tools **37 passed**; worker activity persistence **1 passed**; journal replay **1 passed**; renderer activity **21 passed**; paired source-pin check passed. The progress test verifies counts only; it does not expose search query text or file paths. The activity UI exposes the full message on hover and the file/byte/match counters in operation details.
 - Full suites, package, live app/long-run acceptance, and Flint final model acceptance remain queued. No inference request or model-setting change was made.
 
+## 2026-11-02 structured user clarification
+
+- Focused tests pass for engine `ask_user` availability (**1**), sidecar pause/resume (**1**), crash recovery while awaiting an answer and after an answer (**2**), and durable question journal replay (**1**). The renderer activity suite covers pending and answered question presentation.
+- Full suites, packaged non-dismissible modal behavior, and visible interruption/recovery acceptance remain queued. No inference request or model-setting change was made.
+
 ## 2026-11-02 remote recursive reference discovery correction
 
 - Follow-up audit found Draft 2019-09 `$recursiveRef` was blocked by the empty local-only resolver at execution, but discovery did not identify a remote URI as unsupported. Discovery now reports it alongside `$ref` and `$dynamicRef`, so the model sees the restriction before use.
