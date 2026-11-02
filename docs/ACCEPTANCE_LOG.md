@@ -1,3 +1,7 @@
+## 2026-11-02 assign command before execution
+
+- Engine 14a9138a50033fac8550210e5d470470ecea4c2c now creates Windows command processes suspended, attaches the Job Object before user code starts, then resumes the primary thread. If safe resume fails, it stops the process with an explicit error. This closes the child-before-assignment cancellation race when Job assignment works; if the host refuses assignment, cancellation uses the existing process-scan fallback. The Job Object still does not sandbox filesystem or user privileges. Focused Windows Job Object and command-output/cancellation checks: **4 passed**; app build-configuration checks pass (**8 passed**) and the exact app/engine pin matches; the broader command matrix remains queued. No inference settings changed.
+
 ## 2026-11-02 small-model profile batching correction
 
 - Engine ed411506a34c905bea6d6f970d94496f54e11aa restores explicit batching guidance for known-independent calls, allows validated independent reads to run concurrently, and keeps writes, commands, and MCP operations ordered under their approval rules. It also retains full scope and explicitly says not to cap required work. The profile is 1,242 characters shorter than the original profile while retaining those behaviors. Focused regression: **1 passed**; Python compile and git diff --check passed. Broader workflow and model outcome checks remain queued.
