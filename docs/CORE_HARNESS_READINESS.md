@@ -1,6 +1,6 @@
 # Core harness readiness: audit, design, and execution gates
 
-**Status: active work.** This document focuses on the agent loop and usable project-development workflow. The current paired source includes focused engine, worker, and typecheck evidence, while the complete suites and latest packaged/visible acceptance remain pending. Long-run model behavior, live runtime attribution, updater recovery, and the broader parity backlog remain open; a source test pass is not release readiness.
+**Status: active work.** This document focuses on the agent loop and usable project-development workflow. The latest engine pin has focused compaction, continuation, and checkpoint evidence; worker/typecheck results are from earlier pins and have not yet been rerun against the latest app pin. Complete suites and current packaged/visible acceptance remain pending. Long-run model behavior, live runtime attribution, updater recovery, and broader parity remain open; a source test pass is not release readiness.
 
 ## Current verification update (2026-11-02)
 
