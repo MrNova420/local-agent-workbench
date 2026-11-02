@@ -3,7 +3,7 @@
 ## 2026-11-02 MCP future cancellation recovery
 
 - Engine `36c7317226e21d1e01338b70f7d3e99de2260428` translates an unexpectedly cancelled asyncio bridge future into an ordinary recoverable MCP failure; when the user cancellation event is set, it remains a normal MCP cancellation. This prevents `concurrent.futures.CancelledError` (a `BaseException`) from escaping the worker without a saved terminal state.
-- Focused engine MCP module: **11 passed**, including the new bridge regression; app worker reconnect regressions: **2 passed**; MCP adapter/build-pin checks: **9 passed**. Python compile, engine/app diff checks, and exact app/engine SHA pairing passed. The MCP adapter run emitted one existing Starlette `python_multipart` deprecation warning. App pin and evidence are committed separately; broad suites, packaging, visible workflow acceptance and Flint final acceptance remain queued. No model or inference settings changed.
+- Focused engine MCP module: **11 passed**, including the new bridge regression; app worker reconnect regressions: **2 passed**; MCP adapter/build-pin checks: **9 passed**. Python compile, engine/app diff checks, and exact app/engine SHA pairing passed. The MCP adapter run emitted one existing Starlette `python_multipart` deprecation warning. App commit `97e5461` pairs the engine and records the evidence; Desktop source is fast-forwarded to that commit. Broad suites, packaging, visible workflow acceptance and Flint final acceptance remain queued. No model or inference settings changed.
 
 ## 2026-11-02 MCP discovery cancellation cleanup
 
