@@ -32,6 +32,28 @@ export type RunOptions = {
 
 export type QueuedPrompt = { id: string; prompt: string; queued_at: number };
 
+export type SessionLiveSnapshot = {
+  active: boolean;
+  sessionId: string;
+  turnId?: string;
+  workspace?: string;
+  activityRevision?: number;
+  textRevision?: number;
+  runState?: Record<string, unknown>;
+  activities?: ActivityRecord[];
+  plan?: PlanItemSnapshot[];
+  acceptanceCriteria?: string[];
+  liveAssistant?: { content: string; thinking: string };
+  conflict?: { recommended_source?: 'app' | 'project'; versions?: Array<{ source: 'app' | 'project'; updated_at?: number }> };
+  savedTranscript?: {
+    messages: Array<{ role: string; content?: string; thinking?: unknown }>;
+    turns: Array<{ turn_id?: string; transcript_saved?: boolean }>;
+    usage_events?: Array<Record<string, unknown>>;
+  };
+};
+
+export type PlanItemSnapshot = { title?: string; text?: string; status?: string; source?: 'workbench' | 'agent'; group?: string };
+
 export type WorkerCommand =
   | { command: 'ping' }
   | { command: 'models' }
@@ -62,6 +84,7 @@ export type WorkerCommand =
   | { command: 'workspace_pin'; workspace: string; pinned: boolean }
   | { command: 'workspace_track_sessions'; workspace: string; track: boolean }
   | { command: 'sessions_list'; workspace?: string }
+  | { command: 'session_live_snapshot'; sessionId: string; workspace: string; afterActivityRevision?: number; afterTextRevision?: number }
   | { command: 'session_new'; workspace: string; model: string; context: number; activityMode?: ActivityMode }
   | { command: 'session_activity_mode'; sessionId: string; activityMode: ActivityMode }
   | { command: 'session_run_settings'; sessionId: string; settings: { model: string; context: number; maxTokens: number; temperature: number; access: AccessMode; approvalMode: ApprovalMode; keepAlive: string; reasoning: ReasoningChoice; harnessProfile: HarnessProfile; taskIntent: TaskIntent; skillsEnabled: boolean; skillSources: SkillSource[] } }

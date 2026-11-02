@@ -2,9 +2,20 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { Markdown } from '../src/renderer/Markdown';
-import { appendTranscriptSegment, restoreTranscriptMessages } from '../src/shared/transcript';
+import { appendTranscriptSegment, reconcileLiveAssistantMessage, restoreTranscriptMessages } from '../src/shared/transcript';
 
 describe('resumed transcript rendering', () => {
+  it('reconciles the active turn from a full snapshot without duplicating streamed text', () => {
+    const rows = [
+      { role: 'user' as const, content: 'Build the page', turnId: 'turn-1' },
+      { role: 'assistant' as const, content: 'partial', turnId: 'turn-1', streaming: true },
+    ];
+    const reconciled = reconcileLiveAssistantMessage(rows, 'turn-1', { content: 'complete answer', thinking: 'planning' });
+    expect(reconciled).toHaveLength(2);
+    expect(reconciled[1]).toMatchObject({ content: 'complete answer', thinking: 'planning', turnId: 'turn-1', streaming: true });
+    expect(rows[1].content).toBe('partial');
+  });
+
   it('separates assistant response segments that resume after a tool call', () => {
     expect(appendTranscriptSegment('I will inspect the project.', 'The files are ready.', true)).toBe('I will inspect the project.\n\nThe files are ready.');
     expect(appendTranscriptSegment('I will inspect the project.', ' continues.', false)).toBe('I will inspect the project. continues.');

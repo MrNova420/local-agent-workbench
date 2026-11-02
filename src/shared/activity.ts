@@ -35,3 +35,7 @@ export function applyActivityEvent(current: ActivityRecord[], event: ActivityEve
   next[index] = { ...previous, output: { ...previous.output, [stream]: (previous.output?.[stream] || '') + event.chunk } };
   return next;
 }
+
+export function mergeActivitySnapshot(current: ActivityRecord[], snapshot: ActivityRecord[]): ActivityRecord[] {
+  return snapshot.reduce((rows, activity) => applyActivityEvent(rows, { type: 'activity_event', activity }), current);
+}

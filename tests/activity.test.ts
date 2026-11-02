@@ -1,10 +1,26 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { applyActivityEvent, shouldRefreshWorkspaceForActivity, type ActivityRecord } from '../src/shared/activity';
+import { applyActivityEvent, mergeActivitySnapshot, shouldRefreshWorkspaceForActivity, type ActivityRecord } from '../src/shared/activity';
 import { ActivityFeed } from '../src/renderer/ActivityFeed';
 
 describe('durable live activity state', () => {
+  it('reconciles a missed live-event snapshot without truncating full tool results', () => {
+    const previous: ActivityRecord = { id: 'op-1', turnId: 'turn-1', sessionId: 'session-1', kind: 'operation',
+      name: 'run_command', status: 'running', output: { stdout: 'partial' } };
+    const completeOutput = 'full command result '.repeat(1200);
+    const current = mergeActivitySnapshot([previous], [
+      { ...previous, status: 'completed', result: completeOutput, output: { stdout: completeOutput } },
+      { id: 'plan-1', turnId: 'turn-1', sessionId: 'session-1', kind: 'plan', status: 'updated',
+        items: [{ title: 'Implement', status: 'in_progress' }] },
+    ]);
+
+    expect(current).toHaveLength(2);
+    expect(current[0].status).toBe('completed');
+    expect(current[0].output?.stdout).toBe(completeOutput);
+    expect(current[1].kind).toBe('plan');
+  });
+
   it('renders paused user questions and records their answer after resume', () => {
     const question = { id: 'q-1', questionId: 'q-1', turnId: 'turn-1', sessionId: 'session-1',
       kind: 'question' as const, title: 'Choose a framework', question: 'Which framework should I use?',

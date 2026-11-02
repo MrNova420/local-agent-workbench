@@ -1,15 +1,15 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
-import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, QueuedPrompt, RunOptions, SessionSummary, SkillSource, TaskIntent, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
+import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, QueuedPrompt, RunOptions, SessionLiveSnapshot, SessionSummary, SkillSource, TaskIntent, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
 import { applyToolCallProgress, nextRunPhase, restoredRunPhase, runStepProgress, shouldQueuePromptOnEnter, type ToolCallProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordInputEstimate, recordStreamedText, restoreRunMetrics, type RunMetrics } from '../shared/run-metrics';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, normalizeReasoningChoice, readRunTokenPreferences } from '../shared/model-controls';
 import { featuredInstalledModels } from '../shared/model-recommendations';
 import { normalizeGpuStats } from '../shared/resource-metrics';
-import { appendTranscriptSegment, restoreTranscriptMessages } from '../shared/transcript';
+import { appendTranscriptSegment, reconcileLiveAssistantMessage, restoreTranscriptMessages } from '../shared/transcript';
 import { LocalModelOrbit } from './ModelOrbit';
 import { ActivityFeed } from './ActivityFeed';
-import { applyActivityEvent, shouldRefreshWorkspaceForActivity } from '../shared/activity';
+import { applyActivityEvent, mergeActivitySnapshot, shouldRefreshWorkspaceForActivity } from '../shared/activity';
 import { DEFAULT_RUN_SHEET_LAYOUT, moveRunSheetPanel, restoreRunSheetLayout, resizeRunSheetPanel, type RunSheetLayout, type RunSheetPanel } from '../shared/run-sheet-layout';
 import { nextHarnessProfile } from '../shared/harness-profile';
 import { isNearTranscriptEnd } from '../shared/transcript-follow';
@@ -242,6 +242,8 @@ export default function App() {
   const endRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const assistantSegmentBreakRef = useRef(false);
+  const activeTurnIdRef = useRef('');
+  const liveSnapshotCursorRef = useRef({ sessionId: '', activityRevision: 0, textRevision: 0, busy: false });
   const workspaceHistoryRequestId = useRef(0);
   const projectSessionRequestId = useRef(0);
   const projectFileRequestId = useRef(0);
@@ -505,6 +507,19 @@ export default function App() {
     void refreshHome().catch((error) => notify(`Could not load saved workspace history: ${(error as Error).message}`, 'warn'));
     void request({ command: 'ping' }).then(() => setInstalled(true)).catch(() => setInstalled(false));
     const unsubscribe = window.agent.onEvent((event) => {
+      if ((event.type === 'text' || event.type === 'thinking') && typeof event.textRevision === 'number') {
+        const cursor = liveSnapshotCursorRef.current;
+        if ((typeof event.sessionId === 'string' && cursor.sessionId && event.sessionId !== cursor.sessionId)
+            || (typeof event.turnId === 'string' && activeTurnIdRef.current && event.turnId !== activeTurnIdRef.current)
+            || event.textRevision <= cursor.textRevision) return;
+        cursor.textRevision = event.textRevision;
+      }
+      if (event.type === 'phase' && typeof event.textRevision === 'number') {
+        const cursor = liveSnapshotCursorRef.current;
+        if (!event.sessionId || !cursor.sessionId || event.sessionId === cursor.sessionId) {
+          cursor.textRevision = Math.max(cursor.textRevision, event.textRevision);
+        }
+      }
       if (event.type === 'service_ready') {
         setInstalled(true);
         const warnings = Array.isArray(event.warnings) ? event.warnings.filter((warning): warning is string => typeof warning === 'string') : [];
@@ -574,6 +589,8 @@ export default function App() {
         }
       }
       if (event.type === 'run_started' && typeof event.turnId === 'string') {
+        activeTurnIdRef.current = event.turnId;
+        liveSnapshotCursorRef.current = { sessionId: String(event.sessionId || ''), activityRevision: 0, textRevision: 0, busy: false };
         setToolCallProgress([]);
         setMessages((current) => {
           let index = current.length - 1;
@@ -602,7 +619,11 @@ export default function App() {
       if (event.type === 'tool_call_progress') {
         setToolCallProgress((current) => applyToolCallProgress(current, event));
       }
-      if (event.type === 'tool_batch') { assistantSegmentBreakRef.current = true; setToolCallProgress([]); }
+      if (event.type === 'tool_batch') {
+        assistantSegmentBreakRef.current = true;
+        setToolCallProgress([]);
+        setMessages((current) => current.map((row) => row.streaming ? { ...row, streaming: false } : row));
+      }
       if (event.type === 'session_mirror_error') {
         const appSaved = event.appSaved !== false;
         const projectSaved = event.projectSaved === true;
@@ -647,7 +668,7 @@ export default function App() {
           if (last?.role === 'assistant' && last.streaming) {
             return [...current.slice(0, -1), { ...last, content: appendTranscriptSegment(last.content, chunk, addSegmentBreak) }];
           }
-          return [...current, { role: 'assistant', content: chunk, streaming: true }];
+          return [...current, { role: 'assistant', content: chunk, turnId: activeTurnIdRef.current || undefined, streaming: true }];
         });
       }
       if (event.type === 'thinking') {
@@ -661,7 +682,7 @@ export default function App() {
             const thinking = last.thinking || '';
             return [...current.slice(0, -1), { ...last, thinking: appendTranscriptSegment(thinking, chunk, addSegmentBreak) }];
           }
-          return [...current, { role: 'assistant', content: '', thinking: chunk, streaming: true }];
+          return [...current, { role: 'assistant', content: '', thinking: chunk, turnId: activeTurnIdRef.current || undefined, streaming: true }];
         });
       }
       if (event.type === 'plan') {
@@ -810,6 +831,89 @@ export default function App() {
     }, 1000);
     return () => window.clearInterval(interval);
   }, [running, startedAt]);
+
+  useEffect(() => {
+    const sessionId = session?.session_id;
+    const capturedWorkspace = session?.workspace || workspace;
+    if (!running || !sessionId || !capturedWorkspace) return;
+    let live = true;
+    const reconcile = async () => {
+      const cursor = liveSnapshotCursorRef.current;
+      if (!live || cursor.busy) return;
+      cursor.busy = true;
+      try {
+        const sameSession = cursor.sessionId === sessionId;
+        const snapshot = await request<SessionLiveSnapshot>({
+          command: 'session_live_snapshot', sessionId, workspace: capturedWorkspace,
+          afterActivityRevision: sameSession ? cursor.activityRevision : 0,
+          afterTextRevision: sameSession ? cursor.textRevision : 0,
+        });
+        if (!live || session?.session_id !== sessionId) return;
+        const normalizePath = (value: string) => value.replace(/[\\/]+$/, '').toLocaleLowerCase();
+        if (snapshot.sessionId !== sessionId || !snapshot.workspace
+            || normalizePath(snapshot.workspace) !== normalizePath(capturedWorkspace)) return;
+        if (snapshot.turnId && activeTurnIdRef.current && snapshot.turnId !== activeTurnIdRef.current) return;
+        if (snapshot.conflict) {
+          setSessionConflict({ id: sessionId, workspace: capturedWorkspace, versions: snapshot.conflict.versions || [] });
+          setRunning(false);
+          setPhase('Run ended · session copies need review');
+          notify('The run ended, but the saved session copies diverged. Choose which copy to restore before continuing.', 'warn');
+          return;
+        }
+        liveSnapshotCursorRef.current = {
+          sessionId,
+          activityRevision: Number.isFinite(snapshot.activityRevision) ? Number(snapshot.activityRevision) : cursor.activityRevision,
+          textRevision: Number.isFinite(snapshot.textRevision) ? Number(snapshot.textRevision) : cursor.textRevision,
+          busy: false,
+        };
+        if (snapshot.turnId) activeTurnIdRef.current = snapshot.turnId;
+        if (Array.isArray(snapshot.activities)) setActivities((current) => mergeActivitySnapshot(current, snapshot.activities!));
+        if (Array.isArray(snapshot.plan)) setPlan(snapshot.plan as PlanItem[]);
+        if (Array.isArray(snapshot.acceptanceCriteria)) setAcceptanceCriteria(snapshot.acceptanceCriteria.filter((item): item is string => typeof item === 'string'));
+        if (snapshot.liveAssistant && (snapshot.liveAssistant.content || snapshot.liveAssistant.thinking) && snapshot.turnId) {
+          setMessages((current) => reconcileLiveAssistantMessage(current, snapshot.turnId!, snapshot.liveAssistant!));
+        }
+        const state = snapshot.runState || {};
+        if (snapshot.savedTranscript && typeof state.status === 'string' && state.status !== 'running') {
+          const saved = snapshot.savedTranscript;
+          setMessages(restoreTranscriptMessages(saved.messages, saved.turns));
+          const rows = snapshot.activities || [];
+          setActivities(rows);
+          setPlan(restorePlanItems(snapshot.plan, rows, snapshot.turnId) as PlanItem[]);
+          setAcceptanceCriteria(snapshot.acceptanceCriteria || []);
+          setWorkflowOutcome(typeof state.workflow_outcome === 'string' ? state.workflow_outcome : null);
+          setVerificationEvidence(readVerificationEvidence(state.verification));
+          const latestTurnId = snapshot.turnId;
+          setRunMetrics(restoreRunMetrics((saved.usage_events || []).filter((row) => !latestTurnId || row.turn_id === latestTurnId)));
+        }
+        if (typeof state.started_at === 'number' && Number.isFinite(state.started_at)) {
+          setStartedAt(state.started_at * 1000);
+          setElapsed(Math.max(0, Date.now() - state.started_at * 1000));
+        }
+        const phases: Record<string, string> = {
+          waiting_response_headers: 'Waiting for response headers', waiting: 'Waiting for first token',
+          reasoning: 'Reasoning', generating: 'Generating', processing_response: 'Processing response',
+          working: 'Working', finishing: 'Finishing turn',
+        };
+        if (typeof state.phase === 'string' && phases[state.phase]) setPhase(phases[state.phase]);
+        if (typeof state.request_first_token_seconds === 'number') setRunMetrics((current) => recordFirstToken(current, state.request_first_token_seconds));
+        if (typeof state.status === 'string' && state.status !== 'running') {
+          setRunning(false);
+          setPhase(restoredRunPhase(state.status));
+          setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
+          setRunMetrics((current) => endGeneration(current));
+        }
+      } catch {
+        // Transient IPC and checkpoint errors are retried on the next poll; they
+        // must never turn a slow but active model request into a failed run.
+      } finally {
+        if (live) liveSnapshotCursorRef.current.busy = false;
+      }
+    };
+    void reconcile();
+    const interval = window.setInterval(() => void reconcile(), 1500);
+    return () => { live = false; window.clearInterval(interval); };
+  }, [request, running, session?.session_id, session?.workspace, workspace]);
 
   const currentSessions = useMemo(() => sessions.filter((row) => !workspace || row.workspace === workspace), [sessions, workspace]);
   const availableFiles = useMemo(() => files.filter((row) => row.path).slice(0, 500), [files]);

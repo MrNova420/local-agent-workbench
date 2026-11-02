@@ -35,3 +35,24 @@ export function restoreTranscriptMessages(rows: PersistedTranscriptRow[], turns:
   }
   return restored;
 }
+
+export type LiveTranscriptMessage = TranscriptMessage & { streaming?: boolean; recoveredPartial?: boolean };
+
+/** Replace the active turn's partial assistant row with the sidecar's authoritative full buffer. */
+export function reconcileLiveAssistantMessage(
+  messages: LiveTranscriptMessage[], turnId: string, live: { content: string; thinking: string },
+): LiveTranscriptMessage[] {
+  if (!turnId) return messages;
+  let exact = -1;
+  for (let cursor = messages.length - 1; cursor >= 0; cursor -= 1) {
+    if (messages[cursor].role === 'assistant' && messages[cursor].turnId === turnId && messages[cursor].streaming) { exact = cursor; break; }
+  }
+  const index = exact >= 0 ? exact : messages.at(-1)?.role === 'assistant' && messages.at(-1)?.streaming ? messages.length - 1 : -1;
+  const next = messages.slice();
+  const replacement: LiveTranscriptMessage = {
+    role: 'assistant', content: live.content, thinking: live.thinking || undefined, turnId, streaming: true,
+  };
+  if (index < 0) next.push(replacement);
+  else next[index] = { ...next[index], ...replacement };
+  return next;
+}

@@ -351,6 +351,117 @@ def test_session_run_settings_cannot_change_during_active_run(service, tmp_path)
         service.handle("session_run_settings", {"sessionId": session["session_id"], "settings": {}})
 
 
+def test_session_live_snapshot_returns_full_active_state_for_the_captured_workspace(service, tmp_path):
+    workspace = tmp_path / "live-snapshot-project"
+    workspace.mkdir()
+    session = service.sessions.create(str(workspace), "model-a:latest", 65536)
+    full_output = "complete operation output " * 900
+    session.update(
+        plan=[{"title": "Inspect", "status": "completed"}, {"title": "Implement", "status": "in_progress"}],
+        acceptance_criteria=["The saved plan remains visible while inference continues."],
+        activity_events=[{"id": "op-1", "turnId": "turn-1", "sessionId": session["session_id"],
+                          "workspace": str(workspace), "kind": "operation", "name": "run_command",
+                          "status": "running", "output": {"stdout": full_output}}],
+        run_state={"status": "running", "turn_id": "turn-1", "started_at": 123.0,
+                   "phase": "reasoning", "partial_content": "", "partial_thinking": "working through the next step"},
+    )
+    service.active = {
+        "session": session, "source": workspace, "turn_id": "turn-1",
+        "checkpoint_lock": threading.RLock(), "activity_revision": 7, "text_revision": 1,
+        "live_thinking": "working through the next step", "live_content": "",
+    }
+
+    snapshot = service.handle("session_live_snapshot", {"sessionId": session["session_id"], "workspace": str(workspace)})
+
+    assert snapshot["active"] is True
+    assert snapshot["sessionId"] == session["session_id"]
+    assert snapshot["turnId"] == "turn-1"
+    assert snapshot["workspace"] == str(workspace)
+    assert snapshot["activityRevision"] == 7
+    assert snapshot["plan"] == session["plan"]
+    assert snapshot["acceptanceCriteria"] == session["acceptance_criteria"]
+    assert snapshot["activities"][0]["output"]["stdout"] == full_output
+    assert snapshot["runState"]["phase"] == "reasoning"
+    assert snapshot["liveAssistant"]["thinking"] == "working through the next step"
+
+    other_workspace = tmp_path / "different-project"
+    other_workspace.mkdir()
+    mismatch = service.handle("session_live_snapshot", {
+        "sessionId": session["session_id"], "workspace": str(other_workspace),
+    })
+    assert mismatch == {"active": False, "sessionId": session["session_id"]}
+
+
+def test_session_live_snapshot_does_not_expose_state_without_matching_active_run(service, tmp_path):
+    workspace = tmp_path / "idle-project"
+    workspace.mkdir()
+    session = service.sessions.create(str(workspace), "model-a:latest", 65536)
+    service.active = None
+
+    snapshot = service.handle("session_live_snapshot", {
+        "sessionId": session["session_id"], "workspace": str(workspace),
+    })
+
+    assert snapshot == {"active": False, "sessionId": session["session_id"], "workspace": str(workspace)}
+
+
+def test_session_live_snapshot_restores_saved_terminal_transcript_after_active_controller_is_gone(service, tmp_path):
+    workspace = tmp_path / "terminal-snapshot-project"
+    workspace.mkdir()
+    session = service.sessions.create(str(workspace), "model-a:latest", 65536)
+    session["messages"] = [{"role": "user", "content": "Build the page"},
+                           {"role": "assistant", "content": "The finished answer."}]
+    session["turns"] = [{"turn_id": "turn-done", "transcript_saved": True}]
+    session["run_state"] = {"status": "completed", "turn_id": "turn-done", "workflow_outcome": "implementation_unverified"}
+    session["plan"] = [{"title": "Build", "status": "completed"}]
+    service.sessions.save(session)
+    service.active = None
+
+    snapshot = service.handle("session_live_snapshot", {
+        "sessionId": session["session_id"], "workspace": str(workspace),
+    })
+
+    assert snapshot["active"] is False
+    assert snapshot["runState"]["status"] == "completed"
+    assert snapshot["plan"] == session["plan"]
+    assert snapshot["savedTranscript"]["messages"] == session["messages"]
+
+
+def test_live_snapshot_text_revisions_reset_request_buffers_and_reconcile_late_stream_events(service, tmp_path, monkeypatch):
+    workspace = tmp_path / "request-buffer-project"
+    workspace.mkdir()
+    session = service.sessions.create(str(workspace), "model-a:latest", 65536)
+    session["run_state"] = {
+        "status": "running", "turn_id": "turn-1", "started_at": time.time(), "prompt": "Build it",
+        "safe_messages": [], "partial_content": "", "partial_thinking": "", "active_operation": None,
+    }
+    controller = {
+        "session": session, "source": workspace, "turn_id": "turn-1", "checkpoint_lock": threading.RLock(),
+        "last_checkpoint": time.monotonic(), "last_journal_flush": time.monotonic(), "journal_pending": [],
+        "activity_revision": 0, "text_revision": 0, "live_content": "", "live_thinking": "",
+    }
+    service.active = controller
+    emitted = []
+    monkeypatch.setattr(service, "emit", emitted.append)
+    turn = SimpleNamespace(workspace=workspace)
+
+    service._publish_run_event(controller, turn, {"type": "phase", "phase": "waiting"})
+    service._publish_run_event(controller, turn, {"type": "thinking", "text": "Planning this request."})
+    first = service.handle("session_live_snapshot", {
+        "sessionId": session["session_id"], "workspace": str(workspace), "afterTextRevision": 0,
+    })
+    service._publish_run_event(controller, turn, {"type": "phase", "phase": "waiting"})
+    second = service.handle("session_live_snapshot", {
+        "sessionId": session["session_id"], "workspace": str(workspace), "afterTextRevision": first["textRevision"],
+    })
+    service._publish_run_event(controller, turn, {"type": "text", "text": "Next request output."})
+
+    assert first["liveAssistant"]["thinking"] == "Planning this request."
+    assert second["textRevision"] > first["textRevision"]
+    assert second["liveAssistant"] == {"content": "", "thinking": ""}
+    assert emitted[-1]["textRevision"] == second["textRevision"] + 1
+
+
 def test_ollama_preload_uses_requested_context_and_keep_alive_without_starting_inference(service):
     events = []
     service.emit = events.append

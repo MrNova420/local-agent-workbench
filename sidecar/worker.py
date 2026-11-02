@@ -177,7 +177,23 @@ class AgentService:
         force_snapshot = event_kind in {"context_compacted", "approval_request", "question_request", "question_answered", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
         with controller["checkpoint_lock"]:
             if isinstance(run_state, dict):
+                if event_kind == "phase":
+                    run_state["phase"] = str(event.get("phase", "working"))
+                elif event_kind == "request_dispatched":
+                    run_state["phase"] = "waiting_response_headers"
+                elif event_kind == "request_headers":
+                    run_state["phase"] = "waiting"
+                elif event_kind == "request_complete":
+                    run_state["phase"] = "processing_response"
+                elif event_kind == "request_error":
+                    run_state["phase"] = "cancelled" if event.get("cancelled") else "failed"
                 if event.get("type") == "phase" and event.get("phase") == "waiting":
+                    # Snapshot buffers describe one provider request, while the
+                    # revision stays monotonic across the whole captured turn.
+                    controller["live_content"] = ""
+                    controller["live_thinking"] = ""
+                    controller["text_revision"] = int(controller.get("text_revision", 0)) + 1
+                    enriched["textRevision"] = controller["text_revision"]
                     safe_messages = run_state.get("safe_messages")
                     if not isinstance(safe_messages, list):
                         safe_messages = copy.deepcopy(state.get("messages", []))
@@ -204,8 +220,14 @@ class AgentService:
                     run_state["estimated_input_tokens"] = event.get("estimated_input_tokens")
                 elif event.get("type") == "text":
                     run_state["partial_content"] = str(run_state.get("partial_content", "")) + str(event.get("text", ""))
+                    controller["live_content"] = str(controller.get("live_content", "")) + str(event.get("text", ""))
+                    controller["text_revision"] = int(controller.get("text_revision", 0)) + 1
+                    enriched["textRevision"] = controller["text_revision"]
                 elif event.get("type") == "thinking":
                     run_state["partial_thinking"] = str(run_state.get("partial_thinking", "")) + str(event.get("text", ""))
+                    controller["live_thinking"] = str(controller.get("live_thinking", "")) + str(event.get("text", ""))
+                    controller["text_revision"] = int(controller.get("text_revision", 0)) + 1
+                    enriched["textRevision"] = controller["text_revision"]
                 elif event.get("type") == "tool_batch":
                     run_state["tool_batch"] = {"assistant_message": copy.deepcopy(event.get("assistantMessage")),
                                                 "calls": copy.deepcopy(event.get("calls", [])),
@@ -481,6 +503,9 @@ class AgentService:
             for row in activity_updates:
                 self.emit({"type": "activity_event", "activity": row,
                            "sessionId": state["session_id"], "turnId": controller["turn_id"]})
+
+            if (activity and kind != "operation_output") or activity_updates:
+                controller["activity_revision"] = int(controller.get("activity_revision", 0)) + 1
 
             pending = controller.setdefault("journal_pending", [])
             journal_event = {**event, "sessionId": state["session_id"], "turnId": controller["turn_id"],
@@ -895,6 +920,100 @@ class AgentService:
         if command == "sessions_list":
             workspace = message.get("workspace")
             return self.sessions.list(str(workspace) if workspace else None)
+        if command == "session_live_snapshot":
+            session_id = str(message.get("sessionId", ""))
+            requested_workspace = str(message.get("workspace", ""))
+
+            def inactive_snapshot(*, conflict: dict[str, Any] | None = None) -> dict[str, Any]:
+                base: dict[str, Any] = {"active": False, "sessionId": session_id}
+                if conflict is not None:
+                    base["conflict"] = conflict
+                    return base
+                try:
+                    root = Path(requested_workspace).resolve(strict=True)
+                    loaded = self.sessions.load(session_id, str(root))
+                except (OSError, RuntimeError, ValueError, FileNotFoundError):
+                    return base
+                base["workspace"] = str(root)
+                if loaded.get("conflict"):
+                    base["conflict"] = {"recommended_source": loaded.get("recommended_source"),
+                                        "versions": copy.deepcopy(loaded.get("versions", []))}
+                    return base
+                saved = loaded.get("state")
+                if not isinstance(saved, dict) or Path(str(saved.get("workspace", ""))).resolve() != root:
+                    return base
+                saved_run = saved.get("run_state")
+                if not isinstance(saved_run, dict) or saved_run.get("status") == "running":
+                    return base
+                status = saved_run.get("status")
+                if status not in {"completed", "failed", "cancelled", "stopped", "interrupted", "restored", "recovered"}:
+                    return base
+                criteria: list[str] = []
+                for row in reversed(saved.get("activity_events", [])):
+                    if isinstance(row, dict) and row.get("kind") == "plan" and isinstance(row.get("acceptanceCriteria"), list):
+                        criteria = [item for item in row["acceptanceCriteria"] if isinstance(item, str)]
+                        break
+                base.update({
+                    "sessionId": session_id, "workspace": str(root), "turnId": saved_run.get("turn_id"),
+                    "activityRevision": len(saved.get("activity_events", [])), "textRevision": 0,
+                    "runState": {key: copy.deepcopy(saved_run.get(key)) for key in (
+                        "status", "started_at", "phase", "request_first_token_seconds", "workflow_outcome", "verification",
+                    )},
+                    "activities": copy.deepcopy(saved.get("activity_events", [])),
+                    "plan": copy.deepcopy(saved.get("plan", [])), "acceptanceCriteria": criteria,
+                    "savedTranscript": {"messages": copy.deepcopy(saved.get("messages", [])),
+                                        "turns": copy.deepcopy(saved.get("turns", [])),
+                                        "usage_events": copy.deepcopy(saved.get("usage_events", []))},
+                })
+                return base
+
+            with self.active_lock:
+                controller = self.active
+            if not controller:
+                return inactive_snapshot()
+            state = controller.get("session")
+            if not isinstance(state, dict) or session_id != str(state.get("session_id", "")):
+                return inactive_snapshot()
+            try:
+                active_workspace = Path(controller.get("source", "")).resolve(strict=True)
+                requested_root = Path(requested_workspace).resolve(strict=True) if requested_workspace else None
+            except (OSError, RuntimeError):
+                return inactive_snapshot()
+            if requested_root is None or requested_root != active_workspace:
+                return inactive_snapshot()
+            with controller["checkpoint_lock"]:
+                run_state = state.get("run_state")
+                if not isinstance(run_state, dict):
+                    return {"active": False, "sessionId": session_id}
+                after_activity_revision = message.get("afterActivityRevision", 0)
+                after_activity_revision = after_activity_revision if isinstance(after_activity_revision, int) and not isinstance(after_activity_revision, bool) else 0
+                after_text_revision = message.get("afterTextRevision", 0)
+                after_text_revision = after_text_revision if isinstance(after_text_revision, int) and not isinstance(after_text_revision, bool) else 0
+                activity_revision = int(controller.get("activity_revision", 0))
+                text_revision = int(controller.get("text_revision", 0))
+                snapshot = {
+                    "active": run_state.get("status") == "running",
+                    "sessionId": session_id,
+                    "turnId": controller.get("turn_id"),
+                    "workspace": str(active_workspace),
+                    "activityRevision": activity_revision,
+                    "textRevision": text_revision,
+                    "runState": {key: copy.deepcopy(run_state.get(key)) for key in (
+                        "status", "started_at", "phase", "request_first_token_seconds",
+                        "estimated_input_tokens", "partial_content", "partial_thinking",
+                        "active_operation", "active_operations", "uncertain_operation",
+                    )},
+                }
+                if after_activity_revision < activity_revision:
+                    snapshot["activities"] = copy.deepcopy(state.get("activity_events", []))
+                    snapshot["plan"] = copy.deepcopy(state.get("plan", []))
+                    snapshot["acceptanceCriteria"] = copy.deepcopy(state.get("acceptance_criteria", []))
+                if after_text_revision < text_revision:
+                    snapshot["liveAssistant"] = {
+                        "content": str(controller.get("live_content", "")),
+                        "thinking": str(controller.get("live_thinking", "")),
+                    }
+                return snapshot
         if command == "session_queue_prompt":
             prompt = message.get("prompt")
             if not isinstance(prompt, str):
@@ -1500,6 +1619,7 @@ class AgentService:
         controller = {"cancel": threading.Event(), "engine": None, "pending": {}, "pending_questions": {}, "session": turn.session, "source": source, "working": working,
                      "turn_id": turn_id, "checkpoint_lock": threading.RLock(), "last_checkpoint": time.monotonic(),
                      "last_journal_flush": time.monotonic(), "journal_pending": [], "current_operation_id": None,
+                     "activity_revision": 0, "text_revision": 0, "live_content": "", "live_thinking": "",
                      "stop_after_operation": False, "accepting_queue": True, "approval_mode": approval_mode}
         with self.active_lock:
             self.active = controller
