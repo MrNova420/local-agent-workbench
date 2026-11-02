@@ -1,5 +1,10 @@
 # Visible Acceptance Log
 
+## 2026-11-02 MCP scheduler cleanup and paired source update
+
+- Engine `6c3a3f7a2a6ced364fe34aa0a25a8b169a269923` closes async MCP coroutines if event-loop startup or scheduling fails, preventing an unawaited coroutine leak; cleanup still attempts every client and transport when an exit raises.
+- Focused engine MCP checks: **9 passed**; app reconnect/adapter checks: **3 passed**; Python compile and engine diff check passed. App source pin and exact build pairing are being verified. Broad suites, packaging, visible workflow acceptance, and the final Flint run remain queued. No model was started and no inference settings changed.
+
 ## 2026-11-02 progressive project file scan activity
 
 - Engine `48e6218730effd253d94deee0cd4bafff39d4280` emits sampled progress for `list_files` and `search_files` without changing the result/paging contract or adding a scan cap. The sidecar updates the same operation activity record and journals/replays its latest scan counters. Chat and Activity Trace render the progress inline on the operation row, including after session restore.
