@@ -707,6 +707,134 @@ def test_live_snapshot_text_revisions_reset_request_buffers_and_reconcile_late_s
     assert emitted[-1]["textRevision"] == second["textRevision"] + 1
 
 
+def test_event_persistence_does_not_hold_checkpoint_lock_while_mirror_is_slow(service, tmp_path, monkeypatch):
+    workspace = tmp_path / "slow-mirror-project"
+    workspace.mkdir()
+    session = service.sessions.create(str(workspace), "model-a:latest", 65536)
+    session["run_state"] = {"status": "running", "turn_id": "turn-slow-mirror", "started_at": time.time(),
+                            "safe_messages": [], "partial_content": "", "partial_thinking": "",
+                            "active_operations": {}}
+    checkpoint_lock = threading.RLock()
+    controller = {"session": session, "source": workspace, "turn_id": "turn-slow-mirror",
+                  "checkpoint_lock": checkpoint_lock, "last_checkpoint": time.monotonic() - 10,
+                  "last_journal_flush": time.monotonic(), "journal_pending": [],
+                  "activity_revision": 0, "text_revision": 0, "live_content": "", "live_thinking": ""}
+    service.active = controller
+    mirror_started = threading.Event()
+    release_mirror = threading.Event()
+    original_append = service.sessions.append_events
+
+    def slow_append(*args, **kwargs):
+        mirror_started.set()
+        assert release_mirror.wait(2)
+        return original_append(*args, **kwargs)
+
+    monkeypatch.setattr(service.sessions, "append_events", slow_append)
+    monkeypatch.setattr(service, "emit", lambda _event: None)
+    turn = SimpleNamespace(workspace=workspace)
+    publish = threading.Thread(target=service._publish_run_event, args=(controller, turn, {
+        "type": "tool_start", "operationId": "operation-1", "name": "read_file",
+        "arguments": {"path": "src/app.ts"}, "startedAt": time.time(),
+    }))
+    publish.start()
+    try:
+        assert mirror_started.wait(2)
+        assert checkpoint_lock.acquire(blocking=False), "slow mirrored persistence held the task checkpoint lock"
+        checkpoint_lock.release()
+    finally:
+        release_mirror.set()
+        publish.join(2)
+
+    assert not publish.is_alive()
+    saved = service.sessions.load(session["session_id"])
+    assert any(row.get("operationId") == "operation-1" for row in saved["activity_events"])
+
+
+def test_snapshot_persistence_does_not_hold_checkpoint_lock_while_mirror_is_slow(service, tmp_path, monkeypatch):
+    workspace = tmp_path / "slow-snapshot-project"
+    workspace.mkdir()
+    session = service.sessions.create(str(workspace), "model-a:latest", 65536)
+    session["run_state"] = {"status": "running", "turn_id": "turn-slow-snapshot", "started_at": time.time(),
+                            "safe_messages": [], "partial_content": "", "partial_thinking": "",
+                            "active_operations": []}
+    checkpoint_lock = threading.RLock()
+    controller = {"session": session, "source": workspace, "turn_id": "turn-slow-snapshot",
+                  "checkpoint_lock": checkpoint_lock, "last_checkpoint": time.monotonic() - 10,
+                  "last_journal_flush": time.monotonic(), "journal_pending": [],
+                  "activity_revision": 0, "text_revision": 0, "live_content": "", "live_thinking": ""}
+    service.active = controller
+    save_started = threading.Event()
+    release_save = threading.Event()
+    original_save = service.sessions.save
+
+    def slow_save(state):
+        save_started.set()
+        assert release_save.wait(2)
+        return original_save(state)
+
+    monkeypatch.setattr(service.sessions, "save", slow_save)
+    monkeypatch.setattr(service, "emit", lambda _event: None)
+    turn = SimpleNamespace(workspace=workspace)
+    publish = threading.Thread(target=service._publish_run_event, args=(controller, turn, {
+        "type": "complete", "workflowOutcome": "implemented",
+    }))
+    publish.start()
+    try:
+        assert save_started.wait(2)
+        assert checkpoint_lock.acquire(blocking=False), "slow mirrored snapshot held the task checkpoint lock"
+        checkpoint_lock.release()
+    finally:
+        release_save.set()
+        publish.join(2)
+
+    assert not publish.is_alive()
+    saved = service.sessions.load(session["session_id"])
+    assert saved["run_state"]["workflow_outcome"] == "implemented"
+
+
+def test_active_session_saves_cannot_overwrite_a_newer_snapshot(service, tmp_path, monkeypatch):
+    workspace = tmp_path / "ordered-snapshot-project"
+    workspace.mkdir()
+    session = service.sessions.create(str(workspace), "model-a:latest", 65536)
+    controller = {"session": session, "checkpoint_lock": threading.RLock()}
+    first_save_started = threading.Event()
+    release_first_save = threading.Event()
+    second_save_started = threading.Event()
+    original_save = service.sessions.save
+
+    def ordered_save(snapshot):
+        content = snapshot.get("messages", [{}])[0].get("content") if snapshot.get("messages") else ""
+        if content == "revision-1":
+            first_save_started.set()
+            assert release_first_save.wait(2)
+        elif content == "revision-2":
+            second_save_started.set()
+        return original_save(snapshot)
+
+    monkeypatch.setattr(service.sessions, "save", ordered_save)
+    session["messages"] = [{"role": "assistant", "content": "revision-1"}]
+    first = threading.Thread(target=service._save_active_session, args=(controller,))
+    first.start()
+    assert first_save_started.wait(2)
+
+    with controller["checkpoint_lock"]:
+        session["messages"] = [{"role": "assistant", "content": "revision-2"}]
+    second = threading.Thread(target=service._save_active_session, args=(controller,))
+    second.start()
+    deadline = time.monotonic() + 2
+    while controller.get("session_snapshot_revision", 0) < 2 and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert controller.get("session_snapshot_revision") == 2
+    release_first_save.set()
+    first.join(2)
+    second.join(2)
+
+    assert not first.is_alive() and not second.is_alive()
+    assert second_save_started.is_set()
+    saved = service.sessions.load(session["session_id"])
+    assert saved["messages"][-1]["content"] == "revision-2"
+
+
 def test_ollama_preload_uses_requested_context_and_keep_alive_without_starting_inference(service):
     events = []
     service.emit = events.append

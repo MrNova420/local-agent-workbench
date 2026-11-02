@@ -198,6 +198,22 @@ class AgentService:
         self.active: dict[str, Any] | None = None
         self.output_ids: queue.SimpleQueue[str] = queue.SimpleQueue()
 
+    def _save_active_session(self, controller: dict[str, Any]) -> dict[str, Any]:
+        """Persist an immutable active-session snapshot without blocking its state lock."""
+        with controller["checkpoint_lock"]:
+            controller["session_snapshot_revision"] = int(controller.get("session_snapshot_revision", 0)) + 1
+            revision = controller["session_snapshot_revision"]
+            snapshot = copy.deepcopy(controller["session"])
+        with controller.setdefault("session_save_lock", threading.Lock()):
+            if revision < int(controller.get("session_saved_revision", 0)):
+                return copy.deepcopy(controller.get("session_save_result", {
+                    "app_saved": False, "project_saved": False,
+                    "error": "A newer session snapshot superseded this checkpoint."}))
+            saved = self.sessions.save(snapshot)
+            controller["session_saved_revision"] = revision
+            controller["session_save_result"] = copy.deepcopy(saved)
+            return saved
+
     def _publish_run_event(self, controller: dict[str, Any], turn: TurnContext, event: dict[str, Any]) -> None:
         state = controller["session"]
         run_state = state.get("run_state")
@@ -206,7 +222,8 @@ class AgentService:
         event_kind = event.get("type")
         force_journal = event_kind in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "prompt_manifest", "inference_settings", "request_dispatched", "request_headers", "request_complete", "request_error", "steering_interrupted", "approval_request", "question_request", "question_answered", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
         force_snapshot = event_kind in {"context_compacted", "request_error", "steering_interrupted", "approval_request", "question_request", "question_answered", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
-        with controller["checkpoint_lock"]:
+        checkpoint_lock = controller["checkpoint_lock"]
+        with checkpoint_lock:
             steering_interrupt = controller.get("steering_interrupt")
             if event_kind == "phase" and event.get("phase") == "waiting":
                 controller["inference_active"] = True
@@ -624,17 +641,30 @@ class AgentService:
             flush_journal = force_journal or now - controller["last_journal_flush"] >= 0.5
             if flush_journal and pending:
                 journal_rows = pending[:]
-                journal_result = self.sessions.append_events(state["session_id"], str(state["workspace"]), journal_rows)
+                # Detach the batch before dropping the state lock. New events can
+                # continue to update the live checkpoint while either mirror is slow.
+                pending[:] = []
+                journal_lock = controller.setdefault("journal_flush_lock", threading.Lock())
+                checkpoint_lock.release()
+                try:
+                    with journal_lock:
+                        journal_result = self.sessions.append_events(state["session_id"], str(state["workspace"]), journal_rows)
+                except Exception as exc:
+                    journal_result = {"app_saved": False, "project_saved": False,
+                                      "error": f"{type(exc).__name__}: {exc}"}
+                finally:
+                    checkpoint_lock.acquire()
                 controller["last_journal_flush"] = now
-                for row in pending:
+                for row in journal_rows:
                     saved_to = set(row.get("_journal_saved_to", []))
                     if journal_result["app_saved"]:
                         saved_to.add("app")
                     if journal_result["project_saved"]:
                         saved_to.add("project")
                     row["_journal_saved_to"] = sorted(saved_to)
-                fully_mirrored = [row for row in pending if {"app", "project"}.issubset(set(row.get("_journal_saved_to", [])))]
-                pending[:] = [row for row in pending if row not in fully_mirrored]
+                fully_mirrored = [row for row in journal_rows if {"app", "project"}.issubset(set(row.get("_journal_saved_to", [])))]
+                pending.extend(row for row in journal_rows if row not in fully_mirrored)
+                pending.sort(key=lambda row: int(row.get("_journal_recorded_at_ns", 0)))
                 if fully_mirrored:
                     state["journal_cursor_ns"] = max(int(state.get("journal_cursor_ns", 0)),
                                                       max(int(row.get("_journal_recorded_at_ns", 0)) for row in fully_mirrored))
@@ -649,7 +679,11 @@ class AgentService:
 
             if force_snapshot or now - controller["last_checkpoint"] >= 8.0:
                 controller["last_checkpoint"] = now
-                saved = self.sessions.save(state)
+                checkpoint_lock.release()
+                try:
+                    saved = self._save_active_session(controller)
+                finally:
+                    checkpoint_lock.acquire()
                 if not (saved["app_saved"] and saved["project_saved"]):
                     self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"], "error": saved["error"] or "Session storage is unavailable."})
 
@@ -764,7 +798,7 @@ class AgentService:
                 state["queued_prompts"] = prompts
                 result = self._mutate_queue(prompts, add_prompt=add_prompt, remove_id=remove_id)
                 state["queued_prompts"] = result["queuedPrompts"]
-                saved = self.sessions.save(state)
+            saved = self._save_active_session(controller)
         else:
             if not self.run_lock.acquire(blocking=False):
                 raise RuntimeError("A run is starting; retry the follow-up after it is ready.")
@@ -815,6 +849,9 @@ class AgentService:
             run_state = state.get("run_state")
             if isinstance(run_state, dict):
                 run_state["pending_steers"] = copy.deepcopy(pending)
+            # Keep this transaction under the checkpoint lock: the model thread
+            # consumes pending steering from this shared state, so it must not
+            # observe a steering update before at least one durable save exists.
             saved = self.sessions.save(state)
             if not (saved.get("app_saved") or saved.get("project_saved")):
                 pending.pop()
@@ -1861,11 +1898,11 @@ class AgentService:
                                     "name": name, "arguments": copy.deepcopy(args), "status": "running", "timestamp": time.time(), "output": {}, "result": "", "affectedFiles": []}
                         rows.append(activity)
                     activity.update(approvalStatus="waiting", approvalMode=turn.approval_mode)
-                    saved = self.sessions.save(state)
-                    if not (saved["app_saved"] and saved["project_saved"]):
-                        self.emit({"type": "session_mirror_error", "sessionId": state["session_id"],
-                                   "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"],
-                                   "error": saved["error"] or "Approval state could not be mirrored."})
+                saved = self._save_active_session(controller)
+                if not (saved["app_saved"] and saved["project_saved"]):
+                    self.emit({"type": "session_mirror_error", "sessionId": state["session_id"],
+                               "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"],
+                               "error": saved["error"] or "Approval state could not be mirrored."})
                 self.emit({"type": "activity_event", "activity": copy.deepcopy(activity), "activityPhase": "start", "sessionId": state["session_id"], "turnId": controller["turn_id"]})
                 self.emit({"type": "approval_request", "actionId": action_id, "operationId": operation_id, "turnId": controller["turn_id"], "name": name,
                            "arguments": args, "workspace": str(turn.workspace),
@@ -1879,11 +1916,11 @@ class AgentService:
                 with controller["checkpoint_lock"]:
                     activity["approvalStatus"] = approval_status
                     activity["completedAt"] = time.time()
-                    saved = self.sessions.save(state)
-                    if not (saved["app_saved"] and saved["project_saved"]):
-                        self.emit({"type": "session_mirror_error", "sessionId": state["session_id"],
-                                   "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"],
-                                   "error": saved["error"] or "Approval decision could not be mirrored."})
+                saved = self._save_active_session(controller)
+                if not (saved["app_saved"] and saved["project_saved"]):
+                    self.emit({"type": "session_mirror_error", "sessionId": state["session_id"],
+                               "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"],
+                               "error": saved["error"] or "Approval decision could not be mirrored."})
                 self.emit({"type": "activity_event", "activity": copy.deepcopy(activity), "sessionId": state["session_id"], "turnId": controller["turn_id"]})
                 return bool(result["approved"])
 
