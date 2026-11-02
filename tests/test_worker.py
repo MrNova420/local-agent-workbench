@@ -1489,7 +1489,8 @@ def test_incomplete_provider_stream_preserves_partial_reasoning_and_request_fail
             self.event({"type": "request_error", "provider": "ollama", "request_index": 1,
                         "phase": "streaming_response", "cancelled": False,
                         "error": "Ollama stream closed without its final done=true record."})
-            self.event({"type": "error", "error": "Ollama stream closed without its final done=true record."})
+            self.event({"type": "error", "error": "Ollama stream closed without its final done=true record.",
+                        "partial_response_saved": True})
             return messages
 
         def cancel(self):
@@ -1510,6 +1511,7 @@ def test_incomplete_provider_stream_preserves_partial_reasoning_and_request_fail
 
     saved = service.sessions.load(session_id)
     assert saved["run_state"]["status"] == "failed"
+    assert saved["run_state"]["partial_response_saved"] is True
     assert saved["last_error"]["message"].endswith("done=true record.")
     assert any(row.get("role") == "assistant" and row.get("thinking") == "partial reasoning before disconnect"
                for row in saved["messages"])

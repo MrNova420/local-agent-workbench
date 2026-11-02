@@ -436,7 +436,7 @@ class MirroredSessionStoreTests(unittest.TestCase):
             store.save(state)
             store.append_events(state["session_id"], str(root), [
                 {"_journal_event_id": "partial", "_journal_recorded_at_ns": 10, "type": "text", "turnId": "turn-error", "text": "A partial answer"},
-                {"_journal_event_id": "failed", "_journal_recorded_at_ns": 20, "type": "error", "turnId": "turn-error", "error": "connection lost", "workflowOutcome": "response_missing"},
+                {"_journal_event_id": "failed", "_journal_recorded_at_ns": 20, "type": "error", "turnId": "turn-error", "error": "connection lost", "workflowOutcome": "response_missing", "partial_response_saved": True},
             ])
 
             recovered = store.load(state["session_id"], str(root))["state"]
@@ -444,6 +444,8 @@ class MirroredSessionStoreTests(unittest.TestCase):
             self.assertEqual(recovered["run_state"]["status"], "failed")
             self.assertEqual(recovered["messages"][-1]["content"], "A partial answer")
             self.assertEqual(recovered["messages"][-1]["thinking"], "Need continue")
+            self.assertTrue(recovered["messages"][-1]["partial_response"])
+            self.assertTrue(recovered["run_state"]["partial_response_saved"])
             self.assertEqual(recovered["last_error"]["message"], "connection lost")
             self.assertEqual(recovered["task_checkpoint"]["current"]["status"], "failed")
             self.assertIn("connection lost", recovered["task_checkpoint"]["current"]["blockers"])

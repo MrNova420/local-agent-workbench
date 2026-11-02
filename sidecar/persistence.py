@@ -396,8 +396,15 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any], *,
             last = safe[-1] if safe and isinstance(safe[-1], dict) else {}
             if last.get("role") != "assistant" or any(last.get(key, "") != value for key, value in partial.items()):
                 safe.append({"role": "assistant", **partial})
+            if kind == "error" and event.get("partial_response_saved") is True:
+                for message in reversed(safe):
+                    if isinstance(message, dict) and message.get("role") == "assistant":
+                        message["partial_response"] = True
+                        break
             run["safe_messages"] = safe
             state["messages"] = safe
+        if kind == "error":
+            run["partial_response_saved"] = event.get("partial_response_saved") is True
         run["partial_content"] = ""
         run["partial_thinking"] = ""
         turn_id = run.get("turn_id")

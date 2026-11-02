@@ -5,6 +5,7 @@ export type PersistedTranscriptRow = {
   turn_id?: string;
   steering_id?: string;
   steering_status?: 'pending' | 'delivered' | 'undelivered';
+  partial_response?: boolean;
 };
 
 export type PersistedTranscriptTurn = { turn_id?: string; transcript_saved?: boolean };
@@ -16,6 +17,7 @@ export type TranscriptMessage = {
   turnId?: string;
   steeringId?: string;
   steeringStatus?: 'pending' | 'delivered' | 'undelivered';
+  recoveredPartial?: boolean;
 };
 
 export function appendTranscriptSegment(previous: string, chunk: string, separatedByTool: boolean): string {
@@ -41,6 +43,7 @@ export function restoreTranscriptMessages(rows: PersistedTranscriptRow[], turns:
       turnId,
       ...(steeringId ? { steeringId } : {}),
       ...(steeringStatus ? { steeringStatus } : {}),
+      ...(row.role === 'assistant' && row.partial_response === true ? { recoveredPartial: true } : {}),
     });
   }
   return restored;

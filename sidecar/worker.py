@@ -348,6 +348,8 @@ class AgentService:
                          "stopped_after_operation": "stopped"}[str(event.get("type"))])
                     if isinstance(event.get("verification"), dict):
                         run_state["verification"] = copy.deepcopy(event["verification"])
+                    if event.get("type") == "error":
+                        run_state["partial_response_saved"] = event.get("partial_response_saved") is True
 
             kind = event.get("type")
             activity: dict[str, Any] | None = None

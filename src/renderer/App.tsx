@@ -810,7 +810,12 @@ export default function App() {
         setWorkflowOutcome(typeof event.workflowOutcome === 'string' ? event.workflowOutcome : 'failed');
         setVerificationEvidence(readVerificationEvidence(event.verification));
         setApproval(null);
-        setRunning(false); setPhase((current) => nextRunPhase(current, event)); setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
+        setRunning(false); setPhase((current) => nextRunPhase(current, event)); setMessages((current) => {
+          let lastAssistant = -1;
+          for (let index = current.length - 1; index >= 0; index -= 1) if (current[index].role === 'assistant') { lastAssistant = index; break; }
+          return current.map((row, index) => ({ ...row, streaming: false,
+            ...(event.partial_response_saved === true && index === lastAssistant ? { recoveredPartial: true } : {}) }));
+        });
         setTrace((current) => [...current, { id: crypto.randomUUID(), title: 'Run failed', description: String(event.error || 'The task failed.'), kind: 'error', time: Date.now() }]);
         setRunMetrics((current) => endGeneration(current));
         setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);

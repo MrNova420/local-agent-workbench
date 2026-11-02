@@ -48,6 +48,15 @@ describe('resumed transcript rendering', () => {
     expect(markup).toContain('class="hljs-keyword"');
   });
 
+  it('restores provider-disconnected assistant text with an explicit partial marker', () => {
+    const restored = restoreTranscriptMessages([
+      { role: 'user', content: 'Implement this feature' },
+      { role: 'assistant', content: 'I inspected the files.', thinking: 'Checking current behavior', partial_response: true },
+    ]);
+
+    expect(restored[1]).toMatchObject({ content: 'I inspected the files.', thinking: 'Checking current behavior', recoveredPartial: true });
+  });
+
   it('does not shift restored activity links after a canceled turn without a transcript prompt', () => {
     const restored = restoreTranscriptMessages([
       { role: 'user', content: 'First saved task' },
