@@ -910,7 +910,7 @@ Same-task steering state and transcript follow behavior received another focused
 ### 2026-11-02 Home hero coordinate privacy correction
 
 - A fixed geographic coordinate string was found in the Home hero. It was introduced in the initial scaffold commit `65b012086863252fce0d7df37af2bbb6b8ae2dda`; that commit and the beta.3 tag contain it. The current public `origin/main` also contains that commit. The scaffold commit has no rationale for choosing the location. Source inspection found no geolocation API or runtime location lookup; the value was literal UI text.
-- Removed the coordinate text and its CSS rule from current source. Added `tests/location-privacy.test.ts`, which fails if a coordinate or geolocation access is added to the renderer; it failed before removal and passed afterward (1 test).
+- Removed the coordinate text and its CSS rule from current source. Removed the historical Home-orbit screenshot and README link because the image itself contained the text. Added `tests/location-privacy.test.ts`, which fails if a coordinate or geolocation access is added to the renderer or the withdrawn screenshot is reintroduced; both cases failed before cleanup and pass now (2 tests).
 - Public Git history and beta.3 artifacts have not yet been rewritten or replaced. This correction does not make the old commit or any already-published package inaccessible. A clean future release and an approved public-history scrub are still required before calling the exposure removed from every public surface. Downloaded copies cannot be recalled.
 
 \r\n
