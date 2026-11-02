@@ -1079,7 +1079,7 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 ### 2026-11-02 renderer active-session reattachment state
 
 - Reattachment now carries an ephemeral `active_in_process` marker, restores the real waiting/reasoning/generating phase, and resets per-session live-snapshot cursors before polling. This lets a renderer reattach to current streamed text and activity instead of showing Ready or skipping snapshots because an earlier session had a higher cursor. `run_started`/`run_idle` update the app-wide running indicator even when transcript events for that session are correctly filtered from another project's chat.
-- Focused `tests/run-state.test.ts`: **24 passed**; TypeScript typecheck passed; active-session sidecar reattachment regression passed (**1**). Python compile and `git diff --check` pass. Full renderer/sidecar suites and visible packaged hide-switch-return acceptance remain open; no model or inference settings were changed.
+- Focused `tests/run-state.test.ts` plus `tests/transcript-rendering.test.tsx`: **31 passed**; saved headings, lists, and syntax-highlighted code use the normal Markdown renderer after restore. TypeScript typecheck passed; active-session sidecar reattachment regression passed (**1**) and full `tests/test_worker.py` passed (**77**). Python compile and `git diff --check` pass. Full renderer/sidecar suites and visible packaged hide-switch-return acceptance remain open; no model or inference settings were changed.
 
 ### 2026-11-02 Auto plan-to-implementation and terminal behavior
 
