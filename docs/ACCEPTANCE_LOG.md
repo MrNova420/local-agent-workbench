@@ -373,3 +373,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 - Added a queued sidecar regression for cancellation before the worker thread begins. It checks the persisted terminal `cancelled` run state, the unsaved-transcript turn marker, and the terminal/idle events; it was not run.
 - Added a queued renderer regression that verifies an early canceled turn cannot shift restored activity links; existing turn records without the new marker retain legacy mapping behavior. It was not run.
 - Documented patch releases as monotonically increasing beta tags with the full Squirrel asset set. Release tags automatically publish and therefore remain reserved for a verified build; no tag was created for this development batch.
+
+### 2026-11-02 public home-hero privacy correction
+
+The fixed decorative location label has been removed from Home and the historical image containing it has been removed from the repository. A regression test checks that location data is not embedded in the hero. Public beta.3 artifacts are being withdrawn pending a clean release; no geolocation API was found in the application source.
+
