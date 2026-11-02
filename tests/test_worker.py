@@ -1150,6 +1150,30 @@ def test_harness_profile_toggle_is_saved_in_both_session_copies(service, tmp_pat
     assert project_copy["harness_profile"] == "small-model"
 
 
+def test_live_session_view_settings_do_not_overwrite_unsaved_run_progress(service, tmp_path):
+    project = tmp_path / "active-session-view-settings"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 8192)
+    state["messages"].append({"role": "assistant", "content": "Streaming progress is in memory."})
+    state["run_state"] = {"status": "running", "turn_id": "turn-live", "partial_content": "new partial output"}
+    controller = {"session": state, "checkpoint_lock": threading.RLock(), "turn_id": "turn-live"}
+    service.active = controller
+
+    activity_result = service.handle("session_activity_mode", {
+        "sessionId": state["session_id"], "activityMode": "sidebar",
+    })
+    service.handle("session_harness_profile", {
+        "sessionId": state["session_id"], "harnessProfile": "small-model",
+    })
+
+    saved = service.sessions.load(state["session_id"], str(project))["state"]
+    assert activity_result["app_saved"] and activity_result["project_saved"]
+    assert saved["activity_mode"] == "sidebar"
+    assert saved["harness_profile"] == "small-model"
+    assert saved["messages"][-1]["content"] == "Streaming progress is in memory."
+    assert saved["run_state"]["partial_content"] == "new partial output"
+
+
 def test_interrupted_recovery_retry_warns_and_restore_does_not_run(service, tmp_path):
     project = tmp_path / "recovery-choice-project"
     project.mkdir()

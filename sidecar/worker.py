@@ -1218,7 +1218,14 @@ class AgentService:
             mode = str(message.get("activityMode", ""))
             if mode not in {"compact", "sidebar", "inline"}:
                 raise ValueError("Invalid activity display mode.")
-            state = self._load_session_state(str(message["sessionId"]))
+            session_id = str(message["sessionId"])
+            with self.active_lock:
+                controller = self.active if self.active and self.active["session"].get("session_id") == session_id else None
+            if controller is not None:
+                with controller["checkpoint_lock"]:
+                    controller["session"]["activity_mode"] = mode
+                return self._save_active_session(controller)
+            state = self._load_session_state(session_id)
             state["activity_mode"] = mode
             return self.sessions.save(state)
         if command == "session_run_settings":
@@ -1279,7 +1286,16 @@ class AgentService:
             profile = str(message.get("harnessProfile", "standard"))
             if profile not in {"standard", "small-model"}:
                 raise ValueError("Invalid harness workflow profile.")
-            state = self._load_session_state(str(message["sessionId"]))
+            session_id = str(message["sessionId"])
+            with self.active_lock:
+                controller = self.active if self.active and self.active["session"].get("session_id") == session_id else None
+            if controller is not None:
+                state = controller["session"]
+                with controller["checkpoint_lock"]:
+                    state["harness_profile"] = profile
+                state["persistence"] = self._save_active_session(controller)
+                return state
+            state = self._load_session_state(session_id)
             state["harness_profile"] = profile
             state["persistence"] = self.sessions.save(state)
             return state
