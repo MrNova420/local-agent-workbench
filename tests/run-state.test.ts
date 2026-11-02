@@ -69,6 +69,7 @@ describe('run status transitions', () => {
     expect(nextRunPhase('Waiting for response headers', { type: 'request_headers' })).toBe('Waiting for first token');
     expect(nextRunPhase('Generating', { type: 'request_complete' })).toBe('Processing response');
     expect(nextRunPhase('Waiting for response headers', { type: 'request_error', cancelled: true })).toBe('Cancelling request');
+    expect(nextRunPhase('Reasoning', { type: 'request_error', cancelled: true, interrupted_by_steering: true })).toBe('Applying your update');
     expect(runStepProgress('Processing response', true)).toBe(2);
   });
 

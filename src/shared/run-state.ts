@@ -66,7 +66,7 @@ export function nextRunPhase(previous: string, event: WorkerEvent): string {
   if (event.type === 'request_dispatched') return 'Waiting for response headers';
   if (event.type === 'request_headers') return 'Waiting for first token';
   if (event.type === 'request_complete') return 'Processing response';
-  if (event.type === 'request_error') return event.cancelled ? 'Cancelling request' : 'Request failed';
+  if (event.type === 'request_error') return event.interrupted_by_steering ? 'Applying your update' : event.cancelled ? 'Cancelling request' : 'Request failed';
   if (event.type === 'generation_complete') return 'Finishing turn';
   if (event.type === 'complete') return 'Turn complete';
   if (event.type === 'cancelled') return 'Cancelled';

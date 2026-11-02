@@ -225,6 +225,23 @@ class MirroredSessionStoreTests(unittest.TestCase):
         self.assertEqual(prompt["providerRequest"]["header_wait_seconds"], 1.25)
         self.assertEqual(prompt["providerRequest"]["provider_done_reason"], "length")
 
+    def test_journal_recovery_keeps_same_task_redirect_distinct_from_user_cancel(self):
+        state = {
+            "session_id": "s-steering", "workspace": "C:/project",
+            "run_state": {"turn_id": "turn-steering"}, "activity_events": [],
+        }
+        _replay_run_event(state, {"type": "prompt_manifest", "activityId": "turn-steering-request-0",
+                                  "turnId": "turn-steering", "request_index": 0,
+                                  "messages": [], "configured_context": 65536})
+        _replay_run_event(state, {"type": "request_dispatched", "turnId": "turn-steering", "request_index": 0})
+        _replay_run_event(state, {"type": "request_error", "turnId": "turn-steering", "request_index": 0,
+                                  "cancelled": True, "interrupted_by_steering": True,
+                                  "phase": "stream", "error": "redirected by user"})
+
+        prompt = state["activity_events"][0]
+        self.assertEqual(prompt["status"], "interrupted_by_steering")
+        self.assertEqual(prompt["providerRequest"]["dispatch_status"], "interrupted_by_steering")
+
     def test_new_task_plan_snapshot_clears_prior_acceptance_criteria_on_replay(self):
         state = {
             "session_id": "s1", "workspace": "C:/project", "plan": [{"title": "Old"}],

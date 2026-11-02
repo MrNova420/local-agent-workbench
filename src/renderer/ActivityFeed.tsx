@@ -94,10 +94,11 @@ function PromptManifestDetails({ manifest, providerRequest, providerUsage }: { m
     response_stream_ended: `Response stream ended${providerRequest?.provider_done === true ? ' · provider marked done' : providerRequest?.provider_done === false ? ' · provider did not mark done' : ''}`,
     request_failed: `Request failed${providerRequest?.failure_phase ? ` during ${String(providerRequest.failure_phase).replaceAll('_', ' ')}` : ''}: ${String(providerRequest?.request_error || 'no error detail')}`,
     cancelled_during_request: `Cancelled${providerRequest?.failure_phase ? ` during ${String(providerRequest.failure_phase).replaceAll('_', ' ')}` : ''}`,
+    interrupted_by_steering: 'Response redirected by your update. The partial output was saved and the same task continued.',
   };
   const missingUsageText = dispatchStatus === 'prepared' || dispatchStatus === 'awaiting_response_headers'
     ? 'Provider usage is not available yet because the response has not completed.'
-    : dispatchStatus === 'request_failed' || dispatchStatus === 'cancelled_during_request'
+    : dispatchStatus === 'request_failed' || dispatchStatus === 'cancelled_during_request' || dispatchStatus === 'interrupted_by_steering'
       ? 'The request ended before provider usage counters were returned.'
       : dispatchStatus === 'response_stream_ended'
         ? 'This runtime did not return usage counters for the completed request.'

@@ -1,5 +1,11 @@
 # Visible Acceptance Log
 
+## 2026-11-02 same-task steering recovery correction
+
+- App `dfa079f` pins engine `647df9f9dcc96a894ec773c79e7dc31c92c0862f`. The update is persisted before active provider inference is interrupted; received partial reasoning/text is retained, incomplete tool arguments are excluded, and the existing task resumes. User cancellation, provider failure, and same-task redirection are separate outcomes.
+- Review found journal replay was restoring an interrupted-by-steering request as a user cancellation. Fixed the replay reducer and activity label; added focused recovery and run-phase regressions.
+- Verification: persistence recovery **1 passed**; renderer run-state **22 passed**; worker steering integration **3 passed**; TypeScript typecheck passed. The earlier steering engine/transcript/build-config checks are recorded in Product Backlog. Full suites, crash/fault matrix, packaged visible acceptance, and Flint live acceptance remain queued. No model was started and no inference settings were changed.
+
 ## 2026-11-01 full harness audit: source stabilization pass
 
 - Paired engine commit `f3809e82ed6266e25ac50722535d1d9bb3030ffe`; app `core-revision.txt` pins that exact commit.

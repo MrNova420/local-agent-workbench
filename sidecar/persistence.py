@@ -163,7 +163,9 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any], *,
                                         provider_done=event.get("provider_done"),
                                         provider_done_reason=event.get("provider_done_reason"))
             else:
-                prompt["status"] = "cancelled_during_request" if event.get("cancelled") else "request_failed"
+                prompt["status"] = ("interrupted_by_steering" if event.get("interrupted_by_steering")
+                                     else "cancelled_during_request" if event.get("cancelled")
+                                     else "request_failed")
                 provider_request.update(dispatch_status=prompt["status"], failure_phase=event.get("phase"),
                                         request_error=event.get("error"))
         if kind == "request_error":
