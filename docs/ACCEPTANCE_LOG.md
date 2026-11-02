@@ -813,3 +813,8 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 
 - The engine continuation now supplies the saved next open plan item to the model and asks it to execute that step with a suitable structured tool, avoiding generic “continue implementation” guidance. Shared prompt guidance also asks for the first useful operation after adequate scoping. It does not alter reasoning, context/output, approval, or runtime settings.
 - The app pin now targets engine `ff09ab994e3d4b154f21c65fd297bb59ebdf71ee` so the next sidecar build includes this source. New mocked regressions are queued and have not been run. No package, app UI, or model request was started.
+
+## 2026-11-02 Automatic plan-to-build transition
+
+- The source audit confirmed that `task_mode=plan` in Automatic intent did not remove write tools, but the saved mode could remain “plan” until the model changed it. The engine now promotes a non-empty agent-authored plan to `implement` in the same state update. This makes automatic plan-to-build transition host-owned while leaving the plan expandable and honoring workspace access/approval. Explicit Plan-only remains read-only.
+- Engine commit `04272e7a997e8e247e639c25a0228ac0a604f28f` is now pinned for the next sidecar build. The regression is queued and unrun. The current running package was not rebuilt and no model task was started.
