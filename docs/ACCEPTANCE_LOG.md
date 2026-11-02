@@ -1,3 +1,7 @@
+## 2026-11-02 small-model profile batching correction
+
+- Engine ed411506a34c905bea6d6f970d94496f54e11aa restores explicit batching guidance for known-independent calls, allows validated independent reads to run concurrently, and keeps writes, commands, and MCP operations ordered under their approval rules. It also retains full scope and explicitly says not to cap required work. The profile is 1,242 characters shorter than the original profile while retaining those behaviors. Focused regression: **1 passed**; Python compile and git diff --check passed. Broader workflow and model outcome checks remain queued.
+
 ## 2026-11-02 active-run composer focus handoff
 
 - The renderer now focuses the session composer after run start, steering, queueing, and run-start failure so keyboard input is ready during long inference. A non-empty draft typed while startup is pending is preserved if startup fails. Source diff reviewed; git diff --check passed. Renderer interaction tests and packaged keyboard acceptance are queued; this is not yet behavior-verified.
