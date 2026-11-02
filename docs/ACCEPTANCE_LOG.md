@@ -1,3 +1,7 @@
+## 2026-11-02 shared safe-batching guidance
+
+- Engine 813d502690207eb8b303fa4fc615c0b0131060c8 places independent-call batching in the shared prompt, so Standard and Small-model runs both know the host can execute validated independent reads concurrently. Writes, commands, and MCP calls remain ordered under their approval rules. Focused regression for both profiles: **1 passed**; Python compilation and git diff --check passed. With identical default prompt inputs, Standard grows 270 characters and Small-model is 1,160 characters shorter overall than the original prompt; the Small-model-specific block is 1,430 characters shorter. No model, context, output, reasoning, or runtime setting changed. Representative model outcomes remain queued.
+
 ## 2026-11-02 assign command before execution
 
 - Engine 14a9138a50033fac8550210e5d470470ecea4c2c now creates Windows command processes suspended, attaches the Job Object before user code starts, then resumes the primary thread. If safe resume fails, it stops the process with an explicit error. This closes the child-before-assignment cancellation race when Job assignment works; if the host refuses assignment, cancellation uses the existing process-scan fallback. The Job Object still does not sandbox filesystem or user privileges. Focused Windows Job Object and command-output/cancellation checks: **4 passed**; app build-configuration checks pass (**8 passed**) and the exact app/engine pin matches; the broader command matrix remains queued. No inference settings changed.
