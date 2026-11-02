@@ -14,7 +14,7 @@
 
 ## 2026-11-02 partial inference recovery
 
-- Engine commit `6aef83a` preserves complete reasoning/text already received if a provider stream disconnects before its final record, stores it in the transcript/checkpoint, and marks the error event. It never preserves or executes incomplete tool-call arguments. Focused tests pass: cancellation/stream recovery (7), blocked-read cancellation (1), and checkpoint/operation stream (64). Packaged recovery behavior remains unverified.
+- Engine commit `6aef83a` preserves complete reasoning/text already received if a provider stream disconnects before its final record, stores it in the transcript/checkpoint, and marks the error event. It never preserves or executes incomplete tool-call arguments. Focused tests pass: cancellation/stream recovery (7), blocked-read cancellation (1), checkpoint/operation stream (64), and app sidecar persistence/recovery (2). Source sidecar tests must receive `LOCAL_AGENT_CORE_PATH` pointing to this paired worktree. Packaged recovery behavior remains unverified.
 
 ## 2026-11-02 loaded-template reasoning discovery
 
