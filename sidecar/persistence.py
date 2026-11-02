@@ -59,7 +59,8 @@ def _append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = "".join(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n" for row in rows)
     delay = 0.05
-    for attempt in range(7):
+    deadline = time.monotonic() + 30.0
+    while True:
         try:
             with path.open("a", encoding="utf-8", newline="\n") as handle:
                 handle.write(payload)
@@ -67,10 +68,11 @@ def _append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
                 os.fsync(handle.fileno())
             return
         except PermissionError:
-            if attempt == 6:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 raise
-            time.sleep(delay)
-            delay = min(delay * 2, 0.4)
+            time.sleep(min(delay, remaining))
+            delay = min(delay * 2, 0.75)
 
 
 def _normalize_path(value: str | Path) -> str:

@@ -4,10 +4,40 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from sidecar.persistence import MirroredSessionStore, WorkspaceHistory, _atomic_json, _replay_run_event
+from sidecar.persistence import MirroredSessionStore, WorkspaceHistory, _append_jsonl, _atomic_json, _replay_run_event
 
 
 class MirroredSessionStoreTests(unittest.TestCase):
+    def test_journal_append_retries_a_windows_sharing_lock_longer_than_old_burst(self):
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root, "session.events.jsonl")
+            real_open = Path.open
+            attempts = []
+            clock = [0.0]
+
+            def open_after_extended_lock(candidate, *args, **kwargs):
+                if candidate == path:
+                    attempts.append(1)
+                    if len(attempts) <= 9:
+                        raise PermissionError("temporary Windows sharing violation")
+                return real_open(candidate, *args, **kwargs)
+
+            def advance_clock(delay):
+                clock[0] += delay
+
+            rows = [{"event_id": "event-1", "event": {"type": "text", "text": "雪"}}]
+            with patch("sidecar.persistence.Path.open", autospec=True, side_effect=open_after_extended_lock), \
+                 patch("sidecar.persistence.time.monotonic", side_effect=lambda: clock[0]), \
+                 patch("sidecar.persistence.time.sleep", side_effect=advance_clock):
+                _append_jsonl(path, rows)
+
+            saved = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(saved, rows)
+            self.assertEqual(len(attempts), 10)
+            self.assertGreaterEqual(clock[0], 2.0)
+
     def test_atomic_json_retries_a_windows_sharing_lock_longer_than_old_burst(self):
         from unittest.mock import patch
 
