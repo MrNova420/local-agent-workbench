@@ -18,7 +18,7 @@ The product target is full 1:1 user-facing feature and workflow parity with Code
 
 ### B-019: Same-chat steering, queue-next, and first-operation progress
 
-**Priority:** Core harness blocker. Source inspection confirmed the current composer only queues follow-ups; it cannot direct the active task. A new message must continue the same chat/task and preserve its plan, checkpoint, project, completed operations, and approval state.
+**Priority:** Core harness blocker. The source implementation is committed in engine `39ff549` and integrated into the app source; regression tests and packaged acceptance remain queued. A new message continues the same chat/task and preserves its plan, checkpoint, project, completed operations, and approval state.
 
 - Default a prompt submitted during a run to **Steer this task**. Persist it immediately, deliver it at the next safe boundary after the current inference response or active tool completes, and incorporate it into the existing task without starting a new task ID or replaying completed actions.
 - Keep **Queue next task** as a separate explicit choice. Do not silently turn steering into cancellation or task restart.
