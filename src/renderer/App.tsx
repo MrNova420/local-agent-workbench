@@ -681,7 +681,12 @@ export default function App() {
       if (event.type === 'hf_download_job_complete') { setDownloadedModelDirectory(String(event.directory || '')); notify('Selected Hugging Face files were downloaded at the pinned revision.', 'good'); void refreshModels(); }
       if (event.type === 'hf_download_error' || event.type === 'llama_error' || event.type === 'ollama_import_error') notify(String(event.error || 'Model operation failed.'), 'bad');
       if (event.type === 'llama_loading') notify(`Loading ${shortModel(String(event.model))} with ${fmt(Number(event.context))} context. The app owns this runtime process.`, 'warn');
-      if (event.type === 'llama_ready') notify(`GGUF server ready · ${fmt(Number(event.effective_context ?? event.context))} ${event.effective_context == null ? 'configured' : 'effective'} context.`, 'good');
+      if (event.type === 'llama_ready') {
+        notify(`GGUF server ready · ${fmt(Number(event.effective_context ?? event.context))} ${event.effective_context == null ? 'configured' : 'effective'} context.`, 'good');
+        if (model.startsWith('gguf::')) {
+          void request<ModelInfo>({ command: 'model_info', model }).then(setModelInfo).catch(() => undefined);
+        }
+      }
       if (event.type === 'llama_load_cancelled' || event.type === 'hf_download_cancelled') notify('Model operation cancelled.', 'warn');
       if (event.type === 'ollama_import_complete') { notify(`Safetensors import complete: ${String(event.name)}.`, 'good'); void refreshModels(); }
       if (event.type === 'ollama_import_cancelled') notify('Safetensors import cancelled.', 'warn');
@@ -826,7 +831,7 @@ export default function App() {
     });
     const unsubscribeClose = window.agent.onCloseDecision(() => setCloseChoiceOpen(true));
     return () => { unsubscribe(); unsubscribeClose(); unsubscribeUpdate(); };
-  }, [notify, refreshHome, refreshModels, refreshProjectSessions, refreshWorkspaceHistory, request, workspace]);
+  }, [model, notify, refreshHome, refreshModels, refreshProjectSessions, refreshWorkspaceHistory, request, workspace]);
 
   useEffect(() => {
     if (view !== 'landing') return;

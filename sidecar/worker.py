@@ -844,12 +844,15 @@ class AgentService:
             if provider.provider_id == "llama.cpp":
                 source = self._gguf_record(str(message["model"]))
                 status = self.llama.status()
-                context = status.get("context") if status.get("model") == source["path"] else source.get("context")
+                loaded = status.get("model") == source["path"]
+                context = status.get("context") if loaded else source.get("context")
+                reasoning = status.get("reasoning_capability") if loaded else None
+                if not isinstance(reasoning, dict):
+                    reasoning = {"support": "unknown", "default": None, "values": []}
                 return {"model": message["model"], "provider": "llama.cpp", "context": None,
                         "effective_context": context, "context_limit_known": False, "max_output_tokens": None,
                         "capabilities": [], "tool_support": "unknown",
-                        "reasoning": {"support": "levels", "default": "auto",
-                                      "values": [False, True, "minimal", "low", "medium", "high", "xhigh", "max"]}}
+                        "reasoning": reasoning}
             info = self.runtime.model_info(str(message["model"]))
             details = info.get("model_info", {})
             tags = info.get("details", {}) if isinstance(info.get("details"), dict) else {}

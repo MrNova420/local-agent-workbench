@@ -731,7 +731,21 @@ def test_gguf_registration_is_stable_and_uses_unknown_training_context(service, 
     assert info["context"] is None
     assert info["context_limit_known"] is False
     assert info["provider"] == "llama.cpp"
-    assert info["reasoning"]["values"] == [False, True, "minimal", "low", "medium", "high", "xhigh", "max"]
+    assert info["reasoning"] == {"support": "unknown", "default": None, "values": []}
+
+
+def test_loaded_gguf_model_info_uses_only_template_reported_reasoning_levels(service, tmp_path):
+    model = tmp_path / "model.gguf"
+    model.write_bytes(b"fixture")
+    registered = service.handle("gguf_register", {"path": str(model)})
+    service.llama.status = lambda: {
+        "running": True, "model": str(model.resolve()), "context": 32768,
+        "reasoning_capability": {"support": "levels", "default": None, "values": ["low", "high"]},
+    }
+
+    info = service.handle("model_info", {"model": registered["id"]})
+    assert info["reasoning"] == {"support": "levels", "default": None, "values": ["low", "high"]}
+    assert info["effective_context"] == 32768
 
 
 def test_sessions_are_filtered_by_exact_project_root(service, tmp_path):

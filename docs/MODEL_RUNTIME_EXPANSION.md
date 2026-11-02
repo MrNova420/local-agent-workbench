@@ -40,6 +40,7 @@ The optional llama.cpp executable should be installed or selected through an exp
 
 - Ollama `/api/show` can report the model's supported thinking values and default; the chat API accepts the model default, booleans, or an exact model-defined value. The adapter should map that metadata into the shared capability contract.
 - Other providers may report different controls or none. The UI must not invent a generic `low/medium/high` set when the backend did not advertise it.
+- For llama.cpp, GGUF reasoning levels stay `unknown` until the owned server's `/props.chat_template_caps.reasoning_effort_levels` reports the exact levels for the loaded chat template. Missing levels remain unknown; they are not inferred from generic CLI values. The model default is not guessed.
 - Keep `default` as the initial reasoning selection. Send no provider override for that value.
 - Keep reasoning generation (`default`, enabled/disabled, or supported effort) separate from reasoning visibility in the transcript.
 - The model-specific `Reasoning` selector means the provider's advertised thinking mode/level; it does not promise a token or time limit. Ollama's `think` API accepts a boolean or model-defined level and does not document a separate per-request thinking-token budget. See [Ollama thinking controls](https://github.com/ollama/ollama/blob/main/docs/capabilities/thinking.mdx).
