@@ -895,4 +895,6 @@ Engine commit `dcdf7fc2c3b1ca61bfd44cb2449e4e77b7e69c59` changes budgeted plan c
 
 App commit `e399d86c71dcc64a5fc6bac58055dd5bc97a591d` records and pins that exact engine revision. This documentation synchronization does not add verification: packaged, visible, full-suite, and live-model acceptance remain pending.
 
+Focused engine verification was then run against that pin: `tests/test_operation_stream.py` plus `tests/test_task_checkpoint.py` passed **61 tests**. This adds source-level continuation/checkpoint evidence only; it does not close the queued full-suite, sidecar integration, package, visible UI, or extended model-run gates.
+
 \r\n
