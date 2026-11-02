@@ -901,4 +901,6 @@ Focused renderer checks for resumed Markdown/code formatting, terminal recovery 
 
 Additional focused checks passed on the same paired source: engine `tests/test_llama_cpp_runtime.py`, `tests/test_operation_stream.py`, and `tests/test_task_checkpoint.py` — **75 passed**; sidecar settings/request-provenance checks — **2 passed** with `LOCAL_AGENT_CORE_PATH` set to the pinned engine; renderer `tests/activity.test.ts` and `tests/run-sheet-layout.test.ts` — **23 passed**. The focused checks are now 120 passing cases across engine, sidecar, and renderer paths; this is not the full suite or a packaged app acceptance.
 
+The reasoning-control design is now recorded in `CORE_HARNESS_READINESS.md`: preserve each model's advertised effort choices and default; keep llama.cpp's optional token budget unlimited unless the user selects a value and label it as requested, not guaranteed; do not invent an Ollama token-budget field. Improve action cadence through the existing multi-request tool cycle and safe-boundary same-task steering, without cutting off an active stream or adding arbitrary time/turn limits.
+
 \r\n
