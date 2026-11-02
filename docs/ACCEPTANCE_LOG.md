@@ -990,3 +990,10 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 ### 2026-11-02 renderer session event isolation
 
 `shouldApplySessionEvent` now rejects session-scoped worker events when the event's session ID differs from the renderer's selected-session cursor. The cursor is updated on session create, load, and crash recovery, and cleared when navigation opens a project without a session. This applies to plan, activity, streamed content, and terminal-state events, while unscoped service/model events remain available. `tests/run-state.test.ts`: **22 passed**; TypeScript typecheck and `git diff --check` passed. This source-level guard does not replace visible acceptance while switching projects during a live run.
+
+### 2026-11-02 focused continuation, batch, transcript, and privacy checks
+
+- Against paired engine `947331109fe755e54aeec728bbb016398047c793`, the same-task retry-after-failed-read regression passed (**1**), and the engine's read-only batch suite passed (**4**), including concurrent execution, stable result ordering, cancellation-after-start, uncertainty handling, and no dropped calls. No model was loaded or called.
+- App `tests/transcript-rendering.test.tsx` and `tests/location-privacy.test.ts` passed (**8** total); the restored Markdown/code-highlight rendering and Home location privacy checks remain in the current UI source. `tests/test_build_config.py` passed (**8**) against the synced engine pin and `npm run typecheck` passed.
+- Read-only history inspection covered **407 reachable commits** across local branches/tags/remotes and found no decimal coordinate-pair pattern; a separate DMS-format scan found no matching entries. The remote main and beta tag refs were independently listed. This verifies the searched repository refs only; already-downloaded archives and external caches cannot be recalled, as recorded in the earlier privacy scrub entry.
+- These are focused source checks, not full suites, packaged or visible acceptance, long-run Flint acceptance, updater validation, or release readiness. Broad verification stays queued until implementation work is substantially complete.
