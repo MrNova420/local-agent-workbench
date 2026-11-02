@@ -184,7 +184,7 @@ The app and shared engine have independent public MIT-licensed Git repositories 
 
 ### B-019: Optional project-scoped operation profile
 
-**Status:** Structured built-in file tools now support explicit external-folder scopes, with Ask as the UI default and Allow/Deny policies enforced by the engine. Commands and MCP still run with host-user privileges; disposable-copy mode is not OS containment. Packaged approval acceptance is pending.
+**Status:** Structured built-in file tools support explicit external-folder scopes bound to the project that created each grant. Ask is the UI default; Allow/Deny are enforced by the engine. Commands and MCP still run with host-user privileges; disposable-copy mode is not OS containment. Packaged approval acceptance is pending.
 
 - Explore an opt-in project-scoped file-operation profile that keeps normal project development available while making each operation's root visible. Keep commands/MCP separately permissioned and clearly host-scoped until a real Windows containment mechanism exists.
 - Preserve current full-development behavior by default. Do not describe a project-root policy or approval dialog as an OS sandbox.
@@ -259,5 +259,5 @@ Large tool outputs are now context-budgeted for inference while preserving the f
 - Core recovery follow-up: terminal failures now expose a same-chat, user-triggered continuation prefill from the saved checkpoint. It explicitly inspects completed and uncertain effects before continuing; focused tests (4) and renderer typecheck passed. Packaged resume/restore behavior remains queued.
 - Full-PC access follow-up: project file tools are root-confined; approved PowerShell/command processes run with host-user rights and are not contained. Add explicit external directory grants for built-in file tools and evaluate a real opt-in Windows containment backend. Do not silently widen project file access or call process approval a sandbox.
 
-- External file access is now scoped by concrete folder rules in the engine; UI includes an external-folder picker that defaults to Ask each action. Allow is a separate explicit persistent scope, Deny stays hard, and nested deny beats grants. External structured writes are blocked in Copy mode. Source-focused checks passed; packaged acceptance is pending.
+- External file access uses concrete folder rules bound to a normalized selected-project identity. The sidecar captures only matching rules, and the engine independently filters against the original project root (including runs using disposable copies). Old app-global external grants are disabled with a repair warning while the saved file remains untouched. Ask is the picker default; Allow is explicit, Deny is hard, and nested deny beats grants. External structured writes remain blocked in Copy mode. Focused engine tests: 50 passed; worker tests: 64 passed; renderer typecheck passed. Packaged acceptance is pending.
 - Still open: meaningful real Windows containment for shell/MCP, packaged approval-modal verification, broader MCP/web/LSP/command capability parity, and full system/release acceptance. Shell approval and selected cwd are not a sandbox.

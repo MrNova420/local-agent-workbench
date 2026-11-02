@@ -196,7 +196,7 @@ def test_switching_away_from_session_approval_revokes_saved_chat_grant(service, 
 def test_permission_rules_are_validated_persisted_and_locked_during_runs(service):
     rules = [
         {"tool": "write_file", "decision": "deny", "path_glob": "generated/**"},
-        {"tool": "external_directory", "decision": "ask", "path_glob": "C:/Users/test/shared/**"},
+        {"tool": "external_directory", "decision": "ask", "path_glob": "C:/Users/test/shared/**", "workspace": "C:/Users/test/project"},
     ]
     saved = service.handle("permission_rules_set", {"rules": rules})
     assert saved == rules
@@ -223,6 +223,23 @@ def test_malformed_permission_rules_preserve_file_and_explain_safe_fallback(serv
     assert recovered.permission_rules == []
     assert "permission rules" in recovered.permission_rules_warning.casefold()
     assert recovered.permission_rules_path.read_text(encoding="utf-8") == original
+
+
+def test_legacy_global_external_folder_rules_are_disabled_without_discarding_other_rules(service):
+    service.permission_rules_path.parent.mkdir(parents=True, exist_ok=True)
+    original = json.dumps([
+        {"tool": "write_file", "decision": "deny", "path_glob": "generated/**"},
+        {"tool": "external_directory", "decision": "allow", "path_glob": "C:/Users/test/shared/**"},
+    ])
+    service.permission_rules_path.write_text(original, encoding="utf-8")
+
+    recovered = worker.AgentService()
+
+    assert recovered.permission_rules == [{"tool": "write_file", "decision": "deny", "path_glob": "generated/**"}]
+    assert "legacy external-folder permission" in recovered.permission_rules_warning
+    assert recovered.permission_rules_path.read_text(encoding="utf-8") == original
+    recovered.mcp.shutdown()
+    recovered.llama.shutdown()
     recovered.mcp.shutdown()
     recovered.llama.shutdown()
 
@@ -302,10 +319,7 @@ def test_plan_intent_seeds_live_checklist_and_enforces_read_only_builtin_tools(s
     events = []
     captured = {}
     service.emit = events.append
-    service.permission_rules = [
-        {"tool": "write_file", "decision": "deny"},
-        {"tool": "external_directory", "decision": "ask", "path_glob": "C:/Users/test/shared/**"},
-    ]
+    service.permission_rules = [{"tool": "write_file", "decision": "deny"}]
     service.mcp_tools = [{"type": "function", "function": {"name": "mcp__mutating_tool", "parameters": {"type": "object"}}}]
 
     class CapturingEngine:
@@ -326,6 +340,13 @@ def test_plan_intent_seeds_live_checklist_and_enforces_read_only_builtin_tools(s
     monkeypatch.setattr(worker, "AgentEngine", CapturingEngine)
     project = tmp_path / "plan-intent-project"
     project.mkdir()
+    other_project = tmp_path / "other-project"
+    other_project.mkdir()
+    matching_external_rule = {"tool": "external_directory", "decision": "ask",
+                              "path_glob": "C:/Users/test/shared/**", "workspace": str(project)}
+    other_external_rule = {"tool": "external_directory", "decision": "allow",
+                           "path_glob": "C:/Users/test/shared/**", "workspace": str(other_project)}
+    service.permission_rules.extend([matching_external_rule, other_external_rule])
     service.handle("run_start", {"options": {
         "workspace": str(project), "prompt": "Plan a settings screen", "model": "model-a:latest",
         "context": 4096, "maxTokens": 128, "temperature": 0.2,
@@ -340,8 +361,10 @@ def test_plan_intent_seeds_live_checklist_and_enforces_read_only_builtin_tools(s
     assert captured["access"] == "plan"
     assert captured["kwargs"]["task_intent"] == "plan"
     assert captured["kwargs"]["mcp_tools"] == []
-    assert captured["kwargs"]["permission_rules"] == service.permission_rules
-    assert saved["run_state"]["settings"]["permission_rules"] == service.permission_rules
+    run_rules = [service.permission_rules[0], {**matching_external_rule, "workspace": str(project).replace("\\", "/")}]
+    assert captured["kwargs"]["permission_rules"] == run_rules
+    assert captured["kwargs"]["permission_workspace_root"] == project
+    assert saved["run_state"]["settings"]["permission_rules"] == run_rules
     assert saved["task_intent"] == "plan"
     assert saved["plan"][0]["title"] == "Use the task brief and project instructions as the objective"
     assert saved["task_checkpoint"]["current"]["acceptance_criteria_source"] == "awaiting_agent_refinement"

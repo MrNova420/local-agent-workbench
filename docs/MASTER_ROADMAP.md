@@ -193,16 +193,12 @@ Approved commands may change project files without producing structured `write_f
 ### 2026-11-02 access and failure recovery update
 
 - App commit `2437473` adds a user-triggered same-chat continuation prefill for terminal failures and interruptions. It directs the agent to inspect persisted checkpoint and workspace effects before continuing; it does not replay operations or change model settings. Focused helper tests (4) and renderer typecheck passed.
-- Access review confirms built-in file tools are confined to the captured project; approved command and PowerShell processes retain host-user privileges. Explicit external-folder grants and real Windows containment remain implementation gaps. Packaged recovery, complete suites, and visible full-project acceptance remain queued.
+- Access review confirms built-in file tools are confined to the captured project or an explicitly granted external folder bound to that project; approved command and PowerShell processes retain host-user privileges. Real Windows containment remains an implementation gap. Packaged recovery, complete suites, and visible full-project acceptance remain queued.
 
 - Engine commit `2c3acd3f4c8cdb9331d3a4d4fdf7a4dfa1c84b9b` adds focused proof that a recoverable tool failure is included in the next same-task model request and may be corrected/retried there. One focused test passed; full suites and package acceptance remain queued. The paired app pin was updated.
 
-### 2026-11-02 scoped external folder access source update
+### 2026-11-02 scoped external folder access and workspace isolation
 
-Engine adds path-scoped `external_directory` policy for structured file tools. App adds a native folder picker with Ask default and explicit Allow/Deny choices. Copy mode blocks direct outside writes. Focused engine permission/tool suites and renderer permission tests/typecheck passed. Full suites, sidecar integration, packaged approval UI, and visible project acceptance remain queued. Commands and MCP retain host-user capability; no OS sandbox is claimed.
-
-- Paired engine external-folder implementation is now committed at `0c51f9eebc80c51aec8405ae81326779e450af59`, and `core-revision.txt` pins that exact commit. App folder-picker IPC and permission UI are typechecked; the two focused renderer rule tests pass. Final source suites and packaged approval-flow acceptance remain queued.
-
-- The external-folder permission rules now round-trip through the sidecar settings store and are captured in run settings/engine arguments. Two focused worker tests passed. The project file access extension is implemented in source; packaged approval experience and real OS command containment remain open.
-
-- Engine commit `a9c73c6d296ddc91c00a2d8c69ddc02ae8e3cc67` verifies scoped external list/search/read plus write/edit/append under Edit mode. The focused permission/tool suites now pass **48 tests**; app pin and evidence log are synchronized. Broad suites and packaged approval acceptance remain pending.
+- The native folder picker adds concrete `external_directory` rules with Ask selected by default; Allow and Deny remain explicit choices with deny precedence. Each rule stores its owning project identity. The sidecar captures only rules matching the selected source project, and the engine filters again against that source identity so disposable copies cannot change which grants apply.
+- Legacy app-global external-folder rules are disabled with a repair warning. Their original settings file remains unchanged until the user saves rules. External structured writes remain blocked in Copy mode. Commands and MCP retain host-user privileges; no OS sandbox is claimed.
+- Engine commit `8f2afe62671af4235b2150ab4f80a9c2af8828a7` contains isolation enforcement and regression coverage. Focused engine permission/tool tests: 50 passed. Sidecar worker tests: 64 passed. Renderer typecheck passed. Broader suites, packaged approval UI, and visible workspace-switch acceptance remain queued.

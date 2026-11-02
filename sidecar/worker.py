@@ -28,7 +28,7 @@ if CORE_PATH.is_dir():
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from desktop_engine import AgentEngine, OllamaRuntime, RequestCancelled, ToolRegistry, Workspace  # noqa: E402
-from permission_policy import validate_permission_rules  # noqa: E402
+from permission_policy import permission_rules_for_workspace, validate_permission_rules  # noqa: E402
 from task_checkpoint import begin_task, finish_task, initial_task_plan, record_plan, record_user_update  # noqa: E402
 from disposable_workspace import (  # noqa: E402
     apply_reviewed_changes,
@@ -142,6 +142,18 @@ class AgentService:
         self.permission_rules_warning: str | None = None
         try:
             raw_permission_rules = json.loads(self.permission_rules_path.read_text(encoding="utf-8")) if self.permission_rules_path.exists() else []
+            if isinstance(raw_permission_rules, list):
+                legacy_external = [rule for rule in raw_permission_rules
+                                   if isinstance(rule, dict) and rule.get("tool") == "external_directory"
+                                   and not rule.get("workspace")]
+                if legacy_external:
+                    # Old external grants were app-global. Keep the original
+                    # file intact, but never reapply those grants globally.
+                    raw_permission_rules = [rule for rule in raw_permission_rules if rule not in legacy_external]
+                    self.permission_rules_warning = (
+                        f"{len(legacy_external)} legacy external-folder permission(s) had no owning project and were disabled. "
+                        "Re-add them from the intended project in Tool permissions. The saved file remains unchanged until you save rules."
+                    )
             self.permission_rules = validate_permission_rules(raw_permission_rules)
         except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
             self.permission_rules = []
@@ -1620,7 +1632,10 @@ class AgentService:
             state.pop("copy_manifest", None)
         turn_id = uuid.uuid4().hex
         turn_started_at = time.time()
-        captured_permission_rules = copy.deepcopy(self.permission_rules)
+        # External-folder grants belong to the project selected when this run
+        # starts. In copy mode, scope them to the original source project, not
+        # to the disposable working copy.
+        captured_permission_rules = permission_rules_for_workspace(copy.deepcopy(self.permission_rules), source)
         state.setdefault("activity_events", [])
         state.setdefault("plan", [])
         previous_checkpoint = state.get("task_checkpoint")
@@ -1866,6 +1881,7 @@ class AgentService:
                 task_intent=str(turn.session.get("task_intent", "auto")),
                 operation_result_lookup=lambda operation_id: _saved_operation_result(state, operation_id),
                 permission_rules=run_permission_rules,
+                permission_workspace_root=controller["source"],
                 ask_user=lambda args: self._ask_user(controller, turn, args),
                 session_approval_granted=bool(state.get("session_approval_granted", False)),
                 steering_handler=apply_steering,

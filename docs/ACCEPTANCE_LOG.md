@@ -852,7 +852,7 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 
 ### 2026-11-02 continuation recovery source check
 
-App commit `2437473` adds a same-chat continuation prefill after terminal failures/cancellation. It preserves the previous goal and requires workspace/checkpoint inspection in the next turn before retrying uncertain effects. Focused tests: 4 passed; TypeScript typecheck passed. Not yet package-verified. Access review confirms project file tools are root-bound while approved PowerShell/commands are host-user processes; explicit external folder scopes and OS containment are open.
+App commit `2437473` adds a same-chat continuation prefill after terminal failures/cancellation. It preserves the previous goal and requires workspace/checkpoint inspection in the next turn before retrying uncertain effects. Focused tests: 4 passed; TypeScript typecheck passed. Not yet package-verified. At that point, explicit external folder scopes and OS containment were open; the external-folder scope was later implemented and project-bound as recorded below. Approved PowerShell/commands remain host-user processes.
 
 ### Engine retry-loop regression
 
@@ -867,3 +867,7 @@ Paired engine external-folder implementation committed as `0c51f9eebc80c51aec840
 - Sidecar integration checks now include persisted `external_directory` Ask rules and confirm the same scope is captured into a run's engine arguments and durable run settings. Focused worker tests: **2 passed** with `LOCAL_AGENT_CORE_PATH` set to the paired engine worktree. This verifies protocol/persistence wiring only; packaged permission prompts remain unverified.
 
 External folder acceptance now includes recursive list/search/read and direct write/edit/append under Edit access. Focused engine suites: **48 passed**. Engine commit `a9c73c6d296ddc91c00a2d8c69ddc02ae8e3cc67`; app pin synchronized. Copy mode outside writes remain blocked pending staging support.
+
+### 2026-11-02 external-folder project isolation follow-up
+
+External-folder permission rules now carry their owning workspace identity. Engine commit `8f2afe62671af4235b2150ab4f80a9c2af8828a7` filters those rules inside `AgentEngine`; the sidecar captures matching grants against the selected source project so disposable-copy runs retain the source identity. Legacy app-global external-folder grants are disabled with a repair warning while preserving the stored file until the user saves rules. Verification: engine permission/tool tests **50 passed**; sidecar worker tests **64 passed** with `LOCAL_AGENT_CORE_PATH` set to the paired engine checkout; `npm run typecheck` passed. Full suites, packaged UI, and visible multi-project acceptance remain pending. No model was loaded and no runtime inference settings were changed.
