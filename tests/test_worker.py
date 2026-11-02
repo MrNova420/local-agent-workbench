@@ -194,7 +194,10 @@ def test_switching_away_from_session_approval_revokes_saved_chat_grant(service, 
 
 
 def test_permission_rules_are_validated_persisted_and_locked_during_runs(service):
-    rules = [{"tool": "write_file", "decision": "deny", "path_glob": "generated/**"}]
+    rules = [
+        {"tool": "write_file", "decision": "deny", "path_glob": "generated/**"},
+        {"tool": "external_directory", "decision": "ask", "path_glob": "C:/Users/test/shared/**"},
+    ]
     saved = service.handle("permission_rules_set", {"rules": rules})
     assert saved == rules
     assert service.handle("permission_rules_get", {}) == rules
@@ -299,7 +302,10 @@ def test_plan_intent_seeds_live_checklist_and_enforces_read_only_builtin_tools(s
     events = []
     captured = {}
     service.emit = events.append
-    service.permission_rules = [{"tool": "write_file", "decision": "deny"}]
+    service.permission_rules = [
+        {"tool": "write_file", "decision": "deny"},
+        {"tool": "external_directory", "decision": "ask", "path_glob": "C:/Users/test/shared/**"},
+    ]
     service.mcp_tools = [{"type": "function", "function": {"name": "mcp__mutating_tool", "parameters": {"type": "object"}}}]
 
     class CapturingEngine:
@@ -334,8 +340,8 @@ def test_plan_intent_seeds_live_checklist_and_enforces_read_only_builtin_tools(s
     assert captured["access"] == "plan"
     assert captured["kwargs"]["task_intent"] == "plan"
     assert captured["kwargs"]["mcp_tools"] == []
-    assert captured["kwargs"]["permission_rules"] == [{"tool": "write_file", "decision": "deny"}]
-    assert saved["run_state"]["settings"]["permission_rules"] == [{"tool": "write_file", "decision": "deny"}]
+    assert captured["kwargs"]["permission_rules"] == service.permission_rules
+    assert saved["run_state"]["settings"]["permission_rules"] == service.permission_rules
     assert saved["task_intent"] == "plan"
     assert saved["plan"][0]["title"] == "Use the task brief and project instructions as the objective"
     assert saved["task_checkpoint"]["current"]["acceptance_criteria_source"] == "awaiting_agent_refinement"

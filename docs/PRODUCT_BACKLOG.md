@@ -184,10 +184,11 @@ The app and shared engine have independent public MIT-licensed Git repositories 
 
 ### B-019: Optional project-scoped operation profile
 
-**Status:** Design and capability audit queued. Existing project tools are path-scoped, but approved commands and MCP run with host-user permissions; disposable-copy mode is not OS containment.
+**Status:** Structured built-in file tools now support explicit external-folder scopes, with Ask as the UI default and Allow/Deny policies enforced by the engine. Commands and MCP still run with host-user privileges; disposable-copy mode is not OS containment. Packaged approval acceptance is pending.
 
 - Explore an opt-in project-scoped file-operation profile that keeps normal project development available while making each operation's root visible. Keep commands/MCP separately permissioned and clearly host-scoped until a real Windows containment mechanism exists.
 - Preserve current full-development behavior by default. Do not describe a project-root policy or approval dialog as an OS sandbox.
+- Add staged external-folder changes to Copy mode, and test symlink/junction rejection and unavailable saved folder grants in the packaged app.
 - Compare safe file-root enforcement, generated-file/build directories, external toolchains, command execution, and MCP before choosing boundaries; add a real contained mode only with an explicit capability and recovery design.
 
 ### B-020: Home session recovery visibility
