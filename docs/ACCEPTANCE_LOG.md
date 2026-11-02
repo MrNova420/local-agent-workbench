@@ -860,8 +860,10 @@ Engine focused test verifies a failed file read is shown to the model, a correct
 
 ### 2026-11-02 scoped external-folder access checks
 
-Engine permission/tool tests: **47 passed** across `tests/test_permission_policy.py` and `tests/test_tools.py`. Renderer TypeScript typecheck passed; focused permission editor tests: **2 passed**. User-picked external folder rules default to Ask; allow/deny scopes persist, deny takes precedence, unavailable roots and symlinks fail closed, and copy mode blocks outside writes. The full app/worker/engine suites and packaged app interaction are still pending; no model or package run occurred.
+Engine permission/tool tests: **48 passed** across `tests/test_permission_policy.py` and `tests/test_tools.py`. Renderer TypeScript typecheck passed; focused permission editor tests: **2 passed**. User-picked external folder rules default to Ask; allow/deny scopes persist, deny takes precedence, unavailable roots and symlinks fail closed, and copy mode blocks outside writes. The full app/worker/engine suites and packaged app interaction are still pending; no model or package run occurred.
 
 Paired engine external-folder implementation committed as `0c51f9eebc80c51aec8405ae81326779e450af59`; app pin synchronized. Renderer typecheck and 2 focused permission tests passed again after synchronization. Packaged UI and full suite acceptance remain open.
 
 - Sidecar integration checks now include persisted `external_directory` Ask rules and confirm the same scope is captured into a run's engine arguments and durable run settings. Focused worker tests: **2 passed** with `LOCAL_AGENT_CORE_PATH` set to the paired engine worktree. This verifies protocol/persistence wiring only; packaged permission prompts remain unverified.
+
+External folder acceptance now includes recursive list/search/read and direct write/edit/append under Edit access. Focused engine suites: **48 passed**. Engine commit `a9c73c6d296ddc91c00a2d8c69ddc02ae8e3cc67`; app pin synchronized. Copy mode outside writes remain blocked pending staging support.

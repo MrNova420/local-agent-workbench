@@ -204,3 +204,5 @@ Engine adds path-scoped `external_directory` policy for structured file tools. A
 - Paired engine external-folder implementation is now committed at `0c51f9eebc80c51aec8405ae81326779e450af59`, and `core-revision.txt` pins that exact commit. App folder-picker IPC and permission UI are typechecked; the two focused renderer rule tests pass. Final source suites and packaged approval-flow acceptance remain queued.
 
 - The external-folder permission rules now round-trip through the sidecar settings store and are captured in run settings/engine arguments. Two focused worker tests passed. The project file access extension is implemented in source; packaged approval experience and real OS command containment remain open.
+
+- Engine commit `a9c73c6d296ddc91c00a2d8c69ddc02ae8e3cc67` verifies scoped external list/search/read plus write/edit/append under Edit mode. The focused permission/tool suites now pass **48 tests**; app pin and evidence log are synchronized. Broad suites and packaged approval acceptance remain pending.
