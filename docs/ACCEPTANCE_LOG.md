@@ -3,7 +3,7 @@
 ## 2026-11-02 MCP discovery cancellation cleanup
 
 - Engine `ccaa4290f20a134625b3890d835394d5d1c98475` attempts transport exit even if MCP session exit raises `CancelledError`, then preserves the original discovery cancellation. A test first reproduced the leak (`['session']` closed, transport left open), then passed after the fix.
-- Focused engine MCP module: **10 passed**; Python compile and engine `git diff --check` passed. The paired app pin is updated in source; app pin verification and Desktop fast-forward are pending this milestone commit. Broad suites, packaging, visible workflow acceptance, and final Flint acceptance remain queued. No model or inference settings changed.
+- Focused engine MCP module: **10 passed**; Python compile and engine `git diff --check` passed. App worker reconnect regressions: **2 passed**; adapter/build-pin checks: **9 passed**. Exact app/engine SHA pairing and app/engine diff checks passed; Desktop source is fast-forwarded through app commit `d078a05`. Broad suites, packaging, visible workflow acceptance, and final Flint acceptance remain queued. No model or inference settings changed.
 
 ## 2026-11-02 MCP scheduler cleanup and paired source update
 
