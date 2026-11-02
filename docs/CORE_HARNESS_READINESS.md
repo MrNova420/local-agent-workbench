@@ -413,3 +413,7 @@ The engine now has a passing regression for model-default reasoning followed by 
 ### 2026-11-01 measured Flint placement during active acceptance
 
 Ollama 0.40.13's runner log for the active `hf.co/unsloth/flint-GGUF:UD-IQ2_XXS` process records 28/50 layers offloaded to the GTX 1650 SUPER. It reports 857.30 MiB CUDA model buffers, 10,443.81 MiB CUDA-host model buffers, and 946 MiB of CUDA KV buffers at the selected 65,536 context. The app sampled 26–30% device GPU load and about 91% system CPU; Ollama worker CPU summed to 443–554% in those snapshots. Thus this model does use GPU, but most weight memory remains host-side. `ollama ps`'s 90% CPU / 10% GPU is a placement split, not utilization. These snapshots do not establish sustained utilization or a speed/quality comparison with Ornith. No placement, context, output, reasoning, or cache setting was changed.
+
+### 2026-11-01 interrupted Flint acceptance and implementation pace
+
+The user intentionally cancelled the visible Flint request while taking a break and asked source work to continue in the background. The exact session records the cancelled request and preserves its partial reasoning; no website writes occurred. The source now adds an implementation-pacing preference to act after a sufficient initial plan and reuse the last authoritative checkpoint, while keeping scope, planning, tools, iterations, and runtime uncapped. Its regression and final source/package acceptance are still pending.
