@@ -1,10 +1,10 @@
 # Session Continuity and Run Recovery Implementation
 
-**Status:** source implementation in progress; focused persistence and continuity checks are running incrementally, while full suites and packaged acceptance remain queued.
+**Status:** source implementation in progress; focused persistence and continuity checks pass for their named revisions, while full suites, fault injection, and packaged acceptance remain queued.
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
-**Current paired engine source:** `dcdf7fc2c3b1ca61bfd44cb2449e4e77b7e69c59` (unpublished; regressions intentionally queued). The app repository's current source commit is `e399d86` and its `core-revision.txt` pins this exact engine revision.
+**Current paired source (verified 2026-11-02):** app branch `workbench/core-chat-activity` at `6cec0641628865a0ab74f46f32ad3f984e50dc73`; engine branch `workbench/approval-tool-continuation` at `48e6218730effd253d94deee0cd4bafff39d4280`. The app `core-revision.txt` matches the engine worktree HEAD. The `dcdf7fc` and `e399d86` references in older acceptance notes identify historical checkpoints, not the active pair.
 
 ## Latest focused verification
 
