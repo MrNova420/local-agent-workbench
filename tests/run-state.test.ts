@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { applyToolCallProgress, isGlobalRunLifecycleEvent, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter } from '../src/shared/run-state';
+import { applyToolCallProgress, isGlobalRunLifecycleEvent, latestActiveActivityForTurn, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter } from '../src/shared/run-state';
+import type { ActivityRecord } from '../src/shared/protocol';
 
 describe('session event isolation', () => {
   it('rejects events from a previous or unselected session while allowing unscoped service events', () => {
@@ -13,6 +14,28 @@ describe('session event isolation', () => {
     expect(isGlobalRunLifecycleEvent({ type: 'run_started', sessionId: 'session-a' })).toBe(true);
     expect(isGlobalRunLifecycleEvent({ type: 'run_idle', sessionId: 'session-a' })).toBe(true);
     expect(isGlobalRunLifecycleEvent({ type: 'activity_event', sessionId: 'session-a' })).toBe(false);
+  });
+});
+
+describe('live activity selection', () => {
+  const activity = (overrides: Partial<ActivityRecord>): ActivityRecord => ({
+    id: 'activity', turnId: 'turn-1', sessionId: 'session-1', kind: 'operation', name: 'write_file',
+    status: 'completed', ...overrides,
+  });
+
+  it('does not let completed activity mask the current inference phase', () => {
+    expect(latestActiveActivityForTurn([activity({ status: 'completed' })], 'turn-1')).toBeUndefined();
+    expect(latestActiveActivityForTurn([
+      activity({ status: 'running', name: 'read_file' }),
+      activity({ id: 'done', status: 'completed', name: 'write_file' }),
+    ], 'turn-1')?.name).toBe('read_file');
+  });
+
+  it('keeps only pending tool preparation, approval, and user questions active', () => {
+    expect(latestActiveActivityForTurn([activity({ kind: 'tool_preparation', status: 'assembled' })], 'turn-1')).toBeUndefined();
+    expect(latestActiveActivityForTurn([activity({ kind: 'tool_preparation', status: 'preparing' })], 'turn-1')?.kind).toBe('tool_preparation');
+    expect(latestActiveActivityForTurn([activity({ kind: 'approval', status: 'waiting', approvalStatus: 'waiting' })], 'turn-1')?.approvalStatus).toBe('waiting');
+    expect(latestActiveActivityForTurn([activity({ kind: 'question', status: 'awaiting_user' })], 'turn-1')?.kind).toBe('question');
   });
 });
 

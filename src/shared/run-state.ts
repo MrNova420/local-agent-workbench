@@ -1,6 +1,23 @@
-import type { WorkerEvent } from './protocol';
+import type { ActivityRecord, WorkerEvent } from './protocol';
 
 export type ToolCallProgress = { requestIndex: number; callIndex: number; provider: string; toolName: string; argumentCharacters: number };
+
+export function isLiveActivity(record: ActivityRecord): boolean {
+  if (record.kind === 'operation') return record.status === 'running';
+  if (record.kind === 'tool_preparation') return record.status === 'preparing';
+  if (record.kind === 'approval') return record.approvalStatus === 'waiting' || record.status === 'waiting';
+  if (record.kind === 'question') return record.status === 'awaiting_user';
+  return false;
+}
+
+export function latestActiveActivityForTurn(activities: ActivityRecord[], turnId: string | undefined): ActivityRecord | undefined {
+  if (!turnId) return undefined;
+  for (let index = activities.length - 1; index >= 0; index -= 1) {
+    const activity = activities[index];
+    if (activity.turnId === turnId && isLiveActivity(activity)) return activity;
+  }
+  return undefined;
+}
 
 export function shouldQueuePromptOnEnter(key: string, shiftKey: boolean, isComposing: boolean): boolean {
   return key === 'Enter' && !shiftKey && !isComposing;

@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
 import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, QueuedPrompt, RunOptions, SessionLiveSnapshot, SessionSummary, SkillSource, TaskIntent, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
-import { applyToolCallProgress, isGlobalRunLifecycleEvent, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter, type ToolCallProgress } from '../shared/run-state';
+import { applyToolCallProgress, isGlobalRunLifecycleEvent, latestActiveActivityForTurn, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter, type ToolCallProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordInputEstimate, recordStreamedText, restoreRunMetrics, type RunMetrics } from '../shared/run-metrics';
 import { requestContextStats } from '../shared/request-context';
 import { approvalModeDescription } from '../shared/approval-mode-copy';
@@ -1656,8 +1656,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
     ? [...(activitiesByTurn.get(activeTurnId) || [])].reverse().find((activity) => activity.kind === 'prompt')
     : undefined;
   const latestRequestContext = requestContextStats(latestPromptActivity);
-  const latestActiveActivity = [...activities].reverse().find((activity) => activity.turnId === activeTurnId
-    && ['operation', 'tool_preparation', 'approval', 'question', 'context', 'error'].includes(activity.kind));
+  const latestActiveActivity = latestActiveActivityForTurn(activities, activeTurnId);
   const promptCacheComplete = runMetrics.usageResponses > 0
     && runMetrics.promptTokenReports === runMetrics.usageResponses
     && runMetrics.cachedPromptReports === runMetrics.usageResponses;
