@@ -2,7 +2,7 @@
 
 ## Current paired development checkpoint (2026-11-02)
 
-The active app worktree is `workbench/core-chat-activity` at `d846940`; it pins the shared engine worktree at `251acf4a2858f6dd79dcd3c46ba1a8a898c62c88`. This checkpoint adds cancellable 30-second retry handling for Windows sharing locks on both project file replacement and mirrored session JSON snapshots. Focused evidence: engine operation-stream **41 passed**; app persistence **24 passed**; paired worker regressions **4 passed**; transcript-rendering tests **6 passed**; source pin verification, Python compile/diff checks and TypeScript typecheck passed. These are focused source checks. Full suites, fault injection, packaged installer, visible app workflow, long-run Flint acceptance, updater recovery and public release gates remain open. Historical entries below describe their named checkpoints and may cite superseded pins.
+The active app worktree is `workbench/core-chat-activity` and now pins engine `6ef1b3f5fbd29c94fa19d263ec868208563aa4c1`. The paired source hardens transient Windows sharing-lock retries on project writes and both app-wide and project-mirrored session snapshots. Engine operation/session suites pass **54 tests** and operation-stream passes **41**; app persistence passes **24**, with previous paired worker (**4**), transcript-render (**6**), source-pin and typecheck checks. These are focused source checks. Full suites, fault injection, packaged installer, visible app workflow, long-run Flint acceptance, updater recovery and public release gates remain open. Historical entries below describe their named checkpoints and may cite superseded pins.
 
 ## 2026-11-02 source-startup integrity
 
