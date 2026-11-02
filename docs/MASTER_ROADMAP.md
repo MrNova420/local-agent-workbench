@@ -189,3 +189,8 @@ Approved commands may change project files without producing structured `write_f
 3. Plan/Activity-first default, exact legacy-default migration, and customized-layout preservation (unit coverage authored; execution queued).
 4. Visible app acceptance during long reasoning, structured tool preparation, plan updates, approvals, file edits, commands, resume, and project switching remains required.
 5. For long reasoning-only requests, capture the active session's `request_dispatched`, `request_headers`, `phase`, `request_error`, and terminal events before attributing an early stop to compaction. The current source has no fixed Ollama stream deadline; compaction is between requests, not during streaming.
+
+### 2026-11-02 access and failure recovery update
+
+- App commit `2437473` adds a user-triggered same-chat continuation prefill for terminal failures and interruptions. It directs the agent to inspect persisted checkpoint and workspace effects before continuing; it does not replay operations or change model settings. Focused helper tests (4) and renderer typecheck passed.
+- Access review confirms built-in file tools are confined to the captured project; approved command and PowerShell processes retain host-user privileges. Explicit external-folder grants and real Windows containment remain implementation gaps. Packaged recovery, complete suites, and visible full-project acceptance remain queued.

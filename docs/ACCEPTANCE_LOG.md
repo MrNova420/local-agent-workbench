@@ -849,3 +849,7 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 
 - The chat transcript now renders a labeled Workbench status entry for persisted terminal outcomes where no normal completion can be shown: missing final answer, implementation incomplete, failed, interrupted, canceled, or stopped-after-operation. This is derived from the recovered `workflowOutcome`; it does not fabricate a model message or assert that unobserved work completed. `tests/workflow-outcome.test.ts` passed (3 tests); `npm run typecheck` passed. Full renderer suite, packaged display, and session-reopen visual acceptance remain queued.
 - `CORE_HARNESS_READINESS.md` now lists stable OpenCode V1 tools and separate V2 development tools against Workbench equivalents and gaps. The audit records V2 as non-stable reference, and highlights Code Mode batching, child sessions, browser and worktree operations as potential parity targets; no V2 feature was assumed stable or implemented from the documentation alone.
+
+### 2026-11-02 continuation recovery source check
+
+App commit `2437473` adds a same-chat continuation prefill after terminal failures/cancellation. It preserves the previous goal and requires workspace/checkpoint inspection in the next turn before retrying uncertain effects. Focused tests: 4 passed; TypeScript typecheck passed. Not yet package-verified. Access review confirms project file tools are root-bound while approved PowerShell/commands are host-user processes; explicit external folder scopes and OS containment are open.
