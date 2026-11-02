@@ -206,5 +206,5 @@ The 2026-10-31 full `npm audit` reports 18 moderate findings in development depe
 
 Core priority queue remains: permission rules with deny precedence; real Windows isolation for commands; first-party LSP, browser/search, question and custom tools; session/workspace recovery and history edge cases; explicit task-specific completion/verification; provider capability and overflow handling; packaged MCP lifecycle/error acceptance. Do not drop the full parity register. UI polish, analytics/KV visualization expansion, orbit interactions, and other non-core improvements stay deferred until core reliability gates pass.
 
-- [x] Remove the static location label and its screenshot; scrub public Git history. Withdraw beta.3 artifacts that were built with the exposed UI, then publish a replacement only after the existing release gates pass.
+- [x] Remove the static location label and its screenshot; scrub public Git history. Beta.3 is now draft-only and its old ZIP asset is not publicly downloadable; publish a clean replacement only after the existing release gates pass.
 

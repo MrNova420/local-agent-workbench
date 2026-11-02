@@ -376,5 +376,8 @@ Resume order: (1) inspect both repo status/logs and this readiness note; (2) run
 
 ### 2026-11-02 public home-hero privacy correction
 
-The fixed decorative location label has been removed from Home and the historical image containing it has been removed from the repository. A regression test checks that location data is not embedded in the hero. Public beta.3 artifacts are being withdrawn pending a clean release; no geolocation API was found in the application source.
+The fixed decorative location label has been removed from Home and the historical image containing it has been removed from the repository. A regression test checks that location data is not embedded in the hero. The beta.3 release is now a draft, and its former public ZIP download returns HTTP 404; no geolocation API was found in the application source.
 
+
+
+Public-history verification: main and both published beta tags now point to scrubbed history, preserving unrelated commits. The beta.3 release is draft-only; its old public ZIP URL returns HTTP 404. Downloaded copies and external caches cannot be recalled.
