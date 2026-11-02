@@ -4,7 +4,7 @@
 
 ## Current verification update (2026-11-02)
 
-- **Current paired source:** app `e14a154` pins engine `ab2d68259309796a60d19a9b5ce4e420b37e4573`. GGUF effort choices are discovered from the loaded llama.cpp template; unreported capabilities remain unknown. With reported effort levels, the explicit Off control is available too. The separate reasoning budget stays unlimited by default and does not change output tokens or impose a time limit. Focused engine runtime tests pass (14), full sidecar worker tests pass (66), renderer model/workflow tests pass (15), and TypeScript typecheck passes. Full test suites, package, visible controls, and real template/budget enforcement remain pending.
+- **Current paired source:** app `026265c` pins engine `ab2d68259309796a60d19a9b5ce4e420b37e4573`. GGUF effort choices are discovered from the loaded llama.cpp template; unreported capabilities remain unknown. With reported effort levels, the explicit Off control is available too. The separate reasoning budget stays unlimited by default and does not change output tokens or impose a time limit. Focused engine runtime tests pass (14), full sidecar worker tests pass (66), renderer model/workflow tests pass (15), and TypeScript typecheck passes. Full test suites, package, visible controls, and real template/budget enforcement remain pending.
 
 ## Current verification update (2026-11-02)
 
