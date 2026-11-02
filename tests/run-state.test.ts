@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyToolCallProgress, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter } from '../src/shared/run-state';
+import { applyToolCallProgress, isGlobalRunLifecycleEvent, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter } from '../src/shared/run-state';
 
 describe('session event isolation', () => {
   it('rejects events from a previous or unselected session while allowing unscoped service events', () => {
@@ -7,6 +7,12 @@ describe('session event isolation', () => {
     expect(shouldApplySessionEvent('session-a', 'session-b')).toBe(false);
     expect(shouldApplySessionEvent('session-a', '')).toBe(false);
     expect(shouldApplySessionEvent(undefined, 'session-b')).toBe(true);
+  });
+
+  it('keeps app-wide run lifecycle updates separate from session transcript events', () => {
+    expect(isGlobalRunLifecycleEvent({ type: 'run_started', sessionId: 'session-a' })).toBe(true);
+    expect(isGlobalRunLifecycleEvent({ type: 'run_idle', sessionId: 'session-a' })).toBe(true);
+    expect(isGlobalRunLifecycleEvent({ type: 'activity_event', sessionId: 'session-a' })).toBe(false);
   });
 });
 
@@ -55,6 +61,15 @@ describe('run status transitions', () => {
     ['unknown', 'Ready'],
   ])('restores a saved %s outcome as %s', (status, expected) => {
     expect(restoredRunPhase(status)).toBe(expected);
+  });
+
+  it('restores the live inference phase when reattaching to a running session', () => {
+    expect(restoredRunPhase('running', 'waiting_response_headers')).toBe('Waiting for response headers');
+    expect(restoredRunPhase('running', 'waiting')).toBe('Waiting for first token');
+    expect(restoredRunPhase('running', 'reasoning')).toBe('Reasoning');
+    expect(restoredRunPhase('running', 'generating')).toBe('Generating');
+    expect(restoredRunPhase('running', 'processing_response')).toBe('Processing response');
+    expect(restoredRunPhase('running', 'applying_steering')).toBe('Applying your update');
   });
 
   it('shows first-token wait and generation as separate phases', () => {

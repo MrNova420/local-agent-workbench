@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
 import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, QueuedPrompt, RunOptions, SessionLiveSnapshot, SessionSummary, SkillSource, TaskIntent, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
-import { applyToolCallProgress, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter, type ToolCallProgress } from '../shared/run-state';
+import { applyToolCallProgress, isGlobalRunLifecycleEvent, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter, type ToolCallProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordInputEstimate, recordStreamedText, restoreRunMetrics, type RunMetrics } from '../shared/run-metrics';
 import { requestContextStats } from '../shared/request-context';
 import { approvalModeDescription } from '../shared/approval-mode-copy';
@@ -26,6 +26,7 @@ type PermissionRule = { tool: string; decision: 'allow' | 'ask' | 'deny'; path_g
 type PermissionRuleDraft = { tool: string; decision: PermissionRule['decision']; scope: 'tool' | 'path' | 'command'; value: string; workspace?: string };
 type Session = {
   session_id: string;
+  active_in_process?: boolean;
   workspace: string;
   model: string;
   provider_id?: 'ollama' | 'llama.cpp';
@@ -394,8 +395,15 @@ export default function App() {
       }
       const loaded = response as Session;
       setSessionConflict(null);
-      liveSnapshotCursorRef.current.sessionId = loaded.session_id;
-      setPhase(restoredRunPhase(loaded.run_state?.status));
+      liveSnapshotCursorRef.current = { sessionId: loaded.session_id, activityRevision: 0, textRevision: 0, busy: false };
+      if (loaded.active_in_process) {
+        setRunning(true);
+        setPhase(restoredRunPhase(loaded.run_state?.status, loaded.run_state?.phase));
+        if (typeof loaded.run_state?.started_at === 'number' && Number.isFinite(loaded.run_state.started_at)) {
+          setStartedAt(loaded.run_state.started_at * 1000);
+          setElapsed(Math.max(0, Date.now() - loaded.run_state.started_at * 1000));
+        }
+      } else setPhase(restoredRunPhase(loaded.run_state?.status));
       setFirstOperationSeconds(typeof loaded.run_state?.first_operation_seconds === 'number' ? loaded.run_state.first_operation_seconds : null);
       setFirstFileWriteSeconds(typeof loaded.run_state?.first_file_write_seconds === 'number' ? loaded.run_state.first_file_write_seconds : null);
       setWorkflowOutcome(typeof loaded.run_state?.workflow_outcome === 'string' ? loaded.run_state.workflow_outcome : loaded.run_state?.status === 'interrupted' ? 'interrupted' : null);
@@ -535,6 +543,12 @@ export default function App() {
     void refreshHome().catch((error) => notify(`Could not load saved workspace history: ${(error as Error).message}`, 'warn'));
     void request({ command: 'ping' }).then(() => setInstalled(true)).catch(() => setInstalled(false));
     const unsubscribe = window.agent.onEvent((event) => {
+      if (isGlobalRunLifecycleEvent(event)) {
+        setRunning(event.type === 'run_started');
+        if (event.type === 'run_idle') {
+          setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
+        }
+      }
       if (!shouldApplySessionEvent(event.sessionId, liveSnapshotCursorRef.current.sessionId)) return;
       if ((event.type === 'text' || event.type === 'thinking') && typeof event.textRevision === 'number') {
         const cursor = liveSnapshotCursorRef.current;
@@ -836,8 +850,6 @@ export default function App() {
       if (event.type === 'run_idle') {
         setToolCallProgress([]);
         setApproval(null);
-        setRunning(false);
-        setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
         setRunMetrics((current) => endGeneration(current));
         setMessages((current) => current.map((row) => ({ ...row, streaming: false })));
         setPhase((current) => nextRunPhase(current, event));

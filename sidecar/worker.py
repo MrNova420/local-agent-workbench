@@ -1319,6 +1319,7 @@ class AgentService:
                 state["workspace"] = str(captured_source)
                 state["activity_events"] = state.get("activity_events", []) if isinstance(state.get("activity_events", []), list) else []
                 state["plan"] = state.get("plan", []) if isinstance(state.get("plan", []), list) else []
+                state["active_in_process"] = True
                 return state
             selected_workspace = str(message.get("workspace", "")) or None
             if not selected_workspace:

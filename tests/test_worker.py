@@ -1332,6 +1332,7 @@ def test_resuming_the_live_session_reattaches_without_marking_it_interrupted(ser
 
     resumed = service.handle("session_resume", {"sessionId": state["session_id"], "workspace": str(project)})
 
+    assert resumed["active_in_process"] is True
     assert resumed["run_state"]["status"] == "running"
     assert resumed["run_state"]["partial_content"] == "new live output"
     assert resumed["messages"][-1]["content"] == "new live output"

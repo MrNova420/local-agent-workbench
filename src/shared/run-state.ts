@@ -10,6 +10,10 @@ export function shouldApplySessionEvent(eventSessionId: unknown, activeSessionId
   return typeof eventSessionId !== 'string' || eventSessionId.length === 0 || eventSessionId === activeSessionId;
 }
 
+export function isGlobalRunLifecycleEvent(event: { type: string; sessionId?: unknown }): boolean {
+  return event.type === 'run_started' || event.type === 'run_idle';
+}
+
 export function applyToolCallProgress(current: ToolCallProgress[], event: WorkerEvent): ToolCallProgress[] {
   if (event.type !== 'tool_call_progress') return current;
   const requestIndex = Number(event.request_index ?? 0);
@@ -28,7 +32,25 @@ export function applyToolCallProgress(current: ToolCallProgress[], event: Worker
   return next;
 }
 
-export function restoredRunPhase(status: unknown): string {
+export function restoredRunPhase(status: unknown, phase?: unknown): string {
+  if (status === 'running') {
+    const livePhases: Record<string, string> = {
+      waiting_response_headers: 'Waiting for response headers',
+      waiting: 'Waiting for first token',
+      reasoning: 'Reasoning',
+      generating: 'Generating',
+      processing_response: 'Processing response',
+      steering_interrupted: 'Applying your update',
+      applying_steering: 'Applying your update',
+      continuing: 'Continuing task',
+      finishing: 'Finishing turn',
+    };
+    if (typeof phase === 'string' && livePhases[phase]) return livePhases[phase];
+    if (typeof phase === 'string' && phase.trim()) {
+      return phase.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+    }
+    return 'Working';
+  }
   switch (status) {
     case 'completed': return 'Turn complete';
     case 'failed': return 'Run failed';
