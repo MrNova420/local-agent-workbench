@@ -1,3 +1,7 @@
+## 2026-11-02 command stdin isolation
+
+- Engine c012b841af7737b8cdbfbfa66e0c547ae91eabfc launches commands with stdin redirected to DEVNULL, preventing child processes from consuming the sidecar's newline-delimited control messages. Prompt-driven commands receive EOF; persistent interactive terminal sessions remain unsupported and are tracked as a capability gap. Focused regression verifies the exact Popen stdin target and EOF behavior; command isolation, Unicode output, and cancellation checks: **3 passed**. Full sidecar/protocol and packaged command acceptance remain queued.
+
 ## 2026-11-02 shared safe-batching guidance
 
 - Engine 813d502690207eb8b303fa4fc615c0b0131060c8 places independent-call batching in the shared prompt, so Standard and Small-model runs both know the host can execute validated independent reads concurrently. Writes, commands, and MCP calls remain ordered under their approval rules. Focused regression for both profiles: **1 passed**; Python compilation and git diff --check passed. With identical default prompt inputs, Standard grows 270 characters and Small-model is 1,160 characters shorter overall than the original prompt; the Small-model-specific block is 1,430 characters shorter. No model, context, output, reasoning, or runtime setting changed. Representative model outcomes remain queued.
