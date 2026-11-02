@@ -2,7 +2,7 @@
 
 ## 2026-11-02 loaded-template reasoning discovery
 
-- Current app source pins engine `878ff68eba9720186945fb4ed2b728ee16ae3771`. llama.cpp reasoning levels are read from the loaded model's chat-template capabilities; unloaded or unreported values remain unknown rather than using generic levels. When levels are reported, the explicit reasoning-off option is available and launches with `--reasoning off`. The app refreshes the selected GGUF's model metadata after load. Checkpoint continuity preserves the next concrete plan action after tool results. Focused checkpoint tests pass (25), runtime tests pass (14), full sidecar worker tests pass (66), renderer tests pass (15), and typecheck passes. Broad suites, package, visible app acceptance, and actual template/budget enforcement remain pending.
+- Current app source pins engine `dcdf7fc2c3b1ca61bfd44cb2449e4e77b7e69c59`. llama.cpp reasoning levels are read from the loaded model's chat-template capabilities; unloaded or unreported values remain unknown rather than using generic levels. When levels are reported, the explicit reasoning-off option is available and launches with `--reasoning off`. The app refreshes the selected GGUF's model metadata after load. Checkpoint continuity preserves the next concrete plan action after tool results and the first open step under a compacted budget. Focused checkpoint tests pass (25), runtime tests pass (14), full sidecar worker tests pass (66), renderer tests pass (15), and typecheck passes. Broad suites, package, visible app acceptance, and actual template/budget enforcement remain pending.
 
 ## 2026-11-02 model reasoning control update
 

@@ -889,4 +889,8 @@ App commit `026265ce442667fccb5d84b7b482998016a85483` pins engine `ab2d682593097
 
 Engine commit `878ff68eba9720186945fb4ed2b728ee16ae3771` keeps an open plan's concrete next step in the compaction checkpoint after tool operations. The previous implementation replaced it with a generic review reminder, which could misdirect model continuation. Unplanned tasks still get a result-review fallback. Focused task-checkpoint suite: **25 passed**. App pin synchronized; complete engine/renderer suites, packaging, and long-run model acceptance remain pending.
 
+### 2026-11-02 compacted plan keeps the next open step
+
+Engine commit `dcdf7fc2c3b1ca61bfd44cb2449e4e77b7e69c59` changes budgeted plan compaction to retain the first open action in plan order rather than the last. The full saved plan remains unchanged and recoverable. The checkpoint suite passes: **25 passed**, including a regression that exposed the previous wrong-step behavior. App pin synchronized; full suites, package, and live long-run acceptance remain open.
+
 \r\n
