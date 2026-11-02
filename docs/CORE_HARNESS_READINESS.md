@@ -2,6 +2,22 @@
 
 **Status: active work.** This document focuses on the agent loop and usable project-development workflow. The current paired source has focused engine runtime/loop/context/checkpoint tests, renderer and sidecar tests, and a passing TypeScript typecheck. Complete suites and current packaged/visible acceptance remain pending. Long-run model behavior, live runtime attribution, updater recovery, and broader parity remain open; a source test pass is not release readiness.
 
+## Current parity research (2026-11-02)
+
+The comparison is about observable harness behavior, not claiming identical implementations. OpenCode V1 documents separate filesystem/search/shell tools, resource-aware permissions, MCP/custom tools, and automatic compaction; V2 documents a unified tool contract, ordered action/resource permission rules, durable session operations, safe-boundary steering, session inbox, and resumable execution. V2 compaction retains a configurable recent token tail beside a rolling summary, keeps canonical history, can precompute summaries experimentally, and retries context overflow once. See [V1 tools](https://opencode.ai/docs/tools/), [V1 agents and permissions](https://opencode.ai/docs/agents/), [V1 compaction](https://opencode.ai/docs/config/), [V2 tools](https://dev.opencode.ai/v2/docs/tools), [V2 permissions](https://dev.opencode.ai/v2/docs/permissions/), [V2 compaction](https://dev.opencode.ai/v2/docs/compaction/), and the [V2 session contract](https://github.com/anomalyco/opencode/blob/dev/specs/v2/session.md).
+
+OpenAI's current Agents API documentation describes durable sessions, streamed events, same-session steering/resume, approvals as interruptions on the same saved state, skills, MCP/tools, and a sandbox/environment boundary. This is evidence for Agents API behavior; it is not a one-to-one description of the Codex desktop or CLI. See [Agents API overview](https://developers.openai.com/api/docs/guides/agents-api/overview), [guardrails and approvals](https://developers.openai.com/api/docs/guides/agents/guardrails-approvals), and [sandbox agents](https://developers.openai.com/api/docs/guides/agents/sandboxes).
+
+| Capability | Workbench evidence | Remaining parity work |
+|---|---|---|
+| Session continuation and steering | Same-task steering is persisted and applied at request boundaries; ordered two-update worker regression passes. | Crash/cancel/mirror-failure matrix and visible packaged acceptance remain open. |
+| Tool access and activity | Structured file/Git/command/MCP tools, streamed call preparation, durable operation events and results. | Broaden capability adapters (LSP, web/browser, debugging/build profiles, custom tools); test all batch and failure paths. |
+| Approval and permissions | Per-action/per-task/per-session controls and persistent resource rules exist in source. | Verify exact per-resource precedence, command decomposition, host-boundary reporting and real opt-in Windows containment. |
+| Long-context work | Rolling task checkpoint, retained history, operation lookup, token-aware request compaction, output continuation and partial-response recovery. | Verify summary fidelity, interruptions, repeated compaction, save faults and prompt-cache behavior in end-to-end runs. |
+| Recovery and review | Dual session copies, event journals, uncertain-operation review, persisted transcript rendering. | Complete crash/reopen/package tests and prove no replay or loss across project switches. |
+
+**Design inference:** the highest-value parity gap is not adding more prompt instructions; it is proving one durable session state connects user input, provider requests, tool batches, permission decisions, saved events, and recovery. A local harness must also make clear that host-shell approval is not an OS sandbox. Preserve these as prioritized implementation and evidence gates rather than claiming feature parity from tool names alone.
+
 ## Current verification update (2026-11-02)
 
 - **Source startup pin guard:** unbundled runs now verify their engine checkout matches `core-revision.txt` before importing engine code. A mismatch is reported immediately through the app's service error instead of surfacing later as an import failure or generic timeout. Focused build-config tests: 8 passed; TypeScript typecheck and Python compile passed. Full suites, packaged startup, and visible acceptance remain open.
