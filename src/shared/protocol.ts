@@ -128,6 +128,8 @@ export type ActivityRecord = {
   answer?: string;
   name?: string;
   status: string;
+  /** Latest resumable progress from a long-running structured operation. */
+  progress?: { message: string; filesScanned?: number; bytesRead?: number; matches?: number; timestamp?: number };
   source?: 'workbench' | 'agent';
   approvalStatus?: 'waiting' | 'approved' | 'denied' | 'cancelled';
   approvalMode?: 'per-action' | 'per-task' | 'per-session';

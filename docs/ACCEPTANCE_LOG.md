@@ -1,5 +1,11 @@
 # Visible Acceptance Log
 
+## 2026-11-02 progressive project file scan activity
+
+- Engine `48e6218730effd253d94deee0cd4bafff39d4280` emits sampled progress for `list_files` and `search_files` without changing the result/paging contract or adding a scan cap. The sidecar updates the same operation activity record and journals/replays its latest scan counters. Chat and Activity Trace render the progress inline on the operation row, including after session restore.
+- Focused evidence: engine file tools **37 passed**; worker activity persistence **1 passed**; journal replay **1 passed**; renderer activity **20 passed**; paired source-pin check passed. The progress test verifies counts only; it does not expose search query text or file paths.
+- Full suites, package, live app/long-run acceptance, and Flint final model acceptance remain queued. No inference request or model-setting change was made.
+
 ## 2026-11-02 remote recursive reference discovery correction
 
 - Follow-up audit found Draft 2019-09 `$recursiveRef` was blocked by the empty local-only resolver at execution, but discovery did not identify a remote URI as unsupported. Discovery now reports it alongside `$ref` and `$dynamicRef`, so the model sees the restriction before use.
@@ -846,7 +852,7 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 
 - Source inspection confirmed that the composer remains editable during generation but Enter saves only a queued follow-up; it cannot inject direction into the active task. No implementation change or live run was made in this research step.
 - OpenCode's v2 session design and Codex's Queue/Steer guidance both distinguish steering the active task from starting queued work. The Workbench requirement is to deliver a durable steering message at a safe boundary while preserving the same task/session/project/checkpoint; a pending steer must remain visible if a run ends before delivery. The Codex Responses API has separate steering limitations, so its hosted transport constraints must not be assumed for the local engine.
-- The detailed source comparison, confirmed gaps, and ordered acceptance criteria are recorded in `CORE_HARNESS_READINESS.md` and backlog item B-019. No test, package, app launch, model request, or token/reasoning setting change occurred.
+- The detailed source comparison, confirmed gaps, and ordered acceptance criteria are recorded in `CORE_HARNESS_READINESS.md` and the same-chat steering backlog section. No test, package, app launch, model request, or token/reasoning setting change occurred.
 
 ## 2026-11-02 Same-task steering source implementation
 

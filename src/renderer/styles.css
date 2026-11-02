@@ -113,6 +113,7 @@
 .activity-feed-chat.activity-mode-compact .activity-summary-chat .activity-approval{font-size:7px}
 .activity-feed-chat.activity-mode-compact .activity-card-details{margin:2px 0 7px 10px;padding:6px 8px;border:1px solid rgba(130,158,184,.12);border-radius:4px;background:rgba(9,15,22,.74)}
 .activity-prompt-summary{overflow:hidden;max-width:min(52vw,520px);color:var(--muted);font:8px var(--mono);text-overflow:ellipsis;white-space:nowrap}.activity-summary-chat .activity-prompt-summary{font-size:7px}
+.activity-operation-progress{overflow:hidden;max-width:min(46vw,480px);color:#86bea9;font:7px var(--mono);text-overflow:ellipsis;white-space:nowrap}.activity-feed-sidebar .activity-operation-progress{max-width:100%}
 
 .update-settings{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:14px;padding:12px;border:1px solid rgba(147,171,196,.15);border-radius:7px;background:linear-gradient(130deg,rgba(18,29,41,.7),rgba(8,14,22,.65))}.update-settings>div:first-child{display:grid;gap:6px;min-width:0}.update-settings>div:first-child>b{color:#d9e7e9;font-size:10px}.update-settings>div:first-child>small{color:#8798a8;font:8px/1.5 var(--mono)}.update-settings .eyebrow-line{font-size:7px}
 @media(max-width:900px){.first-run-guide{grid-template-columns:1fr}.first-run-steps{grid-template-columns:1fr}.first-run-steps>span,.first-run-steps>button{min-height:auto}.update-settings{grid-template-columns:1fr}}

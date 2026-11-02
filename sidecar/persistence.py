@@ -243,6 +243,12 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any], *,
             stream = str(event.get("stream", "stdout"))
             output = row.setdefault("output", {})
             output[stream] = str(output.get(stream, "")) + str(event.get("text", ""))
+    elif kind == "tool_progress":
+        row = next((item for item in state.setdefault("activity_events", [])
+                    if item.get("operationId") == event.get("operationId")), None)
+        if row and isinstance(event.get("progress"), dict):
+            row["progress"] = copy.deepcopy(event["progress"])
+            row["timestamp"] = event.get("timestamp", time.time())
     elif kind == "tool_done":
         if (str(event.get("name", "")) in {"write_file", "append_file", "edit_file", "apply_patch"}
                 and str(event.get("status", "")) == "completed"

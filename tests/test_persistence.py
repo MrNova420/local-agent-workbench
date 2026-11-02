@@ -130,6 +130,21 @@ class MirroredSessionStoreTests(unittest.TestCase):
                                   "turnId": "turn-progress", "error": "connection ended"})
         self.assertEqual(state["activity_events"][0]["status"], "interrupted")
 
+    def test_scan_progress_replays_onto_operation_and_preserves_terminal_result(self):
+        state = {"session_id": "s-scan", "workspace": "C:/project",
+                 "run_state": {"turn_id": "turn-scan"}, "activity_events": []}
+        _replay_run_event(state, {"type": "tool_start", "turnId": "turn-scan", "workspace": "C:/project",
+                                  "operationId": "op-search", "name": "search_files", "arguments": {"query": "x"}})
+        _replay_run_event(state, {"type": "tool_progress", "turnId": "turn-scan", "timestamp": 5,
+                                  "operationId": "op-search", "progress": {"message": "Searching · 256 inspected",
+                                                                                "filesScanned": 256, "bytesRead": 8192}})
+        _replay_run_event(state, {"type": "tool_done", "turnId": "turn-scan", "operationId": "op-search",
+                                  "name": "search_files", "result": "complete result", "status": "completed"})
+        row = state["activity_events"][0]
+        self.assertEqual(row["progress"]["filesScanned"], 256)
+        self.assertEqual(row["result"], "complete result")
+        self.assertEqual(row["status"], "completed")
+
     def test_journal_recovery_preserves_uncertain_remote_tool_effects(self):
         state = {
             "session_id": "s-mcp", "workspace": "C:/project",

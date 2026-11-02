@@ -984,6 +984,9 @@ def test_activity_events_checkpoint_complete_results_and_unstarted_calls(service
                                  "calls": [{"id": "call-a", "name": "run_command"}, {"id": "call-b", "name": "write_file"}]})
     service._publish_run_event(controller, turn, {"type": "tool_start", "operationId": "op-a", "toolCallId": "call-a",
                                  "name": "run_command", "arguments": {"argv": ["python"]}, "startedAt": 1})
+    service._publish_run_event(controller, turn, {"type": "tool_progress", "operationId": "op-a",
+                                 "progress": {"message": "Scanning files · 256 inspected", "filesScanned": 256},
+                                 "timestamp": 1.5})
     service._publish_run_event(controller, turn, {"type": "operation_output", "operationId": "op-a", "stream": "stdout", "text": "full log " * 3000})
     service._publish_run_event(controller, turn, {"type": "tool_done", "operationId": "op-a", "toolCallId": "call-a",
                                  "name": "run_command", "result": "complete result " * 2000, "affectedFiles": [], "completedAt": 2})
@@ -995,10 +998,12 @@ def test_activity_events_checkpoint_complete_results_and_unstarted_calls(service
     checkpoint_tools = [message for message in saved["run_state"]["safe_messages"] if message.get("role") == "tool"]
     assert len(activity["output"]["stdout"]) > 12000
     assert len(activity["result"]) > 12000
+    assert activity["progress"]["filesScanned"] == 256
     assert checkpoint_tools[0]["content"] == "complete result " * 2000
     assert checkpoint_tools[1]["content"] == "second result"
     assert sum(message.get("role") == "assistant" and bool(message.get("tool_calls")) for message in saved["run_state"]["safe_messages"]) == 1
     assert any(event["type"] == "activity_event" for event in emitted)
+    assert any(event["type"] == "activity_event" and event.get("activity", {}).get("progress", {}).get("filesScanned") == 256 for event in emitted)
 
 
 def test_parallel_active_reads_are_tracked_and_recovered_individually(service, tmp_path, monkeypatch):

@@ -396,6 +396,11 @@ class AgentService:
                             "name": event.get("name", "tool"), "arguments": copy.deepcopy(event.get("arguments", {})),
                             "status": "running", "startedAt": event.get("startedAt", time.time()), "output": {}, "result": "", "affectedFiles": []}
                 rows.append(activity)
+            elif kind == "tool_progress":
+                activity = next((item for item in rows if item.get("operationId") == event.get("operationId")), None)
+                if activity and isinstance(event.get("progress"), dict):
+                    activity["progress"] = copy.deepcopy(event["progress"])
+                    activity["timestamp"] = event.get("timestamp", time.time())
             elif kind == "operation_output":
                 activity = next((item for item in rows if item.get("operationId") == event.get("operationId")), None)
                 if activity:

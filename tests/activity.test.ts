@@ -72,6 +72,15 @@ describe('durable live activity state', () => {
     }], mode: 'compact', surface: 'chat' }));
     expect(assembled).toContain('Complete structured call received');
   });
+  it('renders and restores live file-scan progress on the operation row', () => {
+    const operation: ActivityRecord = { id: 'op-search', operationId: 'op-search', turnId: 'turn-1',
+      sessionId: 'session-1', kind: 'operation', name: 'search_files', status: 'running' };
+    const progress = { message: 'Searching files · 256 inspected · 8,192 bytes read', filesScanned: 256, bytesRead: 8192 };
+    const current = applyActivityEvent([], { type: 'activity_event', activity: { ...operation, progress } });
+    const markup = renderToStaticMarkup(createElement(ActivityFeed, { entries: current, mode: 'compact', surface: 'chat' }));
+    expect(markup).toContain(progress.message);
+    expect(mergeActivitySnapshot([], current)[0].progress?.filesScanned).toBe(256);
+  });
   it('progressively renders long activity histories without discarding older records', () => {
     const entries: ActivityRecord[] = Array.from({ length: 245 }, (_, index) => ({
       id: `activity-${index}`, sessionId: 'session-long', turnId: 'turn-long', kind: 'operation',
