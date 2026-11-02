@@ -1002,3 +1002,10 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 
 - Engine commit `83489ae3e51bc82f6ca624055072ab7264f1c947` adds general model guidance to inspect errors and current state, correct causes before retrying, preserve completed work, inspect uncertain effects before retry, and never route around denials. It imposes no fixed retry/iteration cap. `tests/test_agent_instructions.py`: **10 passed**. No model was started or called.
 - The app now pins this engine revision. `tests/test_build_config.py`: **8 passed**; `npm run typecheck` passed. This remains focused source verification; full suites, packaged and visible acceptance, long-run Flint acceptance, updater validation, and release readiness remain open.
+
+### 2026-11-02 interruptible same-task steering and reasoning restore
+
+- Paired engine `647df9f9dcc96a894ec773c79e7dc31c92c0862f` adds a request-scoped steering interrupt distinct from Cancel. A durably saved update can close the active provider stream; received text/reasoning is saved as partial, incomplete tool arguments are discarded, and the same task resumes with the update. Ordinary Cancel still takes precedence. Engine `tests/test_operation_stream.py -k steering`: **3 passed**.
+- The sidecar marks the provider request as redirected, interrupts only while inference is active, and retains safe-boundary delivery during tool/approval operations. `tests/test_worker.py -k steering`: **3 passed**.
+- The composer now says “Redirect now”; the transcript labels partial redirected output, and restore includes reasoning-only assistant segments even when visible content is absent. Renderer transcript/run-state tests: **29 passed**; TypeScript typecheck and `git diff --check` passed. No inference/model or model-setting changes were made.
+- These are focused source checks only. The packaged app, visible long inference, crash point between interruption and resumed request, and live Flint workflow remain queued; this is not release readiness.

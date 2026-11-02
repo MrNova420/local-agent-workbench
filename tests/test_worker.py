@@ -151,6 +151,33 @@ def test_active_task_steering_is_saved_to_the_captured_session_and_waits_for_bou
         })
 
 
+def test_active_inference_steering_is_persisted_before_request_interrupt(service, tmp_path, monkeypatch):
+    project = tmp_path / "active-inference-steering-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    state["task_checkpoint"] = worker.begin_task(None, prompt="Build the feature", turn_id="turn-live",
+                                                workspace=str(project), settings={})
+    state["run_state"] = {"status": "running", "turn_id": "turn-live", "safe_messages": []}
+    interrupt = threading.Event()
+    controller = {"session": state, "checkpoint_lock": threading.RLock(), "accepting_steering": True,
+                  "pending_steers": [], "turn_id": "turn-live", "inference_active": True,
+                  "steering_interrupt": interrupt}
+    service.active = controller
+    emitted = []
+    monkeypatch.setattr(service, "emit", emitted.append)
+
+    result = service.handle("session_steer", {
+        "sessionId": state["session_id"], "workspace": str(project), "prompt": "Start implementing now",
+    })
+
+    assert result["status"] == "interrupting"
+    assert interrupt.is_set()
+    saved = service.sessions.load(state["session_id"])
+    assert saved["task_checkpoint"]["current"]["user_updates"][-1]["instruction"] == "Start implementing now"
+    assert emitted[-1]["type"] == "steering_update"
+    assert emitted[-1]["status"] == "interrupting"
+
+
 def test_steering_messages_are_delivered_in_order_before_same_task_continues(service, tmp_path, monkeypatch):
     events = []
     service.emit = events.append

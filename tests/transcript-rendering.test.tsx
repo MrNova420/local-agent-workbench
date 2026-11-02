@@ -57,6 +57,17 @@ describe('resumed transcript rendering', () => {
     expect(restored[1]).toMatchObject({ content: 'I inspected the files.', thinking: 'Checking current behavior', recoveredPartial: true });
   });
 
+  it('restores reasoning-only assistant segments after an interrupted same-task redirect', () => {
+    const restored = restoreTranscriptMessages([
+      { role: 'user', content: 'Implement this feature' },
+      { role: 'assistant', thinking: 'I inspected the project and found the relevant component.', partial_response: true, steering_interrupted: true },
+      { role: 'user', content: 'Keep the existing layout', steering_id: 'update-1', steering_status: 'delivered' },
+    ]);
+
+    expect(restored).toHaveLength(3);
+    expect(restored[1]).toMatchObject({ content: '', thinking: 'I inspected the project and found the relevant component.', recoveredPartial: true, steeringInterrupted: true });
+  });
+
   it('does not shift restored activity links after a canceled turn without a transcript prompt', () => {
     const restored = restoreTranscriptMessages([
       { role: 'user', content: 'First saved task' },

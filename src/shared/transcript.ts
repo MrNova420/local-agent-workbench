@@ -4,8 +4,9 @@ export type PersistedTranscriptRow = {
   thinking?: unknown;
   turn_id?: string;
   steering_id?: string;
-  steering_status?: 'pending' | 'delivered' | 'undelivered';
+  steering_status?: 'pending' | 'interrupting' | 'delivered' | 'undelivered';
   partial_response?: boolean;
+  steering_interrupted?: boolean;
 };
 
 export type PersistedTranscriptTurn = { turn_id?: string; transcript_saved?: boolean };
@@ -16,8 +17,9 @@ export type TranscriptMessage = {
   thinking?: string;
   turnId?: string;
   steeringId?: string;
-  steeringStatus?: 'pending' | 'delivered' | 'undelivered';
+  steeringStatus?: 'pending' | 'interrupting' | 'delivered' | 'undelivered';
   recoveredPartial?: boolean;
+  steeringInterrupted?: boolean;
 };
 
 export function appendTranscriptSegment(previous: string, chunk: string, separatedByTool: boolean): string {
@@ -31,19 +33,24 @@ export function restoreTranscriptMessages(rows: PersistedTranscriptRow[], turns:
   let userTurnIndex = 0;
   const restored: TranscriptMessage[] = [];
   for (const row of rows) {
-    if ((row.role !== 'user' && row.role !== 'assistant') || typeof row.content !== 'string' || row.content.length === 0) continue;
+    if (row.role !== 'user' && row.role !== 'assistant') continue;
+    const content = typeof row.content === 'string' ? row.content : '';
+    const hasThinking = typeof row.thinking === 'string' && row.thinking.length > 0;
+    if ((row.role === 'user' && content.length === 0)
+        || (row.role === 'assistant' && content.length === 0 && !hasThinking)) continue;
     const explicitTurnId = typeof row.turn_id === 'string' ? row.turn_id : undefined;
     const turnId = row.role === 'user' ? explicitTurnId || savedTurns[userTurnIndex++]?.turn_id : undefined;
     const steeringId = typeof row.steering_id === 'string' ? row.steering_id : undefined;
-    const steeringStatus = row.steering_status === 'pending' || row.steering_status === 'undelivered' ? row.steering_status : steeringId ? 'delivered' : undefined;
+    const steeringStatus = row.steering_status === 'pending' || row.steering_status === 'interrupting' || row.steering_status === 'undelivered' ? row.steering_status : steeringId ? 'delivered' : undefined;
     restored.push({
       role: row.role,
-      content: row.content,
+      content,
       thinking: typeof row.thinking === 'string' ? row.thinking : undefined,
       turnId,
       ...(steeringId ? { steeringId } : {}),
       ...(steeringStatus ? { steeringStatus } : {}),
       ...(row.role === 'assistant' && row.partial_response === true ? { recoveredPartial: true } : {}),
+      ...(row.role === 'assistant' && row.steering_interrupted === true ? { steeringInterrupted: true } : {}),
     });
   }
   return restored;

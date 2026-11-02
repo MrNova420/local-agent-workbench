@@ -204,9 +204,21 @@ class AgentService:
         enriched = {**event, "sessionId": state["session_id"], "turnId": controller["turn_id"],
                     "workspace": str(turn.workspace), "timestamp": event.get("at", time.time())}
         event_kind = event.get("type")
-        force_journal = event_kind in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "prompt_manifest", "inference_settings", "request_dispatched", "request_headers", "request_complete", "request_error", "approval_request", "question_request", "question_answered", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
-        force_snapshot = event_kind in {"context_compacted", "approval_request", "question_request", "question_answered", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
+        force_journal = event_kind in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "prompt_manifest", "inference_settings", "request_dispatched", "request_headers", "request_complete", "request_error", "steering_interrupted", "approval_request", "question_request", "question_answered", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
+        force_snapshot = event_kind in {"context_compacted", "request_error", "steering_interrupted", "approval_request", "question_request", "question_answered", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
         with controller["checkpoint_lock"]:
+            steering_interrupt = controller.get("steering_interrupt")
+            if event_kind == "phase" and event.get("phase") == "waiting":
+                controller["inference_active"] = True
+                if controller.get("pending_steers") and steering_interrupt is not None:
+                    steering_interrupt.set()
+            elif event_kind in {"request_complete", "request_error"}:
+                controller["inference_active"] = False
+            if (event_kind == "request_error" and event.get("cancelled")
+                    and steering_interrupt is not None and steering_interrupt.is_set()
+                    and not (controller.get("cancel") and controller["cancel"].is_set())):
+                event = {**event, "interrupted_by_steering": True}
+                enriched["interrupted_by_steering"] = True
             if isinstance(run_state, dict):
                 if event_kind == "phase":
                     run_state["phase"] = str(event.get("phase", "working"))
@@ -217,7 +229,10 @@ class AgentService:
                 elif event_kind == "request_complete":
                     run_state["phase"] = "processing_response"
                 elif event_kind == "request_error":
-                    run_state["phase"] = "cancelled" if event.get("cancelled") else "failed"
+                    run_state["phase"] = ("steering_interrupted" if event.get("interrupted_by_steering")
+                                           else "cancelled" if event.get("cancelled") else "failed")
+                elif event_kind == "steering_interrupted":
+                    run_state["phase"] = "applying_steering"
                 if event.get("type") == "phase" and event.get("phase") == "waiting":
                     # Snapshot buffers describe one provider request, while the
                     # revision stays monotonic across the whole captured turn.
@@ -496,7 +511,9 @@ class AgentService:
                                                 provider_done=event.get("provider_done"),
                                                 provider_done_reason=event.get("provider_done_reason"))
                     else:
-                        activity["status"] = "cancelled_during_request" if event.get("cancelled") else "request_failed"
+                        activity["status"] = ("interrupted_by_steering" if event.get("interrupted_by_steering")
+                                               else "cancelled_during_request" if event.get("cancelled")
+                                               else "request_failed")
                         provider_request.update(dispatch_status=activity["status"],
                                                 failure_phase=event.get("phase"), request_error=event.get("error"))
             elif kind == "generation_usage":
@@ -803,14 +820,18 @@ class AgentService:
                 if isinstance(run_state, dict):
                     run_state["pending_steers"] = copy.deepcopy(pending)
                 raise RuntimeError(saved.get("error") or "Steering input could not be saved to either session mirror.")
-            self.emit({"type": "steering_update", "status": "accepted", "updateId": update["id"],
+            steering_interrupt = controller.get("steering_interrupt")
+            interrupting = bool(controller.get("inference_active", False) and steering_interrupt is not None)
+            if interrupting:
+                steering_interrupt.set()
+            self.emit({"type": "steering_update", "status": "interrupting" if interrupting else "accepted", "updateId": update["id"],
                        "prompt": clean, "sessionId": session_id, "turnId": controller["turn_id"],
                        "workspace": str(selected_workspace), "createdAt": update["created_at"]})
             if not (saved.get("app_saved") and saved.get("project_saved")):
                 self.emit({"type": "session_mirror_error", "sessionId": session_id,
                            "appSaved": saved.get("app_saved", False), "projectSaved": saved.get("project_saved", False),
                            "error": saved.get("error") or "Steering was saved to only one session mirror."})
-        return {"accepted": True, "updateId": update["id"], "status": "pending", "persistence": saved}
+        return {"accepted": True, "updateId": update["id"], "status": "interrupting" if interrupting else "pending", "persistence": saved}
 
     def _load_session_state(self, session_id: str) -> dict[str, Any]:
         loaded = self.sessions.load(session_id)
@@ -1742,7 +1763,8 @@ class AgentService:
                      "last_journal_flush": time.monotonic(), "journal_pending": [], "current_operation_id": None,
                      "activity_revision": 0, "text_revision": 0, "live_content": "", "live_thinking": "",
                      "stop_after_operation": False, "accepting_queue": True, "accepting_steering": True,
-                     "pending_steers": [], "approval_mode": approval_mode}
+                     "pending_steers": [], "steering_interrupt": threading.Event(),
+                     "inference_active": False, "approval_mode": approval_mode}
         with self.active_lock:
             self.active = controller
         saved = self.sessions.save(controller["session"])
@@ -1895,6 +1917,7 @@ class AgentService:
                     ]
                     if isinstance(run_state, dict):
                         run_state["pending_steers"] = copy.deepcopy(controller["pending_steers"])
+                    controller["steering_interrupt"].clear()
                     for update in pending:
                         self.emit({"type": "steering_update", "status": "delivered", "updateId": update["id"],
                                    "prompt": update["instruction"], "sessionId": state["session_id"],
@@ -1922,6 +1945,7 @@ class AgentService:
                 ask_user=lambda args: self._ask_user(controller, turn, args),
                 session_approval_granted=bool(state.get("session_approval_granted", False)),
                 steering_handler=apply_steering,
+                steering_interrupt_event=controller["steering_interrupt"],
             )
             chosen_runtime = self.providers.runtime_for(turn.model, engine.runtime, state.get("provider_id"))
             engine.runtime = RequestScopedOllama(chosen_runtime)
