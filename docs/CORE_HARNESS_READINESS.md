@@ -4,7 +4,7 @@
 
 ## Current verification update (2026-11-02)
 
-- **Current paired source:** app source commit `fb63107` pins engine source `dcdf7fc2c3b1ca61bfd44cb2449e4e77b7e69c59`. GGUF effort choices are discovered from the loaded llama.cpp template; unreported capabilities remain unknown. With reported effort levels, the explicit Off control is available too. Compaction preserves the concrete next action after tool results and the first open step under a small checkpoint budget. Focused engine operation-stream/checkpoint/runtime tests pass (75 combined); paired sidecar reasoning/settings checks pass (2); renderer transcript/recovery/reasoning/activity/worksheet checks pass (43 combined). Earlier focused sidecar and TypeScript typecheck checks also passed. Full suites, package, visible controls, and real template/budget enforcement remain pending.
+- **Current paired source:** app source commit `55652dc` pins engine source `dcdf7fc2c3b1ca61bfd44cb2449e4e77b7e69c59`. GGUF effort choices are discovered from the loaded llama.cpp template; unreported capabilities remain unknown. With reported effort levels, the explicit Off control is available too. Compaction preserves the concrete next action after tool results and the first open step under a small checkpoint budget. Focused engine operation-stream/checkpoint/runtime tests pass (75 combined); paired sidecar reasoning/settings checks pass (2); renderer transcript/recovery/reasoning/activity/worksheet checks pass (43 combined). Earlier focused sidecar and TypeScript typecheck checks also passed. Full suites, package, visible controls, and real template/budget enforcement remain pending.
 
 ## Earlier reasoning-budget verification (2026-11-02)
 
