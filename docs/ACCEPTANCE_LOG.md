@@ -897,4 +897,6 @@ App commit `e399d86c71dcc64a5fc6bac58055dd5bc97a591d` records and pins that exac
 
 Focused engine verification was then run against that pin: `tests/test_operation_stream.py` plus `tests/test_task_checkpoint.py` passed **61 tests**. This adds source-level continuation/checkpoint evidence only; it does not close the queued full-suite, sidecar integration, package, visible UI, or extended model-run gates.
 
+Focused renderer checks for resumed Markdown/code formatting, terminal recovery actions, and reasoning/token-budget controls also passed: `tests/transcript-rendering.test.tsx`, `tests/workflow-outcome.test.ts`, and `tests/model-controls.test.ts` — **20 tests**. Server/runtime enforcement and packaged session-reopen rendering remain unverified.
+
 \r\n
