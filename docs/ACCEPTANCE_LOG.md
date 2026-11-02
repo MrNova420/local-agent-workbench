@@ -853,3 +853,7 @@ The initial Git-diff exclusion was reversed in the later `Respect opt-in session
 ### 2026-11-02 continuation recovery source check
 
 App commit `2437473` adds a same-chat continuation prefill after terminal failures/cancellation. It preserves the previous goal and requires workspace/checkpoint inspection in the next turn before retrying uncertain effects. Focused tests: 4 passed; TypeScript typecheck passed. Not yet package-verified. Access review confirms project file tools are root-bound while approved PowerShell/commands are host-user processes; explicit external folder scopes and OS containment are open.
+
+### Engine retry-loop regression
+
+Engine focused test verifies a failed file read is shown to the model, a corrected same-task retry succeeds, and the final answer is returned: **1 passed, 29 deselected**. Engine commit `2c3acd3f4c8cdb9331d3a4d4fdf7a4dfa1c84b9b`; paired app pin synchronized. This does not replay side effects automatically.

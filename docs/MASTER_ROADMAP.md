@@ -194,3 +194,5 @@ Approved commands may change project files without producing structured `write_f
 
 - App commit `2437473` adds a user-triggered same-chat continuation prefill for terminal failures and interruptions. It directs the agent to inspect persisted checkpoint and workspace effects before continuing; it does not replay operations or change model settings. Focused helper tests (4) and renderer typecheck passed.
 - Access review confirms built-in file tools are confined to the captured project; approved command and PowerShell processes retain host-user privileges. Explicit external-folder grants and real Windows containment remain implementation gaps. Packaged recovery, complete suites, and visible full-project acceptance remain queued.
+
+- Engine commit `2c3acd3f4c8cdb9331d3a4d4fdf7a4dfa1c84b9b` adds focused proof that a recoverable tool failure is included in the next same-task model request and may be corrected/retried there. One focused test passed; full suites and package acceptance remain queued. The paired app pin was updated.
