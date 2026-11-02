@@ -1,5 +1,9 @@
 # Product roadmap and release state
 
+## Current paired development checkpoint (2026-11-02)
+
+The active app worktree is `workbench/core-chat-activity` at `d846940`; it pins the shared engine worktree at `251acf4a2858f6dd79dcd3c46ba1a8a898c62c88`. This checkpoint adds cancellable 30-second retry handling for Windows sharing locks on both project file replacement and mirrored session JSON snapshots. Focused evidence: engine operation-stream **41 passed**; app persistence **24 passed**; paired worker regressions **4 passed**; transcript-rendering tests **6 passed**; source pin verification, Python compile/diff checks and TypeScript typecheck passed. These are focused source checks. Full suites, fault injection, packaged installer, visible app workflow, long-run Flint acceptance, updater recovery and public release gates remain open. Historical entries below describe their named checkpoints and may cite superseded pins.
+
 ## 2026-11-02 source-startup integrity
 
 - App commit `b778410` added the source-mode guard: unbundled startup rejects an engine checkout that differs from the app pin before engine modules are imported, and Electron reports the mismatch immediately. The guard remains in current source, now pinned to engine `613bca01a4054c52548ab1071dbe9ee694c3177b`. Focused build-config tests pass (8) and TypeScript typecheck passes. Full suites, package, visible startup, model workflow, and release readiness remain open.
