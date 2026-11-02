@@ -2,7 +2,7 @@
 
 ## Current paired development checkpoint (2026-11-02)
 
-The newest paired source checkpoint is app pending commit plus engine `b64c1629fee160f5bb3992632472476e0ed32fc9`. Continuation progress now uses observed read results and hashed argument identity, and the renderer live banner selects only active activity. Focused engine checks (100), renderer run-state checks (26), and typecheck pass. Full suites, packaged/visible acceptance and Flint acceptance remain queued; this is not a release-readiness claim.
+The newest paired source checkpoint is app pending commit plus engine `97415948dc3522ad1464d6960ff69f1905cecf26`. Continuation progress uses observed read results and hashed argument identity; the renderer live banner selects only active activity; and the compacted inference checkpoint is covered for active-goal/open-plan retention at 4K. Focused engine checks (100 plus 55 module checks and the strengthened context case), renderer run-state checks (26), pin check (8), and typecheck pass. Full suites, packaged/visible acceptance and Flint acceptance remain queued; this is not a release-readiness claim.
 
 The continuation loop now treats a distinct emitted model response as new continuity evidence instead of stopping solely because the saved project state did not change; any repeated response/state fingerprint, including a non-adjacent cycle, produces a visible incomplete outcome. Focused engine workflow checks pass (**72**). This preserves unlimited task duration and leaves the full test/package/Flint gates open.
 
