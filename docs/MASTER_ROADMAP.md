@@ -1,5 +1,9 @@
 # Product roadmap and release state
 
+## 2026-11-02 current source pin and loop handling
+
+- The app's `core-revision.txt` pins engine `b1981571c9a7680646cb1cef587fe4c384fae869`. The engine now terminates repeated plan-only calls correctly across implementation, read-only, denied-action, and planning modes; the renderer explains blocked access/denial outcomes and offers same-checkpoint continuation in chat. Focused engine suites pass (79), focused renderer summary tests pass (6), and both changed trees pass `git diff --check`. This is focused source evidence only. Broad suites, current worker/typecheck, package, visible workflow, extended local-model behavior, updater, and release gates remain open. No model/context/output/reasoning setting changed.
+
 ## 2026-11-02 same-chat continuity source audit
 
 - **Latest continuity correction:** app pin commit `a75d244` points to engine `eabf0679ef538c6409c45f0fa69004f15bd312a4`. Compaction previously summarized a checkpoint to a fixed quarter-budget target before checking whether the full checkpoint and current conversation already fit. The engine now retains the full checkpoint in that case and summarizes only when the actual request exceeds its input budget. The new regression failed before the fix because useful checkpoint text was removed despite available budget. Context, context reserve, and output settings are unchanged. Context, operation-stream, and task-checkpoint focused suites pass (76). Full suites, packaging, visible acceptance, model endurance, and release readiness remain open.

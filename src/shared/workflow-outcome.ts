@@ -4,6 +4,8 @@ export function terminalWorkflowSummary(outcome: unknown): string | null {
       return 'The model did not produce a final reply after the Workbench requested one. Review the saved plan and activity to see what completed; operations are not replayed automatically.';
     case 'implementation_incomplete':
       return 'The run ended without new observable project progress after a continuation request. Its plan and checkpoint are saved so you can review them and continue safely.';
+    case 'blocked':
+      return 'The run stopped because a project action was denied or the selected access policy is read-only. The Workbench preserved that boundary and did not bypass it; review the saved plan and choose an allowed next step.';
     case 'interrupted':
       return 'The run was interrupted. Its checkpoint and recorded operation results are saved; review any operation that may have been in flight before continuing.';
     case 'cancelled':
@@ -15,6 +17,11 @@ export function terminalWorkflowSummary(outcome: unknown): string | null {
     default:
       return null;
   }
+}
+
+export function canContinueFromOutcome(outcome: unknown): boolean {
+  return typeof outcome === 'string'
+    && ['blocked', 'response_missing', 'implementation_incomplete', 'failed', 'interrupted', 'cancelled', 'stopped'].includes(outcome);
 }
 
 export function buildSafeContinuationPrompt(goal?: string): string {
