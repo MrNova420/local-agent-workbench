@@ -376,6 +376,49 @@ def test_plan_intent_seeds_live_checklist_and_enforces_read_only_builtin_tools(s
     assert any(event.get("type") == "activity_event" and event.get("activity", {}).get("kind") == "plan" for event in events)
 
 
+def test_copy_run_keeps_external_folder_grants_bound_to_original_project(service, tmp_path, monkeypatch):
+    captured = {}
+    service.permission_rules = []
+
+    class CapturingEngine:
+        def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
+            captured.update(root=Path(root), access=access, kwargs=kwargs)
+            self.event = event
+            self.state = {}
+            self.runtime = object()
+
+        def run(self, prompt, messages):
+            self.event({"type": "complete", "workflowOutcome": "completed"})
+            return messages
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(worker, "AgentEngine", CapturingEngine)
+    project = tmp_path / "copy-source-project"
+    other_project = tmp_path / "other-source-project"
+    project.mkdir(); other_project.mkdir()
+    (project / "README.md").write_text("fixture", encoding="utf-8")
+    matching = {"tool": "external_directory", "decision": "ask", "path_glob": "C:/Users/test/shared/**", "workspace": str(project)}
+    unrelated = {"tool": "external_directory", "decision": "allow", "path_glob": "C:/Users/test/shared/**", "workspace": str(other_project)}
+    service.permission_rules = [matching, unrelated]
+
+    service.handle("run_start", {"options": {
+        "workspace": str(project), "prompt": "Implement the requested task", "model": "model-a:latest",
+        "context": 4096, "maxTokens": 128, "temperature": 0.2,
+        "access": "copy", "approvalMode": "per-action", "taskIntent": "implement",
+    }})
+    controller = service.active
+    assert controller is not None
+    controller["thread"].join(3)
+
+    assert captured["access"] == "copy"
+    assert captured["root"] == Path(controller["working"])
+    assert captured["root"] != project
+    assert captured["kwargs"]["permission_workspace_root"] == project
+    assert captured["kwargs"]["permission_rules"] == [{**matching, "workspace": str(project).replace("\\", "/")}]
+
+
 def test_agent_plan_decisions_are_saved_to_checkpoint_and_activity(service, tmp_path, monkeypatch):
     project = tmp_path / "plan-decision-project"
     project.mkdir()
