@@ -151,6 +151,71 @@ def test_active_task_steering_is_saved_to_the_captured_session_and_waits_for_bou
         })
 
 
+def test_steering_messages_are_delivered_in_order_before_same_task_continues(service, tmp_path, monkeypatch):
+    events = []
+    service.emit = events.append
+    started = threading.Event()
+    deliver = threading.Event()
+    captured = {}
+
+    class BoundaryEngine:
+        def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
+            captured.update(root=Path(root).resolve(), model=model, context=context,
+                            access=access, approval=approval, steering=kwargs["steering_handler"])
+            self.event = event
+            self.state = {}
+            self.runtime = object()
+
+        def run(self, prompt, messages):
+            messages.append({"role": "user", "content": prompt})
+            started.set()
+            assert deliver.wait(2)
+            assert captured["steering"](messages, finishing=False)
+            self.event({"type": "complete", "workflowOutcome": "discussion",
+                        "verification": {"status": "not_verified"}})
+            return messages
+
+        def cancel(self):
+            deliver.set()
+
+    monkeypatch.setattr(worker, "AgentEngine", BoundaryEngine)
+    project = tmp_path / "steering-boundary-project"
+    project.mkdir()
+    service.handle("run_start", {"options": {
+        "workspace": str(project), "prompt": "Build the feature", "model": "model-a:latest",
+        "context": 4096, "maxTokens": 128, "temperature": 0.2,
+        "access": "ask", "approvalMode": "per-action",
+    }})
+    controller = service.active
+    assert controller is not None
+    assert started.wait(2)
+    session_id = controller["session"]["session_id"]
+    turn_id = controller["turn_id"]
+
+    first = service.handle("session_steer", {
+        "sessionId": session_id, "workspace": str(project), "prompt": "Keep the current layout",
+    })
+    second = service.handle("session_steer", {
+        "sessionId": session_id, "workspace": str(project), "prompt": "Add a mobile check",
+    })
+    deliver.set()
+    controller["thread"].join(3)
+
+    saved = service.sessions.load(session_id)
+    updates = [row for row in saved["messages"] if row.get("steering_id")]
+    assert [row["content"] for row in updates] == ["Keep the current layout", "Add a mobile check"]
+    assert all(row["turn_id"] == turn_id for row in updates)
+    checkpoint_updates = saved["task_checkpoint"]["current"]["user_updates"]
+    assert [row["status"] for row in checkpoint_updates] == ["delivered", "delivered"]
+    assert [row["id"] for row in checkpoint_updates] == [first["updateId"], second["updateId"]]
+    assert captured["root"] == project.resolve()
+    assert captured["approval"] == "per-action"
+    assert saved["run_state"]["status"] == "completed"
+    assert [event["status"] for event in events if event.get("type") == "steering_update"] == [
+        "accepted", "accepted", "delivered", "delivered",
+    ]
+
+
 def test_session_run_settings_persist_skill_controls_and_inference_values(service, tmp_path):
     workspace = tmp_path / "skill-settings-project"
     workspace.mkdir()
