@@ -1498,7 +1498,6 @@ function Landing({ workspaces, workspaceSearch, workspaceHistoryStatus, sessions
         <LocalModelOrbit models={models} labels={modelLabels} selectedModel={model} status={modelCatalogStatus} onModelInfo={onModelInfo} />
         <div className="visual-core"><span>LOCAL</span><strong>AI</strong><small>WORKS IN YOUR SPACE</small></div>
         <div className="orbit-label label-tl"><i/> PRIVATE BY DEFAULT</div><div className="orbit-label label-br"><i/> NO REMOTE ROUTING</div>
-        <div className="visual-coordinate">[LOCATION REMOVED]<br/>[LOCATION REMOVED]</div>
       </div>
     </div>
     {workspaceHistoryStatus === 'ready' && !workspaceSearch && !workspaces.length && <section className="first-run-guide" aria-label="First run setup">

@@ -907,4 +907,10 @@ Focused sidecar checks for cancel acknowledgment and durable tool-call progress 
 
 Same-task steering state and transcript follow behavior received another focused pass: renderer `tests/run-state.test.ts` and `tests/transcript-follow.test.ts` — **22 passed**; paired sidecar steering acceptance test — **1 passed**. Focused saved-session approval checks passed as well: sidecar **3 passed** for grant persistence, fail-closed mirror failure, and revocation; renderer `tests/permission-rules.test.ts` — **2 passed**. Focused persistence recovery tests then passed **23/23**. Across the individually listed focused suites, **178 tests passed**; visible composer and non-dismissible approval behavior in a packaged long inference remain unverified.
 
+### 2026-11-02 Home hero coordinate privacy correction
+
+- A fixed geographic coordinate string was found in the Home hero. It was introduced in the initial scaffold commit `65b012086863252fce0d7df37af2bbb6b8ae2dda`; that commit and the beta.3 tag contain it. The current public `origin/main` also contains that commit. The scaffold commit has no rationale for choosing the location. Source inspection found no geolocation API or runtime location lookup; the value was literal UI text.
+- Removed the coordinate text and its CSS rule from current source. Added `tests/location-privacy.test.ts`, which fails if a coordinate or geolocation access is added to the renderer; it failed before removal and passed afterward (1 test).
+- Public Git history and beta.3 artifacts have not yet been rewritten or replaced. This correction does not make the old commit or any already-published package inaccessible. A clean future release and an approved public-history scrub are still required before calling the exposure removed from every public surface. Downloaded copies cannot be recalled.
+
 \r\n
