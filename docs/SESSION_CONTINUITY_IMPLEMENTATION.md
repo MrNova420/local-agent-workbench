@@ -1,10 +1,16 @@
 # Session Continuity and Run Recovery Implementation
 
-**Status:** source implementation in progress; verification intentionally queued.  
+**Status:** source implementation in progress; focused persistence and continuity checks are running incrementally, while full suites and packaged acceptance remain queued.  
 **Applies to:** Electron workbench plus its pinned shared Python engine.  
 **Settings:** selected context, maximum output, and model-default reasoning are not changed.
 
 **Current paired engine source:** `dcdf7fc2c3b1ca61bfd44cb2449e4e77b7e69c59` (unpublished; regressions intentionally queued). The app repository's current source commit is `e399d86` and its `core-revision.txt` pins this exact engine revision.
+
+## Latest focused verification
+
+- App sidecar persistence suite `tests/test_persistence.py`: **23 passed**, covering app/project mirrors, conflict handling, moved projects, journal replay, partial/final response recovery, interrupted operations, and workspace history.
+- Paired engine, renderer, sidecar settings, steering, cancellation, approval, activity, transcript, reasoning-control, and worksheet checks are individually recorded in `ACCEPTANCE_LOG.md` (178 focused tests currently pass across those slices).
+- This does not close the listed fault-injection matrix, complete engine/sidecar/renderer suites, typecheck for the current source batch, packaged app, visible close/reopen and long-run workflow, updater, or model/runtime acceptance.
 
 ## Implemented in this source batch
 
