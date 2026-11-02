@@ -1909,6 +1909,42 @@ def test_per_session_approval_is_mirrored_before_approval_is_accepted(service, t
     assert result == {"done": True, "approved": True}
 
 
+def test_per_session_approval_save_does_not_hold_checkpoint_lock(service, tmp_path, monkeypatch):
+    project = tmp_path / "slow-session-approval-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    checkpoint_lock = threading.RLock()
+    condition = threading.Condition()
+    result = {"done": False, "approved": False}
+    controller = {"session": state, "approval_mode": "per-session", "checkpoint_lock": checkpoint_lock,
+                  "pending": {"action-1": (condition, result)}}
+    service.active = controller
+    save_started = threading.Event()
+    release_save = threading.Event()
+    lock_acquired = threading.Event()
+    monkeypatch.setattr(service.sessions, "save", lambda _state: (
+        save_started.set(), release_save.wait(2), {"app_saved": True, "project_saved": True, "error": None}
+    )[-1])
+    approved = []
+    approval_thread = threading.Thread(target=lambda: approved.append(service.approval_reply("action-1", True)))
+    approval_thread.start()
+    assert save_started.wait(2)
+
+    def acquire_checkpoint():
+        with checkpoint_lock:
+            lock_acquired.set()
+
+    checkpoint_thread = threading.Thread(target=acquire_checkpoint)
+    checkpoint_thread.start()
+    assert lock_acquired.wait(1), "a slow mirror save must not block active checkpoint access"
+    release_save.set()
+    approval_thread.join(2)
+    checkpoint_thread.join(2)
+
+    assert approved == [True]
+    assert result == {"done": True, "approved": True}
+
+
 def test_per_session_approval_fails_closed_when_mirror_save_fails(service, tmp_path, monkeypatch):
     project = tmp_path / "session-approval-save-failure"
     project.mkdir()

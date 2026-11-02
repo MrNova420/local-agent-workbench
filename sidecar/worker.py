@@ -1878,7 +1878,7 @@ class AgentService:
                     run_state["safe_messages"] = copy.deepcopy(state.get("messages", []))
                     run_state["partial_content"] = ""
                     run_state["partial_thinking"] = ""
-                saved = self.sessions.save(state)
+                saved = self._save_active_session(controller)
                 if not (saved["app_saved"] and saved["project_saved"]):
                     self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"], "error": saved["error"] or "Session storage is unavailable."})
                 self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
@@ -1965,7 +1965,12 @@ class AgentService:
                     if isinstance(run_state, dict):
                         run_state["safe_messages"] = copy.deepcopy(messages)
                         run_state["pending_steers"] = []
-                    saved = self.sessions.save(state)
+                try:
+                    saved = self._save_active_session(controller)
+                except Exception as exc:
+                    saved = {"app_saved": False, "project_saved": False,
+                             "error": f"{type(exc).__name__}: {exc}"}
+                with steering_condition:
                     if not (saved.get("app_saved") or saved.get("project_saved")):
                         del messages[prior_messages:]
                         for update in pending:
@@ -2069,7 +2074,7 @@ class AgentService:
             state["working_workspace"] = str(turn.workspace)
             if turn.access == "copy":
                 state["copy_manifest"] = state.get("copy_manifest") or capture_manifest(turn.workspace)
-            saved = self.sessions.save(state)
+            saved = self._save_active_session(controller)
             if not (saved["app_saved"] and saved["project_saved"]):
                 self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"], "error": saved["error"] or "Session storage is unavailable."})
             self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
@@ -2094,7 +2099,7 @@ class AgentService:
                 state["run_state"]["active_operations"] = {}
             state["last_error"] = {"message": f"{type(exc).__name__}: {exc}", "occurred_at": time.time()}
             try:
-                self.sessions.save(state)
+                self._save_active_session(controller)
                 self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
             except Exception as save_error:
                 self.emit({"type": "error", "error": f"{exc}; session save failed: {save_error}"})
@@ -2105,20 +2110,22 @@ class AgentService:
                 pass
             self.emit(error_event)
         finally:
-            with controller["checkpoint_lock"]:
-                controller["accepting_steering"] = False
-                undelivered = copy.deepcopy(controller.get("pending_steers", []))
+            with controller.setdefault("steering_persist_lock", threading.Lock()):
+                with controller["checkpoint_lock"]:
+                    controller["accepting_steering"] = False
+                    undelivered = copy.deepcopy(controller.get("pending_steers", []))
+                    if undelivered:
+                        for update in undelivered:
+                            record_user_update(state.setdefault("task_checkpoint", {}),
+                                               {**update, "status": "undelivered", "run_finished_at": time.time()})
+                            self.emit({"type": "steering_update", "status": "undelivered", "updateId": update["id"],
+                                       "prompt": update["instruction"], "sessionId": state["session_id"],
+                                       "turnId": controller["turn_id"], "workspace": state["workspace"]})
+                        run_state = state.get("run_state")
+                        if isinstance(run_state, dict):
+                            run_state["pending_steers"] = copy.deepcopy(undelivered)
                 if undelivered:
-                    for update in undelivered:
-                        record_user_update(state.setdefault("task_checkpoint", {}),
-                                           {**update, "status": "undelivered", "run_finished_at": time.time()})
-                        self.emit({"type": "steering_update", "status": "undelivered", "updateId": update["id"],
-                                   "prompt": update["instruction"], "sessionId": state["session_id"],
-                                   "turnId": controller["turn_id"], "workspace": state["workspace"]})
-                    run_state = state.get("run_state")
-                    if isinstance(run_state, dict):
-                        run_state["pending_steers"] = copy.deepcopy(undelivered)
-                    saved = self.sessions.save(state)
+                    saved = self._save_active_session(controller)
                     if not (saved.get("app_saved") and saved.get("project_saved")):
                         self.emit({"type": "session_mirror_error", "sessionId": state["session_id"],
                                    "appSaved": saved.get("app_saved", False), "projectSaved": saved.get("project_saved", False),
@@ -2148,13 +2155,15 @@ class AgentService:
             return False
         if approved and controller and controller.get("approval_mode") == "per-session":
             state = controller["session"]
-            with controller["checkpoint_lock"]:
-                previous = bool(state.get("session_approval_granted", False))
-                state["session_approval_granted"] = True
-                saved = self.sessions.save(state)
+            with controller.setdefault("approval_persist_lock", threading.Lock()):
+                with controller["checkpoint_lock"]:
+                    previous = bool(state.get("session_approval_granted", False))
+                    state["session_approval_granted"] = True
+                saved = self._save_active_session(controller)
                 if not (saved.get("app_saved") and saved.get("project_saved")):
-                    state["session_approval_granted"] = previous
-                    rollback = self.sessions.save(state)
+                    with controller["checkpoint_lock"]:
+                        state["session_approval_granted"] = previous
+                    rollback = self._save_active_session(controller)
                     self.emit({"type": "session_mirror_error", "sessionId": state["session_id"],
                                "appSaved": saved.get("app_saved", False), "projectSaved": saved.get("project_saved", False),
                                "error": "; ".join(part for part in (saved.get("error"),
