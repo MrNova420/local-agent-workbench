@@ -8,7 +8,7 @@ The continuation loop now treats a distinct emitted model response as new contin
 
 The current engine milestone adds opt-in regular-expression and case-sensitive project search while preserving literal case-insensitive defaults. Regex timeouts are per line and return partial results with an explicit incomplete status. Focused engine tool tests (**41**) and context/budget checks (**21**) pass; packaged sidecar integration and visible acceptance remain queued.
 
-The active app worktree `workbench/core-chat-activity` pins engine `affcb8f8eeffae6ca554ef442fd7f5dd57b6a912`. Full source suites pass on this pair: engine **349**, renderer **115**, sidecar **128**, and TypeScript typecheck. The paired source includes append-in-place large-file writes, byte-exact Windows line endings, rollback for synchronous partial appends, selected-output request budgeting, paged compaction recovery, and captured-session activity. Packaging from this exact pin, visible app acceptance, and the Flint live task remain open; no release-readiness claim is made.
+The active app worktree `workbench/core-chat-activity` pins engine `affcb8f8eeffae6ca554ef442fd7f5dd57b6a912`. Full source suites pass on this pair: engine **349**, renderer **115**, sidecar **128**, and TypeScript typecheck. The paired source includes append-in-place large-file writes, byte-exact Windows line endings, rollback for synchronous partial appends, selected-output request budgeting, paged compaction recovery, and captured-session activity. Packaging from this exact pin and bundled-worker ready/ping/shutdown smoke pass; visible app acceptance and the Flint live task remain open. No release-readiness claim is made.
 
 ## 2026-11-02 source-startup integrity
 

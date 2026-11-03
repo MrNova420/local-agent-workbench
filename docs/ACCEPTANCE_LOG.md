@@ -1,3 +1,9 @@
+## 2026-11-02 exact-pair Windows package and worker smoke
+
+- Built app `bfabdd7d4e33d285fa6aafd1eb89b534ed0b36a9` with exact engine pin `affcb8f8eeffae6ca554ef442fd7f5dd57b6a912` using `npm run make`. The Windows x64 Squirrel setup (208,908,288 bytes), full nupkg (208,131,676 bytes), and portable ZIP (212,063,809 bytes) were produced. Nupkg (87 members) and ZIP (74 members) passed archive integrity checks. Fresh SHA-256 values are in the ignored local build output `out/make/SHA256SUMS.txt`; the old beta.3 release-assets folder was not reused.
+
+- The packaged `agent-worker.exe` returned `ready`, successful JSONL `ping`, and successful `shutdown`, exit 0, with isolated temporary app data and no inference/Ollama request. This verifies packaged worker startup/protocol only. The Computer Use helper failed initialization (`failed to write kernel assets: The system cannot find the path specified`), so no visible window workflow was performed; Flint live acceptance remains open. No model was started or altered by this package check.
+
 ## 2026-11-02 adaptive budgeting and incremental large-file writes
 
 - App is paired to engine `affcb8f8eeffae6ca554ef442fd7f5dd57b6a912`. Request budgeting reserves the selected output setting with no hidden default cushion; the configured context/output/reasoning values were not changed. The full engine suite passed (**349 tests**, 5 subtests, one upstream warning); paired app checks pass: renderer **115**, sidecar **128**, and TypeScript typecheck.
