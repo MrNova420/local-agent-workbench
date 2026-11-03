@@ -1,3 +1,13 @@
+## 2026-11-02 remove fixed timeout from project file replacement
+
+- Engine `02125b02dbe08860dd7220b3c8e7431af41a9599` no longer fails an atomic project-file replacement solely because a Windows sharing lock lasted longer than 30 seconds. It retries with bounded backoff until replacement succeeds or the explicit request cancellation signal is set; this does not change model response deadlines or inference settings.
+- Regression was first run against the old implementation and failed at the 30-second deadline while a simulated lock was configured to release at 35 seconds. After the change, the long-lock case and two existing transient/extended-lock cases pass (**3 focused tests**). Full suites are not rerun for this milestone; visible app-flow acceptance remains open because the approved Computer Use runtime failed initialization twice (`failed to write kernel assets: The system cannot find the path specified`).
+- The previous beta.3 package predates this engine change and is not evidence for this pin. Rebuild and packaged acceptance are pending.
+
+## 2026-11-02 unresolved project-journal stall evidence
+
+- The stopped disposable worker run left the app event journal with both `plan` and `prompt_manifest`, but the project event journal retained only `plan`. The active session snapshot had no provider request phase, and there was no `request_dispatched` event. After the process stopped, both journal files opened for append; no exception or lock owner was captured. This narrows the stall to event publication/mirroring before provider dispatch but does **not** identify whether the project append, stream callback, or another boundary stalled. Do not treat the run as a model timeout. Investigation remains open.
+
 ## 2026-11-02 Flint attempt stopped before inference (not acceptance)
 
 - A direct packaged-worker protocol attempt created only a disposable project/session checkpoint and initial plan. It produced no `request_dispatched` event, no project-file writes, and no model load (`ollama ps` remained empty). It was stopped after the user clarified that acceptance must use the actual app flow; this backend-only attempt does not count as Flint or user-flow acceptance. Its session copies remain in the disposable fixture for recovery behavior; no other workspace was touched.
