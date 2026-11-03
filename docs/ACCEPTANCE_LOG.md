@@ -2,7 +2,12 @@
 
 - Engine `02125b02dbe08860dd7220b3c8e7431af41a9599` no longer fails an atomic project-file replacement solely because a Windows sharing lock lasted longer than 30 seconds. It retries with bounded backoff until replacement succeeds or the explicit request cancellation signal is set; this does not change model response deadlines or inference settings.
 - Regression was first run against the old implementation and failed at the 30-second deadline while a simulated lock was configured to release at 35 seconds. After the change, the long-lock case and two existing transient/extended-lock cases pass (**3 focused tests**). Full suites are not rerun for this milestone; visible app-flow acceptance remains open because the approved Computer Use runtime failed initialization twice (`failed to write kernel assets: The system cannot find the path specified`).
-- The previous beta.3 package predates this engine change and is not evidence for this pin. Rebuild and packaged acceptance are pending.
+- A fresh local beta.3 package was subsequently built from the exact app/engine pair and its packaged worker smoke passed (recorded below). These local artifacts are not a new public release; visible app-flow and Flint acceptance remain open.
+
+## 2026-11-02 package current file-lock retry engine
+
+- Built app `cc9d5a8486823af6d6a97838760065d9cf0413a0` with exact engine pin `02125b02dbe08860dd7220b3c8e7431af41a9599` using `LOCAL_AGENT_CORE_PATH` and `npm run make`. Squirrel setup: **208,907,264 bytes**, SHA-256 `7cc1db9b22cebf3f334d38c4a10f9823aca1e1c0f9990c27745cf2507d3ebfab`; nupkg: **208,130,760 bytes**, SHA-256 `fe5102390d760f1d8be33700022f4c3e07f9b4c92c5d9dafac849e4694b8d838`; portable ZIP: **212,062,965 bytes**, SHA-256 `d26550241198b8bc61c1da4c2d31d82d903724ebf92f60cfd389add5f14a7988`; `RELEASES` SHA-256 `e19a4d6043b761be684fb5736c1634f02fbbf6164cd67ddbc59ff15a1f67d89b`. Fresh local checksum list: `out/make/SHA256SUMS.txt`. Nupkg (87 entries) and portable ZIP (74 entries) were fully read and passed archive integrity checks.
+- The packaged `agent-worker.exe` returned `ready`, successful JSONL `ping`, and successful `shutdown`, exit 0, with isolated temporary app data and no model request. This is package/sidecar evidence only. The Computer Use runtime again failed initialization twice, so the app window workflow and user-folder isolation flow were not exercised; Flint acceptance remains open. Ollama stayed untouched and no model was started.
 
 ## 2026-11-02 unresolved project-journal stall evidence
 
