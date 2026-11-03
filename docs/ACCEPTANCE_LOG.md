@@ -1,3 +1,8 @@
+## 2026-11-02 remove fixed deadlines from mirrored session persistence
+
+- Engine `07639f77362fe0f2ae66e6e7bb9ca93308071fd8` and app sidecar persistence now retry Windows permission/sharing errors during session snapshot replacement and event-journal append without a 30-second total deadline. The engine session store follows the same retry-until-success behavior. The engine project-file replace remains cancellable; session persistence favors retaining the save over silently abandoning it.
+- Red/green lock regressions: engine session save held for a simulated 35 seconds (**1 passed**); app mirrored snapshot and journal append held for 35 seconds (**2 passed**). The previous engine+app full suite results remain attached to engine `02125b0`; full suites and a fresh package on `07639f7` are pending. The visible app/user-folder and Flint acceptance gates remain open.
+
 ## 2026-11-02 remove fixed timeout from project file replacement
 
 - Engine `02125b02dbe08860dd7220b3c8e7431af41a9599` no longer fails an atomic project-file replacement solely because a Windows sharing lock lasted longer than 30 seconds. It retries with bounded backoff until replacement succeeds or the explicit request cancellation signal is set; this does not change model response deadlines or inference settings.

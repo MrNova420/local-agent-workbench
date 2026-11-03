@@ -67,6 +67,54 @@ class MirroredSessionStoreTests(unittest.TestCase):
             self.assertGreaterEqual(clock[0], 2.0)
             self.assertEqual(list(Path(root).glob("*.tmp")), [])
 
+    def test_journal_append_keeps_waiting_past_legacy_deadline_until_lock_releases(self):
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root, "session.events.jsonl")
+            real_open = Path.open
+            attempts = []
+            clock = [0.0]
+
+            def open_after_long_lock(candidate, *args, **kwargs):
+                if candidate == path:
+                    attempts.append(1)
+                    if clock[0] < 35.0:
+                        raise PermissionError("session journal remains open")
+                return real_open(candidate, *args, **kwargs)
+
+            with patch("sidecar.persistence.Path.open", autospec=True, side_effect=open_after_long_lock), \
+                 patch("sidecar.persistence.time.monotonic", side_effect=lambda: clock[0]), \
+                 patch("sidecar.persistence.time.sleep", side_effect=lambda delay: clock.__setitem__(0, clock[0] + delay)):
+                _append_jsonl(path, [{"event_id": "event-long-lock", "event": {"type": "text", "text": "saved"}}])
+
+            saved = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(saved[0]["event_id"], "event-long-lock")
+            self.assertGreaterEqual(clock[0], 35.0)
+
+    def test_atomic_session_snapshot_keeps_waiting_past_legacy_deadline(self):
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root, "session.json")
+            path.write_text('{"old":true}', encoding="utf-8")
+            real_replace = os.replace
+            clock = [0.0]
+
+            def replace_after_long_lock(source, destination):
+                if clock[0] < 35.0:
+                    raise PermissionError("session snapshot remains open")
+                return real_replace(source, destination)
+
+            with patch("sidecar.persistence.os.replace", side_effect=replace_after_long_lock), \
+                 patch("sidecar.persistence.time.monotonic", side_effect=lambda: clock[0]), \
+                 patch("sidecar.persistence.time.sleep", side_effect=lambda delay: clock.__setitem__(0, clock[0] + delay)):
+                _atomic_json(path, {"new": "saved"})
+
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {"new": "saved"})
+            self.assertGreaterEqual(clock[0], 35.0)
+            self.assertEqual(list(Path(root).glob("*.tmp")), [])
+
     def test_event_recovery_derives_first_non_plan_operation_timing(self):
         state = {"session_id": "s-first-operation", "workspace": "C:/project",
                  "run_state": {"turn_id": "turn-first-operation", "started_at": 100.0},

@@ -32,16 +32,12 @@ def _atomic_json(path: Path, value: Any) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         delay = 0.05
-        deadline = time.monotonic() + 30.0
         while True:
             try:
                 os.replace(temporary, path)
                 break
             except PermissionError:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise
-                time.sleep(min(delay, remaining))
+                time.sleep(delay)
                 delay = min(delay * 2, 0.75)
     finally:
         if temporary is not None:
@@ -59,7 +55,6 @@ def _append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = "".join(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n" for row in rows)
     delay = 0.05
-    deadline = time.monotonic() + 30.0
     while True:
         try:
             with path.open("a", encoding="utf-8", newline="\n") as handle:
@@ -68,10 +63,7 @@ def _append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
                 os.fsync(handle.fileno())
             return
         except PermissionError:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise
-            time.sleep(min(delay, remaining))
+            time.sleep(delay)
             delay = min(delay * 2, 0.75)
 
 
