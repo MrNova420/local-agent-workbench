@@ -58,7 +58,7 @@ from disposable_workspace import (  # noqa: E402
 )
 from mcp_support import MCPManager  # noqa: E402
 from project_knowledge import ProjectKnowledge  # noqa: E402
-from project_view import preview_files  # noqa: E402
+from project_view import preview_file_page  # noqa: E402
 from project_diff import workspace_diff_text  # noqa: E402
 from persistence import MirroredSessionStore, WorkspaceHistory  # noqa: E402
 from telemetry import Telemetry  # noqa: E402
@@ -1077,7 +1077,7 @@ class AgentService:
             return result
         if command == "workspace_files":
             root = validate_selected_workspace(True, message["workspace"])
-            return preview_files(root, limit=2000)
+            return preview_file_page(root, offset=message.get("offset", 0), limit=message.get("limit", 200))
         if command == "workspaces_list":
             return self.workspaces.list(str(message.get("query", "")))
         if command == "workspace_record":

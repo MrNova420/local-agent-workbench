@@ -51,6 +51,21 @@ def test_dynamic_models_and_full_advertised_context(service):
     }
 
 
+def test_workspace_file_pages_return_every_project_file_without_a_hidden_cap(service, tmp_path):
+    project = tmp_path / "large-project"
+    project.mkdir()
+    for index in range(2005):
+        (project / f"{index:04}.txt").write_text(str(index), encoding="utf-8")
+
+    first = service.handle("workspace_files", {"workspace": str(project), "offset": 0, "limit": 500})
+    later = service.handle("workspace_files", {"workspace": str(project), "offset": 2000, "limit": 500})
+
+    assert first["files"][0]["path"] == "0000.txt"
+    assert first["next_offset"] == 500
+    assert later["files"][-1]["path"] == "2004.txt"
+    assert later["next_offset"] is None
+
+
 def test_session_followup_prompt_queue_is_persisted_and_project_bound(service, tmp_path, monkeypatch):
     project = tmp_path / "queued-prompt-project"
     project.mkdir()

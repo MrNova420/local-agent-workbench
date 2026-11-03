@@ -1209,3 +1209,10 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 
 - If MCP rediscovery throws during task setup, the sidecar now drops stale MCP schemas and continues the project task with its other tools, while reporting MCP unavailable for that run. This prevents a broken optional server from blocking unrelated project work or advertising tool names whose client mappings are gone.
 - Red/green regression: `tests/test_worker.py::test_mcp_reconnect_failure_does_not_send_stale_tool_schemas_to_model` fails before the fix and passes after it. Paired focused checks for retry, failure isolation, and adapter lifecycle: **3 passed**. Python compilation and `git diff --check` pass. The full suites, packaged MCP restart and visible workflow remain queued.
+## 2026-11-02 complete suites on paged project inventory
+
+- App source adds offset-based project-file pages with a user-selectable page size and no product maximum. The engine iterator and project file tools remain traversable beyond any page; the browser now fetches each page instead of silently dropping entries after 2,000 files. Engine pin: `038bcf7c4b0dc2306fc486d318eb747225cd4cbd`.
+- Full paired suites pass: engine **352 passed, 5 subtests**; app **115 Vitest + 131 sidecar pytest**; TypeScript typecheck passes. Both Python suites emit only the existing Starlette `python_multipart` pending-deprecation warning.
+- Ollama's `prompt_eval_cached_count` is forwarded and durably recorded in generation usage where the provider reports it. The UI labels missing reports as unknown. Ollama does not expose actual KV allocation size/type through this response, so the app reports those runtime details as unavailable rather than claiming they're measured. Live Flint cache reuse and model-runner KV allocation are not yet established by packaged UI evidence.
+- Device currently has Local Agent Workbench `0.1.0` installed at `%LOCALAPPDATA%\\LocalAgentWorkbench`; no Workbench/Electron process was running at inspection. Building the paired installer and refreshing the installed copy are the next steps. Visible UI/Flint acceptance remains open.
+

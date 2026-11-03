@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
-import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, QueuedPrompt, RunOptions, SessionLiveSnapshot, SessionSummary, SkillSource, TaskIntent, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
+import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, ProjectFilePage, QueuedPrompt, RunOptions, SessionLiveSnapshot, SessionSummary, SkillSource, TaskIntent, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
 import { applyToolCallProgress, isGlobalRunLifecycleEvent, latestActiveActivityForTurn, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter, type ToolCallProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordInputEstimate, recordStreamedText, restoreRunMetrics, type RunMetrics } from '../shared/run-metrics';
 import { requestContextStats } from '../shared/request-context';
@@ -180,6 +180,16 @@ export default function App() {
   const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null);
   const [workspace, setWorkspace] = useState(localStorage.getItem('agent-workspace') || '');
   const [files, setFiles] = useState<ProjectFile[]>([]);
+  const [filePage, setFilePage] = useState<{ offset: number; next_offset: number | null }>({ offset: 0, next_offset: null });
+  const [filePageSize, setFilePageSize] = useState(() => {
+    const saved = Number(localStorage.getItem('agent-file-page-size'));
+    return Number.isSafeInteger(saved) && saved > 0 ? saved : 200;
+  });
+  const [filePageSizeDraft, setFilePageSizeDraft] = useState(() => {
+    const saved = Number(localStorage.getItem('agent-file-page-size'));
+    return String(Number.isSafeInteger(saved) && saved > 0 ? saved : 200);
+  });
+  const [filePageLoading, setFilePageLoading] = useState(false);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [projectSessionHistoryStatus, setProjectSessionHistoryStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [homeSessions, setHomeSessions] = useState<SessionSummary[]>([]);
@@ -257,6 +267,7 @@ export default function App() {
   const workspaceHistoryRequestId = useRef(0);
   const projectSessionRequestId = useRef(0);
   const projectFileRequestId = useRef(0);
+  const filePageOffsetRef = useRef(0);
   const navigationRequestId = useRef(0);
   const modelCatalogLoaded = useRef(false);
   const modelCatalogRequestId = useRef(0);
@@ -267,6 +278,21 @@ export default function App() {
   }, []);
 
   const request = useCallback(async <T,>(command: WorkerCommand): Promise<T> => window.agent.request<T>(command), []);
+
+  const loadWorkspaceFilePage = useCallback(async (root: string, offset: number, limit = filePageSize) => {
+    const requestId = ++projectFileRequestId.current;
+    setFilePageLoading(true);
+    try {
+      const page = await request<ProjectFilePage>({ command: 'workspace_files', workspace: root, offset, limit });
+      if (requestId !== projectFileRequestId.current) return null;
+      setFiles(page.files);
+      setFilePage({ offset: page.offset, next_offset: page.next_offset });
+      filePageOffsetRef.current = page.offset;
+      return page;
+    } finally {
+      if (requestId === projectFileRequestId.current) setFilePageLoading(false);
+    }
+  }, [filePageSize, request]);
 
   const refreshModels = useCallback(async (quiet = false) => {
     const requestId = ++modelCatalogRequestId.current;
@@ -309,12 +335,10 @@ export default function App() {
   const refreshWorkspace = useCallback(async (root: string) => {
     // File access is the essential project operation. A session-index failure
     // must not make the workspace look unavailable or discard refreshed files.
-    const requestId = ++projectFileRequestId.current;
-    const fileRows = await request<ProjectFile[]>({ command: 'workspace_files', workspace: root });
-    if (requestId !== projectFileRequestId.current) return;
-    setFiles(fileRows);
+    const page = await loadWorkspaceFilePage(root, filePageOffsetRef.current);
+    if (!page) return;
     void refreshProjectSessions(root).catch((error) => notify(`Project files loaded, but saved sessions could not be refreshed: ${(error as Error).message}`, 'warn'));
-  }, [notify, refreshProjectSessions, request]);
+  }, [loadWorkspaceFilePage, notify, refreshProjectSessions]);
 
   const refreshWorkspaceHistory = useCallback(async (query = '') => {
     const requestId = ++workspaceHistoryRequestId.current;
@@ -349,12 +373,15 @@ export default function App() {
   const showProject = useCallback(async (root: string) => {
     const navigationId = ++navigationRequestId.current;
     const fileRequestId = ++projectFileRequestId.current;
+    setFilePageLoading(true);
     try {
-      const filesResult = await request<ProjectFile[]>({ command: 'workspace_files', workspace: root });
+      const filesResult = await request<ProjectFilePage>({ command: 'workspace_files', workspace: root, offset: 0, limit: filePageSize });
       if (navigationId !== navigationRequestId.current || fileRequestId !== projectFileRequestId.current) return;
       setWorkspace(root);
       localStorage.setItem('agent-workspace', root);
-      setFiles(filesResult);
+      setFiles(filesResult.files);
+      setFilePage({ offset: filesResult.offset, next_offset: filesResult.next_offset });
+      filePageOffsetRef.current = filesResult.offset;
       setSessions([]);
       setProjectSessionHistoryStatus('loading');
       const sessionRequestId = ++projectSessionRequestId.current;
@@ -382,7 +409,8 @@ export default function App() {
         notify(`Project opened, but workspace history could not be saved or refreshed: ${(historyError as Error).message}`, 'warn');
       }
     } catch (error) { notify(`Could not open project: ${(error as Error).message}`, 'bad'); }
-  }, [notify, refreshWorkspaceHistory, request]);
+    finally { if (fileRequestId === projectFileRequestId.current) setFilePageLoading(false); }
+  }, [filePageSize, notify, refreshWorkspaceHistory, request]);
 
   const loadSession = useCallback(async (id: string, selectedWorkspace = workspace, source?: 'app' | 'project') => {
     const navigationId = ++navigationRequestId.current;
@@ -421,6 +449,8 @@ export default function App() {
       }
       setWorkspace(root);
       setFiles([]);
+      setFilePage({ offset: 0, next_offset: null });
+      filePageOffsetRef.current = 0;
       localStorage.setItem('agent-workspace', root);
       setSession(loaded);
       if (loaded.recovery_issues?.length) {
@@ -469,12 +499,17 @@ export default function App() {
       setView('session');
       setRecoverySession(loaded.run_state?.status === 'interrupted' ? loaded : null);
       setProjectSessionHistoryStatus('loading');
-      void request<ProjectFile[]>({ command: 'workspace_files', workspace: root }).then((rows) => {
+      setFilePageLoading(true);
+      void request<ProjectFilePage>({ command: 'workspace_files', workspace: root, offset: 0, limit: filePageSize }).then((page) => {
         if (fileRequestId !== projectFileRequestId.current || navigationId !== navigationRequestId.current) return;
-        setFiles(rows);
+        setFiles(page.files);
+        setFilePage({ offset: page.offset, next_offset: page.next_offset });
+        filePageOffsetRef.current = page.offset;
       }).catch((error) => {
         if (fileRequestId !== projectFileRequestId.current || navigationId !== navigationRequestId.current) return;
         notify(`Session restored, but the project file list could not be loaded: ${(error as Error).message}`, 'warn');
+      }).finally(() => {
+        if (fileRequestId === projectFileRequestId.current && navigationId === navigationRequestId.current) setFilePageLoading(false);
       });
       void request<SessionSummary[]>({ command: 'sessions_list', workspace: root }).then((rows) => {
         if (sessionRequestId !== projectSessionRequestId.current) return;
@@ -487,7 +522,7 @@ export default function App() {
       });
       await refreshWorkspaceHistory('');
     } catch (error) { notify(`Could not resume session: ${(error as Error).message}`, 'bad'); }
-  }, [modelInfo?.context, notify, refreshWorkspaceHistory, request, workspace]);
+  }, [filePageSize, modelInfo?.context, notify, refreshWorkspaceHistory, request, workspace]);
 
   async function recoverInterruptedRun(action: 'resume' | 'retry' | 'restore') {
     if (!recoverySession) return;
@@ -997,7 +1032,7 @@ export default function App() {
   }, [request, running, session?.session_id, session?.workspace, workspace]);
 
   const currentSessions = useMemo(() => sessions.filter((row) => !workspace || row.workspace === workspace), [sessions, workspace]);
-  const availableFiles = useMemo(() => files.filter((row) => row.path).slice(0, 500), [files]);
+  const availableFiles = useMemo(() => files.filter((row) => row.path), [files]);
   const telemetry = useMemo(() => {
     const loaded = Array.isArray(snapshot.loaded) ? snapshot.loaded as Array<Record<string, unknown>> : [];
     const active = loaded.find((row) => row.name === model);
@@ -1409,8 +1444,18 @@ export default function App() {
         onInstallOllama={() => void window.agent.openOllamaDownload().catch((error) => notify(`Could not open Ollama setup: ${(error as Error).message}`, 'bad'))}
       />}
       {view === 'project' && <ProjectHome
-        root={workspace} tab={projectTab} setTab={setProjectTab} files={availableFiles} sessions={currentSessions} sessionHistoryStatus={projectSessionHistoryStatus}
+        root={workspace} tab={projectTab} setTab={setProjectTab} files={availableFiles} filePage={filePage} filePageSize={filePageSize} filePageLoading={filePageLoading} sessions={currentSessions} sessionHistoryStatus={projectSessionHistoryStatus}
         onNew={() => void newSession()} onOpenSession={(id) => void loadSession(id, workspace)} onFiles={() => void refreshWorkspace(workspace)}
+        onFilePage={(offset) => void loadWorkspaceFilePage(workspace, offset).catch((error) => notify(`Project files could not load: ${(error as Error).message}`, 'warn'))}
+        filePageSizeDraft={filePageSizeDraft}
+        onFilePageSizeChange={setFilePageSizeDraft}
+        onApplyFilePageSize={() => {
+          const size = Number(filePageSizeDraft);
+          if (!Number.isSafeInteger(size) || size < 1) return;
+          setFilePageSize(size);
+          localStorage.setItem('agent-file-page-size', String(size));
+          void loadWorkspaceFilePage(workspace, 0, size).catch((error) => notify(`Project files could not load: ${(error as Error).message}`, 'warn'));
+        }}
         onRefreshSessions={() => void refreshProjectSessions(workspace).catch((error) => notify(`Saved sessions could not be refreshed: ${(error as Error).message}`, 'warn'))}
         onDiff={showDiff} onMcp={openMcp} onTools={openTools} running={running}
         onHome={() => { setView('landing'); void refreshHome().catch((error) => notify(`Could not refresh saved workspace history: ${(error as Error).message}`, 'warn')); }}
@@ -1579,12 +1624,16 @@ function Landing({ workspaces, workspaceSearch, workspaceHistoryStatus, sessions
   </section>;
 }
 
-function ProjectHome({ root, tab, setTab, files, sessions, sessionHistoryStatus, onNew, onOpenSession, onFiles, onRefreshSessions, onDiff, onMcp, onTools, onHome, running }: {
+function ProjectHome({ root, tab, setTab, files, filePage, filePageSize, filePageSizeDraft, filePageLoading, sessions, sessionHistoryStatus, onNew, onOpenSession, onFiles, onFilePage, onFilePageSizeChange, onApplyFilePageSize, onRefreshSessions, onDiff, onMcp, onTools, onHome, running }: {
   root: string; tab: 'overview' | 'files' | 'sessions'; setTab: (value: 'overview' | 'files' | 'sessions') => void;
+  filePage: { offset: number; next_offset: number | null }; filePageSize: number; filePageSizeDraft: string; filePageLoading: boolean;
   files: ProjectFile[]; sessions: SessionSummary[]; sessionHistoryStatus: 'loading' | 'ready' | 'error'; onNew: () => void; onOpenSession: (id: string) => void;
-  onFiles: () => void; onRefreshSessions: () => void; onDiff: () => void; onMcp: () => void; onTools: () => void; onHome: () => void; running: boolean;
+  onFiles: () => void; onFilePage: (offset: number) => void; onFilePageSizeChange: (size: string) => void; onApplyFilePageSize: () => void;
+  onRefreshSessions: () => void; onDiff: () => void; onMcp: () => void; onTools: () => void; onHome: () => void; running: boolean;
 }) {
   const textFiles = files.filter((row) => row.text).length;
+  const requestedPageSize = Number(filePageSizeDraft);
+  const validPageSize = Number.isSafeInteger(requestedPageSize) && requestedPageSize > 0;
   return <section className="project-view">
     <div className="project-identity">
       <div className="project-monogram">{shortPath(root).slice(0, 2).toUpperCase()}</div>
@@ -1595,7 +1644,7 @@ function ProjectHome({ root, tab, setTab, files, sessions, sessionHistoryStatus,
     {tab === 'overview' && <div className="project-overview">
       <div className="overview-main">
         <div className="overview-welcome"><span className="eyebrow-line">WORKING DIRECTORY / VERIFIED</span><h2>Pick up where<br/>the work is.</h2><p>Built-in file tools stay within this project. Approved commands and MCP tools may access other locations under your Windows account; approval is not OS sandboxing. Session history stays associated with this folder.</p><Button kind="bright" onClick={onNew}><Icon name="plus"/> Create a new task</Button></div>
-        <div className="workspace-facts"><div><small>VISIBLE FILES</small><strong>{fmt(files.length)}</strong></div><div><small>TEXT FILES</small><strong>{fmt(textFiles)}</strong></div><div><small>SAVED SESSIONS</small><strong>{fmt(sessions.length)}</strong></div></div>
+        <div className="workspace-facts"><div><small>FILES ON PAGE</small><strong>{fmt(files.length)}</strong></div><div><small>TEXT ON PAGE</small><strong>{fmt(textFiles)}</strong></div><div><small>SAVED SESSIONS</small><strong>{fmt(sessions.length)}</strong></div></div>
       </div>
       <div className="recent-session-card"><div className="section-heading"><div><span className="section-number">03</span><h2>Recent sessions</h2></div><button onClick={() => setTab('sessions')}>All sessions <Icon name="arrow"/></button></div>
         {sessions.slice(0, 5).map((row, index) => <button className="session-tile" key={row.session_id} onClick={() => onOpenSession(row.session_id)}><span className="session-index">{String(index + 1).padStart(2, '0')}</span><span><strong>Session {row.session_id.slice(-8)}</strong><small>{row.model}</small>{row.sync_conflict && <small className="session-conflict-note">Copies differ · project version recommended</small>}</span><time>{new Date(row.updated_at * 1000).toLocaleDateString()}</time><Icon name="arrow"/></button>)}
@@ -1603,7 +1652,7 @@ function ProjectHome({ root, tab, setTab, files, sessions, sessionHistoryStatus,
       </div>
       <div className="project-capabilities"><div><Icon name="branch"/><span><b>File boundary</b><small>Built-in file tools stay under this root.</small></span></div><div><Icon name="terminal"/><span><b>Host command access</b><small>Approval is consent, not OS containment.</small></span></div><div><Icon name="clock"/><span><b>Local history</b><small>Sessions can be resumed at any time.</small></span></div></div>
     </div>}
-    {tab === 'files' && <div className="project-file-list"><div className="section-heading"><div><span className="section-number">04</span><h2>Indexed project files</h2></div><span>{files.length} entries</span></div>{files.map((file) => <div className="file-row" key={file.path}><span className={`file-glyph ${file.text ? 'text-file' : ''}`}>{file.text ? 'Aa' : '▧'}</span><code>{file.path}</code><small>{file.size > 1024 ? `${(file.size / 1024).toFixed(1)} KB` : `${file.size} B`}</small></div>)}</div>}
+    {tab === 'files' && <div className="project-file-list"><div className="section-heading"><div><span className="section-number">04</span><h2>Indexed project files</h2></div><span>{files.length ? `Showing ${fmt(filePage.offset + 1)}–${fmt(filePage.offset + files.length)}${filePage.next_offset === null ? ' · end of list' : ' · more available'}` : filePageLoading ? 'Loading files…' : 'No files on this page'}</span></div>{files.map((file) => <div className="file-row" key={file.path}><span className={`file-glyph ${file.text ? 'text-file' : ''}`}>{file.text ? 'Aa' : '▧'}</span><code>{file.path}</code><small>{file.size > 1024 ? `${(file.size / 1024).toFixed(1)} KB` : `${file.size} B`}</small></div>)}<div className="file-page-controls"><label>Rows per page<input aria-label="Rows per page" type="number" min={1} step={1} value={filePageSizeDraft} onChange={(event) => onFilePageSizeChange(event.target.value)}/></label><Button kind="quiet" disabled={!validPageSize || filePageLoading} onClick={onApplyFilePageSize}>Apply</Button><div className="file-page-navigation"><Button kind="quiet" disabled={filePage.offset === 0 || filePageLoading} onClick={() => onFilePage(Math.max(0, filePage.offset - filePageSize))}>Previous</Button><Button kind="outline" disabled={filePage.next_offset === null || filePageLoading} onClick={() => filePage.next_offset !== null && onFilePage(filePage.next_offset)}>Next</Button></div>{filePageLoading && <span role="status">Loading file page…</span>}</div></div>}
     {tab === 'sessions' && <div className="project-file-list"><div className="section-heading"><div><span className="section-number">05</span><h2>Saved sessions</h2></div><span>{sessionHistoryStatus === 'loading' ? 'Syncing…' : sessionHistoryStatus === 'error' ? 'History unavailable' : `${sessions.length} sessions`}</span></div>{sessions.map((row) => <button className="session-tile full-session" key={row.session_id} onClick={() => onOpenSession(row.session_id)}><span className="session-index"><Icon name="clock"/></span><span><strong>Session {row.session_id}</strong><small>{row.model}</small>{row.sync_conflict && <small className="session-conflict-note">Copies differ · project version recommended</small>}</span><time>{new Date(row.updated_at * 1000).toLocaleString()}</time><Icon name="arrow"/></button>)}{sessionHistoryStatus !== 'ready' || !sessions.length ? <div className="empty-inline" role={sessionHistoryStatus === 'error' ? 'alert' : sessionHistoryStatus === 'loading' ? 'status' : undefined}><span><b>{sessionHistoryStatus === 'loading' ? 'Loading saved sessions…' : sessionHistoryStatus === 'error' ? 'Saved sessions could not be loaded.' : 'No saved sessions yet.'}</b><small>{sessionHistoryStatus === 'error' ? 'History remains preserved. Retry the session list without leaving this project.' : sessionHistoryStatus === 'loading' ? 'Session history is syncing independently of project files.' : 'Start a task to create the first session.'}</small></span>{sessionHistoryStatus === 'error' && <button onClick={onRefreshSessions}>Retry</button>}</div> : null}</div>}
   </section>;
 }

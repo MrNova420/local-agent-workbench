@@ -77,7 +77,7 @@ export type WorkerCommand =
   | { command: 'ollama_safetensors_import'; directory: string; name: string }
   | { command: 'ollama_import_cancel' }
   | { command: 'system_snapshot' }
-  | { command: 'workspace_files'; workspace: string }
+  | { command: 'workspace_files'; workspace: string; offset?: number; limit?: number }
   | { command: 'workspace_diff'; workspace: string }
   | { command: 'workspaces_list'; query?: string }
   | { command: 'workspace_record'; workspace: string }
@@ -270,6 +270,7 @@ export type SessionConflict = {
 };
 
 export type ProjectFile = { path: string; size: number; text: boolean };
+export type ProjectFilePage = { files: ProjectFile[]; offset: number; next_offset: number | null };
 
 declare global {
   interface Window { agent: DesktopApi }
