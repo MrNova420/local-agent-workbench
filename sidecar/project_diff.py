@@ -5,16 +5,13 @@ import subprocess
 from pathlib import Path
 
 
-_MAX_FILES = 200
-_MAX_FILE_BYTES = 256 * 1024
-_MAX_DIFF_CHARS = 1_000_000
 _SKIP_DIRS = {".git", ".agent-workbench", "node_modules", "__pycache__", ".venv", "venv", "dist", "build", "coverage"}
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", "-C", str(root), *args], capture_output=True, text=True,
-        timeout=15, check=False, shell=False,
+        check=False, shell=False,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
 
@@ -31,8 +28,6 @@ def _new_file_diff(root: Path, relative: Path) -> str:
         return ""
     name = relative.as_posix()
     header = f"diff --git a/{name} b/{name}\nnew file mode 100644\n--- /dev/null\n+++ b/{name}\n"
-    if len(raw) > _MAX_FILE_BYTES:
-        return header + f"Binary or oversized file omitted ({len(raw)} bytes).\n"
     if b"\0" in raw:
         return header + "Binary file omitted.\n"
     content = raw.decode("utf-8", errors="replace")
@@ -44,8 +39,6 @@ def _project_files_diff(root: Path) -> str:
     chunks = [
         "Selected folder is not its own Git repository. Showing files in this folder as the current project snapshot; no earlier Git baseline is available.\n"
     ]
-    count = 0
-    total = len(chunks[0])
     for current, directories, files in os.walk(root, topdown=True, followlinks=False):
         current_path = Path(current)
         directories[:] = sorted(
@@ -57,13 +50,8 @@ def _project_files_diff(root: Path) -> str:
             chunk = _new_file_diff(root, relative)
             if not chunk:
                 continue
-            if count >= _MAX_FILES or total + len(chunk) > _MAX_DIFF_CHARS:
-                chunks.append("\nFurther files omitted because the review size limit was reached.\n")
-                return "\n".join(chunks)
             chunks.append(chunk)
-            count += 1
-            total += len(chunk)
-    if count == 0:
+    if len(chunks) == 1:
         return chunks[0] + "No files are available to preview.\n"
     return "\n".join(chunks)
 
@@ -88,19 +76,10 @@ def workspace_diff_text(workspace: str | Path) -> str:
             record[3:] for record in status.stdout.split("\0")
             if record.startswith("?? ") and record[3:]
         ]
-        omitted_files = max(0, len(untracked) - _MAX_FILES)
-        for name in untracked[:_MAX_FILES]:
+        for name in untracked:
             chunk = _new_file_diff(root, Path(name))
             if not chunk:
                 continue
-            if sum(map(len, chunks)) + len(chunk) <= _MAX_DIFF_CHARS:
-                chunks.append(chunk)
-            else:
-                omitted_files += 1
-        if omitted_files:
-            chunks.append(
-                f"\nReview incomplete: {omitted_files} untracked file(s) omitted because preview size limits were reached. "
-                "Use Git directly for a complete review.\n"
-            )
+            chunks.append(chunk)
     result = "\n".join(chunks).strip()
     return result or "No unstaged Git changes in this project."
