@@ -1097,7 +1097,8 @@ class AgentService:
             return {"text": workspace_diff_text(root)}
         if command == "sessions_list":
             workspace = message.get("workspace")
-            return self.sessions.list(str(workspace) if workspace else None)
+            paths = [row["path"] for row in self.workspaces.list() if row.get("available")] if not workspace else None
+            return self.sessions.list(str(workspace) if workspace else None, workspace_paths=paths)
         if command == "session_live_snapshot":
             session_id = str(message.get("sessionId", ""))
             requested_workspace = str(message.get("workspace", ""))

@@ -739,7 +739,7 @@ class MirroredSessionStore:
             return {"conflict": False, "source": selected["source"], "state": state}
         return state
 
-    def list(self, workspace: str | None = None) -> list[dict[str, Any]]:
+    def list(self, workspace: str | None = None, workspace_paths: list[str] | None = None) -> list[dict[str, Any]]:
         root = Path(workspace).resolve() if workspace else None
         metadata = self.identity.read(root) if root else None
         candidates: dict[str, list[dict[str, Any]]] = {}
@@ -754,9 +754,15 @@ class MirroredSessionStore:
             matches = root is None or _normalize_path(state.get("workspace", "")) == _normalize_path(root) or bool(metadata and state.get("workspace_id") == metadata.get("workspace_id"))
             if matches:
                 candidates.setdefault(sid, []).append({"source": "app", "state": state})
-        if root and root.is_dir():
+        project_roots = [root] if root else [Path(path).resolve() for path in (workspace_paths or []) if path]
+        seen_roots: set[str] = set()
+        for project_root in project_roots:
+            key = _normalize_path(project_root)
+            if key in seen_roots or not project_root.is_dir():
+                continue
+            seen_roots.add(key)
             try:
-                local = self._project_store(root)
+                local = self._project_store(project_root)
                 for row in local.list():
                     sid = row.get("session_id")
                     if sid:

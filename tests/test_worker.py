@@ -66,6 +66,20 @@ def test_workspace_file_pages_return_every_project_file_without_a_hidden_cap(ser
     assert later["next_offset"] is None
 
 
+def test_global_session_library_finds_project_only_sessions_from_workspace_history(service, tmp_path):
+    project = tmp_path / "project-only-session"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    service.workspaces.record(str(project))
+    (service.sessions.app.root / f"{state['session_id']}.json").unlink()
+
+    rows = service.handle("sessions_list", {})
+
+    assert [row["session_id"] for row in rows] == [state["session_id"]]
+    assert rows[0]["workspace"] == str(project)
+    assert rows[0]["sources"] == ["project"]
+
+
 def test_session_followup_prompt_queue_is_persisted_and_project_bound(service, tmp_path, monkeypatch):
     project = tmp_path / "queued-prompt-project"
     project.mkdir()
