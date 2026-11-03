@@ -1,3 +1,11 @@
+## 2026-11-02 adaptive budgeting and incremental large-file writes
+
+- App is paired to engine `affcb8f8eeffae6ca554ef442fd7f5dd57b6a912`. Request budgeting reserves the selected output setting with no hidden default cushion; the configured context/output/reasoning values were not changed. The full engine suite passed (**349 tests**, 5 subtests, one upstream warning); paired app checks pass: renderer **115**, sidecar **128**, and TypeScript typecheck.
+
+- In-place binary `append_file` preserves exact line endings, writes only new bytes, and rolls back synchronous partial failures. Direct project-file verification saved **100,000 lines / 5.9 MB** in both **720 × ~8K-character chunks** (6.05 seconds) and **5,556 × 1,024-character chunks** (44.39 seconds), then verified exact line count, endpoints and SHA-256 `ef81d11a56c049e2787e14b01b966f403b073c33dcb200017c3451f1a05e50f3`. The 1,024-character case used a 128-token file-result budget, not a product setting. No model generated these fixtures; these checks prove storage integrity, not model authorship quality or end-to-end generation time.
+
+- A previous attempt exposed and fixed Windows newline conversion in the append descriptor before this evidence was recorded. Crash-interrupted appends remain uncertain and require inspection before retry. Visible app acceptance and the live Flint task remain open.
+
 ## 2026-11-02 adaptive request-budget correction
 
 - Paired engine `fe1ccb7e35b2d62374ded981acfaba176b4e48e0` removes an undeclared 1,024-token cushion and the default 512-token reserve from request budgeting. The model's selected context/output settings remain unchanged; the planner now reserves the selected output and uses the remaining configured context for estimated input. Explicit caller-supplied reserves still work.
