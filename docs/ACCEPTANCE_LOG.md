@@ -1,7 +1,13 @@
 ## 2026-11-02 remove fixed deadlines from mirrored session persistence
 
 - Engine `07639f77362fe0f2ae66e6e7bb9ca93308071fd8` and app sidecar persistence now retry Windows permission/sharing errors during session snapshot replacement and event-journal append without a 30-second total deadline. The engine session store follows the same retry-until-success behavior. The engine project-file replace remains cancellable; session persistence favors retaining the save over silently abandoning it.
-- Red/green lock regressions: engine session save held for a simulated 35 seconds (**1 passed**); app mirrored snapshot and journal append held for 35 seconds (**2 passed**). The previous engine+app full suite results remain attached to engine `02125b0`; full suites and a fresh package on `07639f7` are pending. The visible app/user-folder and Flint acceptance gates remain open.
+- Red/green lock regressions: engine session save held for a simulated 35 seconds (**1 passed**); app mirrored snapshot and journal append held for 35 seconds (**2 passed**). The full suites and exact-pair package for `07639f7` now pass as recorded below. The visible app/user-folder and Flint acceptance gates remain open.
+
+## 2026-11-02 full verification on session-persistence pin
+
+- Exact source pair: app `41bdb58925fbb0c7e43e6718e9329bfb91ba90dd`, engine `07639f77362fe0f2ae66e6e7bb9ca93308071fd8`. Full engine suite: **351 passed, 5 subtests**. Full app suite: **115 renderer tests** and **130 sidecar tests** passed. `npm run typecheck` passed. Engine and sidecar pytest each emit the same upstream Starlette `python_multipart` pending-deprecation warning.
+- `npm run make` succeeded for Windows x64 from this exact pair. Installer **208,908,800 bytes**, SHA-256 `3c73d7420747b675de61b999fc06b52db370c2d6503cb657d6dbd8df41b39ab6`; nupkg **208,132,207 bytes**, SHA-256 `1e37e71a0878612e5e47fc96baf969b1a3d77dac7ec839b2e3320798e0d2d6ea`; portable ZIP **212,064,209 bytes**, SHA-256 `67eacff0c75a9e79cd4a29284878c436d66746143c46a44db0eb597138607e56`; `RELEASES` SHA-256 `fb952343a437eda93051bed6139607d50d12dc8b7167acd95b567b9578b82b87`. Nupkg (87 entries) and ZIP (74 entries) fully read successfully. Current hashes are in ignored `out/make/SHA256SUMS.txt`.
+- The packaged worker returned `ready`, JSONL `ping`, and JSONL `shutdown`, exit 0, using isolated temporary app data. No Ollama model was loaded or changed. This still does not cover launching and using the visible app in the disposable user project folder. The Computer Use runtime failed initialization, so visual/chat/project-isolation/Flint acceptance remains open; no backend-only attempt is substituted for that required flow.
 
 ## 2026-11-02 remove fixed timeout from project file replacement
 
