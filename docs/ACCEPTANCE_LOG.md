@@ -1,3 +1,7 @@
+## 2026-11-02 Flint attempt stopped before inference (not acceptance)
+
+- A direct packaged-worker protocol attempt created only a disposable project/session checkpoint and initial plan. It produced no `request_dispatched` event, no project-file writes, and no model load (`ollama ps` remained empty). It was stopped after the user clarified that acceptance must use the actual app flow; this backend-only attempt does not count as Flint or user-flow acceptance. Its session copies remain in the disposable fixture for recovery behavior; no other workspace was touched.
+
 ## 2026-11-02 exact-pair Windows package and worker smoke
 
 - Built app `bfabdd7d4e33d285fa6aafd1eb89b534ed0b36a9` with exact engine pin `affcb8f8eeffae6ca554ef442fd7f5dd57b6a912` using `npm run make`. The Windows x64 Squirrel setup (208,908,288 bytes), full nupkg (208,131,676 bytes), and portable ZIP (212,063,809 bytes) were produced. Nupkg (87 members) and ZIP (74 members) passed archive integrity checks. Fresh SHA-256 values are in the ignored local build output `out/make/SHA256SUMS.txt`; the old beta.3 release-assets folder was not reused.
