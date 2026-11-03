@@ -1,3 +1,9 @@
+## 2026-11-02 adaptive request-budget correction
+
+- Paired engine `fe1ccb7e35b2d62374ded981acfaba176b4e48e0` removes an undeclared 1,024-token cushion and the default 512-token reserve from request budgeting. The model's selected context/output settings remain unchanged; the planner now reserves the selected output and uses the remaining configured context for estimated input. Explicit caller-supplied reserves still work.
+- The engine regression first failed at 4,096 context / 128 output because only 2,944 input tokens were budgeted; it now passes at 3,968. At 65,536 / 8,192 the planner budgets 57,344. The full engine suite passes (**347 passed**, 5 subtests, one upstream warning); paired app suite passes (**115 Vitest + 128 pytest**, one upstream warning). This is source-suite evidence only.
+- The estimator remains a conservative half-UTF-8-byte approximation until Ollama returns an exact prompt count; it is not tokenizer-exact or yet calibrated across calls. The full output remains saved and tool results remain paged by actual request budget. No model was running in `ollama ps` during this check, and the visible acceptance run is still open. One initial app-side test collection correctly rejected a mistyped engine pin; correcting it to the verified full hash made the complete app suite pass.
+
 ## 2026-11-02 command stdin isolation
 
 - Engine c012b841af7737b8cdbfbfa66e0c547ae91eabfc launches commands with stdin redirected to DEVNULL, preventing child processes from consuming the sidecar's newline-delimited control messages. Prompt-driven commands receive EOF; persistent interactive terminal sessions remain unsupported and are tracked as a capability gap. Focused regression verifies the exact Popen stdin target and EOF behavior; command isolation, Unicode output, and cancellation checks: **3 passed**. Full sidecar/protocol and packaged command acceptance remain queued.
