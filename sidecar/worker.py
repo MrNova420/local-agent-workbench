@@ -288,9 +288,9 @@ class AgentService:
         event_kind = event.get("type")
         provider_retry_transition = (event_kind == "phase" and isinstance(event.get("retryAttempt"), int)
                                      and not isinstance(event.get("retryAttempt"), bool) and event["retryAttempt"] > 0)
-        force_journal = (event_kind in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "prompt_manifest", "inference_settings", "request_dispatched", "request_headers", "request_complete", "request_error", "steering_interrupted", "approval_request", "question_request", "question_answered", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
+        force_journal = (event_kind in {"tool_start", "tool_done", "tool_batch", "plan", "progress_checkpoint", "context_compacted", "prompt_manifest", "inference_settings", "request_dispatched", "request_headers", "request_complete", "request_error", "steering_interrupted", "approval_request", "question_request", "question_answered", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
                          or provider_retry_transition)
-        force_snapshot = (event_kind in {"context_compacted", "request_error", "steering_interrupted", "approval_request", "question_request", "question_answered", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
+        force_snapshot = (event_kind in {"progress_checkpoint", "context_compacted", "request_error", "steering_interrupted", "approval_request", "question_request", "question_answered", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
                           or provider_retry_transition
                           or (event_kind == "prompt_manifest" and event.get("context_checkpoint_due") is True))
         checkpoint_lock = controller["checkpoint_lock"]
@@ -547,6 +547,13 @@ class AgentService:
                     activity["decisions"] = copy.deepcopy(event["decisions"])
                 if isinstance(event.get("progressCheckpoint"), dict):
                     activity["progressCheckpoint"] = copy.deepcopy(event["progressCheckpoint"])
+                rows.append(activity)
+            elif kind == "progress_checkpoint":
+                activity = {"id": activity_id, "turnId": controller["turn_id"],
+                            "sessionId": state["session_id"], "workspace": str(turn.workspace),
+                            "kind": "context_checkpoint", "status": "saved",
+                            "progressCheckpoint": copy.deepcopy(event.get("progressCheckpoint", {})),
+                            "timestamp": time.time()}
                 rows.append(activity)
             elif kind == "context_compacted":
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],

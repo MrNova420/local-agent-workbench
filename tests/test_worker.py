@@ -1045,6 +1045,17 @@ def test_due_context_checkpoint_prompt_forces_immediate_session_snapshot(service
     assert len(snapshots) == 1
     assert snapshots[0]["task_checkpoint"]["current"]["context_checkpoint"]["due"] is True
 
+    service._publish_run_event(controller, SimpleNamespace(workspace=project), {
+        "type": "progress_checkpoint", "progressCheckpoint": {
+            "verifiedFindings": ["saved finding"], "completedWork": [],
+            "pendingWork": ["continue"], "nextAction": "continue the task",
+        },
+    })
+
+    assert len(snapshots) == 2
+    assert snapshots[1]["activity_events"][-1]["kind"] == "context_checkpoint"
+    assert snapshots[1]["activity_events"][-1]["progressCheckpoint"]["nextAction"] == "continue the task"
+
 
 def test_session_run_settings_cannot_change_during_active_run(service, tmp_path):
     workspace = tmp_path / "busy-project"

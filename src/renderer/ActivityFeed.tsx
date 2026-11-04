@@ -65,7 +65,7 @@ function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expande
     setDisclosureState({ key: disclosureKey, open });
   };
   const promptSummary = row.kind === 'prompt' ? promptRequestSummary(row) : [];
-  const title = row.name?.replaceAll('_', ' ') || (row.kind === 'plan' ? 'Plan updated' : row.kind === 'approval' ? 'Action approval' : row.kind === 'question' ? row.title || 'Question for you' : row.kind === 'context' ? 'Request context compacted' : row.kind === 'prompt' ? promptSummary[0] : 'Activity');
+  const title = row.name?.replaceAll('_', ' ') || (row.kind === 'plan' ? 'Plan updated' : row.kind === 'approval' ? 'Action approval' : row.kind === 'question' ? row.title || 'Question for you' : row.kind === 'context' ? 'Request context compacted' : row.kind === 'context_checkpoint' ? 'Progress checkpoint saved' : row.kind === 'prompt' ? promptSummary[0] : 'Activity');
   const chatTitle = row.kind === 'operation' ? title.replace(/\bfile\b/gi, '').trim() : title;
   const firstFile = row.affectedFiles?.[0];
   const extraFiles = Math.max(0, (row.affectedFiles?.length || 0) - 1);

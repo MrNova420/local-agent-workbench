@@ -635,6 +635,7 @@ The engine now returns authoritative plan-change state, next open item, and acce
 - Engine commit `1c816389dfeee104486b9d73fd0ff81a1fc0205d` now asks for a saved continuity checkpoint before another extended response or project operation once the measured input budget crosses the existing adaptive threshold. A checkpoint-only `update_plan` call preserves the current plan and task mode. If the same response repeats without saving the handoff, the run ends as recoverable `checkpoint_missing`; the transcript, plan, and completed operations remain available, and no operation is replayed.
 - Focused engine verification: `python -m pytest tests/test_prompt_manifest.py -q` — **9 passed**. Paired full suites: engine **418 plus 12 subtests**, renderer **135**, and sidecar **166**; TypeScript typecheck passed. Packaging, visible workflow acceptance, and live Flint acceptance remain pending.
 - This improves checkpoint continuity; it does not persist private hidden reasoning the model did not emit, guarantee that a local model will obey a checkpoint request, or prove long-run task productivity. No model or inference setting was changed.
+- The sidecar stores a checkpoint-only handoff as its own `context_checkpoint` activity row and forces the event journal plus app/project session snapshots before the next inference call. Focused persistence test: **1 passed**; ActivityFeed tests: **25 passed**. A new package is required to include this last UI/persistence integration.
 
 ### 2026-11-04 paired Windows candidate
 

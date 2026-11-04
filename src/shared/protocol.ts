@@ -121,7 +121,7 @@ export type ActivityRecord = {
   turnId: string;
   sessionId: string;
   workspace?: string;
-  kind: 'operation' | 'tool_preparation' | 'approval' | 'question' | 'plan' | 'context' | 'prompt' | 'error';
+  kind: 'operation' | 'tool_preparation' | 'approval' | 'question' | 'plan' | 'context' | 'context_checkpoint' | 'prompt' | 'error';
   taskMode?: 'discussion' | 'plan_only' | 'plan' | 'implement';
   questionId?: string;
   question?: string;

@@ -273,6 +273,22 @@ describe('durable live activity state', () => {
     expect(trace).toContain('Add the new route and verify it');
   });
 
+  it('renders checkpoint-only handoffs as their own inspectable activity row', () => {
+    const record: ActivityRecord = {
+      id: 'context-checkpoint', sessionId: 's-1', turnId: 't-1', kind: 'context_checkpoint', status: 'saved',
+      progressCheckpoint: {
+        verifiedFindings: ['The workspace is isolated to the selected project'],
+        completedWork: ['Inspected the current settings'], pendingWork: ['Continue the request'],
+        nextAction: 'Resume implementation from the saved settings review',
+      },
+    };
+    const trace = renderToStaticMarkup(createElement(ActivityFeed, { entries: [record], mode: 'compact', surface: 'sidebar' }));
+
+    expect(trace).toContain('Progress checkpoint saved');
+    expect(trace).toContain('Saved progress checkpoint');
+    expect(trace).toContain('Resume implementation from the saved settings review');
+  });
+
   it('distinguishes saved provider request settings from prompt estimates and shows omitted reasoning overrides', () => {
     const record: ActivityRecord = {
       id: 'request-1', sessionId: 's-1', turnId: 't-1', kind: 'prompt', name: 'Model request 1', status: 'sent',
