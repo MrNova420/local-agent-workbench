@@ -8,6 +8,11 @@
 - App `5800a8f` now pins engine `506dbe97b45724509301af30ab3f709a8cd0ff82`. Replacement writes incrementally encode to a same-directory temporary file in cancellable chunks before atomic replace; append writes incrementally encode and roll back partial output if cancellation arrives before commit.
 - Added replacement/append cancellation regressions for preserving the old file and cleaning temporary/partial data. These have not been run; grouped engine, sidecar, renderer, typecheck, packaging, visible workflow, and Flint acceptance remain queued.
 
+## 2026-11-04 live file-write activity source pairing (verification queued)
+
+- App `6811745` pins engine `b40f45028fd161fdde86be40f4c127522246f00f`. File replacement and append operations report cumulative UTF-8 bytes written under their operation IDs; the sidecar stores progress on that activity row and the renderer shows it in compact chat/sidebar rows and expanded details.
+- Added engine, sidecar persistence, and renderer coverage. These checks remain unrun; packaged visible long-file workflow acceptance remains open.
+
 ## 2026-11-04 context-checkpoint recovery hardening (verification queued)
 
 - Prompt-manifest journal replay now restores `context_checkpoint` due/armed/acknowledged state, thresholds, measured request ratio, estimated tokens, and budget. A structured plan event restores the acknowledged verified findings, completed/pending work, and next action. When a request crosses the threshold, the sidecar forces an immediate mirrored snapshot as well as its durable event record.
