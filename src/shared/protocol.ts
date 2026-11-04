@@ -133,6 +133,7 @@ export type ActivityRecord = {
   source?: 'workbench' | 'agent';
   approvalStatus?: 'waiting' | 'approved' | 'denied' | 'cancelled';
   approvalMode?: 'per-action' | 'per-task' | 'per-session';
+  approvalReason?: 'uncertain_mcp_retry';
   timestamp?: number;
   startedAt?: number;
   completedAt?: number;

@@ -56,6 +56,7 @@ function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expande
       {row.kind === 'prompt' && row.promptManifest?.context_checkpoint_due === true && <span className="activity-review-warning">progress checkpoint required before changes</span>}
       <span className="activity-status">{row.status.replaceAll('_', ' ')}</span>
       {row.status === 'uncertain' && <span className="activity-review-warning">inspect before retry</span>}
+      {row.approvalReason === 'uncertain_mcp_retry' && <span className="activity-review-warning">explicit review · possible duplicate</span>}
       {row.approvalStatus && <span className={`activity-approval activity-approval-${row.approvalStatus}`}>approval {row.approvalStatus.replaceAll('_', ' ')}</span>}
       {row.progress?.message && <span className="activity-operation-progress" title={row.progress.message}>{row.progress.message}</span>}
       {surface === 'sidebar' && row.affectedFiles?.length ? <span className="activity-file-count">{row.affectedFiles.length} file{row.affectedFiles.length === 1 ? '' : 's'}</span> : null}

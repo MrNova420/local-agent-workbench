@@ -1953,6 +1953,11 @@ class AgentService:
             knowledge = ProjectKnowledge(turn.workspace)
 
             def approve(name: str, args: Any) -> bool:
+                checkpoint = state.get("task_checkpoint", {})
+                current_checkpoint = checkpoint.get("current", {}) if isinstance(checkpoint, dict) else {}
+                prior_uncertain = current_checkpoint.get("uncertain_operation") if isinstance(current_checkpoint, dict) else None
+                uncertain_retry = (name.startswith("mcp__") and isinstance(prior_uncertain, dict)
+                                   and prior_uncertain.get("status") == "uncertain")
                 action_id = uuid.uuid4().hex
                 condition = threading.Condition()
                 result = {"done": False, "approved": False}
@@ -1967,7 +1972,10 @@ class AgentService:
                                     "sessionId": state["session_id"], "workspace": str(turn.workspace), "kind": "operation",
                                     "name": name, "arguments": copy.deepcopy(args), "status": "running", "timestamp": time.time(), "output": {}, "result": "", "affectedFiles": []}
                         rows.append(activity)
-                    activity.update(approvalStatus="waiting", approvalMode=turn.approval_mode)
+                    activity.update(approvalStatus="waiting",
+                                    approvalMode="per-action" if uncertain_retry else turn.approval_mode)
+                    if uncertain_retry:
+                        activity["approvalReason"] = "uncertain_mcp_retry"
                 saved = self._save_active_session(controller)
                 if not (saved["app_saved"] and saved["project_saved"]):
                     self.emit({"type": "session_mirror_error", "sessionId": state["session_id"],
@@ -1976,7 +1984,11 @@ class AgentService:
                 self.emit({"type": "activity_event", "activity": copy.deepcopy(activity), "activityPhase": "start", "sessionId": state["session_id"], "turnId": controller["turn_id"]})
                 self.emit({"type": "approval_request", "actionId": action_id, "operationId": operation_id, "turnId": controller["turn_id"], "name": name,
                            "arguments": args, "workspace": str(turn.workspace),
-                           "mode": turn.approval_mode, "sessionId": state["session_id"]})
+                           "mode": "per-action" if uncertain_retry else turn.approval_mode,
+                           "reason": "uncertain_mcp_retry" if uncertain_retry else None,
+                           "uncertainOperationId": prior_uncertain.get("operationId") if uncertain_retry else None,
+                           "uncertainOperationName": prior_uncertain.get("name") if uncertain_retry else None,
+                           "sessionId": state["session_id"]})
                 with condition:
                     while not result["done"] and not controller["cancel"].is_set():
                         condition.wait(0.25)

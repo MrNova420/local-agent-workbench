@@ -60,7 +60,7 @@ type Session = {
   task_checkpoint?: { current?: { goal?: string; user_updates?: Array<{ id?: string; turn_id?: string; instruction?: string; status?: string }> }; task_history?: Array<{ goal?: string }> };
 };
 type TraceRow = { id: string; title: string; description?: string; kind: 'tool' | 'status' | 'plan' | 'error'; time: number };
-type Approval = { actionId: string; name: string; arguments: unknown; workspace: string; mode: ApprovalMode };
+type Approval = { actionId: string; name: string; arguments: unknown; workspace: string; mode: ApprovalMode; reason?: string; uncertainOperationId?: string; uncertainOperationName?: string };
 type AgentQuestion = { questionId: string; title: string; question: string; options: Array<{ label: string; description?: string }> };
 type Notice = { tone: 'good' | 'warn' | 'bad'; text: string };
 type TelemetryView = {
@@ -806,7 +806,7 @@ export default function App() {
         if (Array.isArray(event.acceptanceCriteria)) setAcceptanceCriteria(event.acceptanceCriteria.filter((item): item is string => typeof item === 'string'));
       }
       if (event.type === 'approval_request') {
-        setApproval({ actionId: String(event.actionId), name: String(event.name), arguments: event.arguments, workspace: String(event.workspace), mode: event.mode === 'per-session' ? 'per-session' : event.mode === 'per-task' ? 'per-task' : 'per-action' });
+        setApproval({ actionId: String(event.actionId), name: String(event.name), arguments: event.arguments, workspace: String(event.workspace), mode: event.mode === 'per-session' ? 'per-session' : event.mode === 'per-task' ? 'per-task' : 'per-action', reason: typeof event.reason === 'string' ? event.reason : undefined, uncertainOperationId: typeof event.uncertainOperationId === 'string' ? event.uncertainOperationId : undefined, uncertainOperationName: typeof event.uncertainOperationName === 'string' ? event.uncertainOperationName : undefined });
       }
       if (['cancelled', 'error', 'stopped_after_operation', 'generation_complete'].includes(String(event.type))) {
         setAgentQuestion(null);
@@ -2034,12 +2034,14 @@ function PermissionRulesModal({ rules, setRules, tools, loading, running, worksp
 
 function ApprovalModal({ approval, onChoice, onCancelRun }: { approval: Approval; onChoice: (value: boolean) => void; onCancelRun: () => void }) {
   const hostExecution = approval.name === 'run_command' || approval.name === 'run_shell' || approval.name.startsWith('mcp__');
+  const uncertainMcpRetry = approval.reason === 'uncertain_mcp_retry';
   return <Modal title={approval.name.replaceAll('_', ' ')} eyebrow="ACTION NEEDS YOUR REVIEW" wide dismissible={false} onClose={() => undefined}>
-    <p className="modal-copy">The agent requested an action under <b>{approval.mode === 'per-session' ? 'chat-session' : approval.mode === 'per-task' ? 'per-task' : 'per-action'} approval</b>. Review the exact arguments and selected workspace, then choose an action.{approval.mode === 'per-session' ? ' Approving runs this action and grants later actions in this saved chat session.' : ''}</p>
+    <p className="modal-copy">{uncertainMcpRetry ? <>An earlier MCP operation has an uncertain result{approval.uncertainOperationName ? <> ({approval.uncertainOperationName})</> : ''}. This action may repeat its remote effect. Review the exact arguments and workspace; approving this is a one-action decision and can create a duplicate.</> : <>The agent requested an action under <b>{approval.mode === 'per-session' ? 'chat-session' : approval.mode === 'per-task' ? 'per-task' : 'per-action'} approval</b>. Review the exact arguments and selected workspace, then choose an action.{approval.mode === 'per-session' ? ' Approving runs this action and grants later actions in this saved chat session.' : ''}</>}</p>
+    {uncertainMcpRetry && <div className="execution-boundary-warning"><b>Uncertain operation: {approval.uncertainOperationId || 'saved in task activity'}</b><span>Auto, task, and session approvals do not cover this action. The result of the earlier call is still unverified.</span></div>}
     <div className="approval-context"><span>WORKSPACE</span><code>{approval.workspace}</code></div>
     {hostExecution && <div className="execution-boundary-warning"><b>Runs with your Windows account permissions</b><span>The selected folder is the working directory. It is not an OS security boundary: this command or MCP server may access other files and services your account can reach.</span></div>}
     <pre className="diff-view approval-preview">{JSON.stringify(approval.arguments, null, 2)}</pre>
-    <div className="modal-actions"><Button kind="quiet" onClick={onCancelRun}>Cancel task</Button><Button kind="outline" onClick={() => onChoice(false)}>Deny action</Button><Button kind="bright" onClick={() => onChoice(true)}>{approval.mode === 'per-session' ? 'Approve action + session' : approval.mode === 'per-task' ? 'Approve task' : 'Approve action'}</Button></div>
+    <div className="modal-actions"><Button kind="quiet" onClick={onCancelRun}>Cancel task</Button><Button kind="outline" onClick={() => onChoice(false)}>Deny action</Button><Button kind="bright" onClick={() => onChoice(true)}>{uncertainMcpRetry ? 'Approve this MCP action' : approval.mode === 'per-session' ? 'Approve action + session' : approval.mode === 'per-task' ? 'Approve task' : 'Approve action'}</Button></div>
   </Modal>;
 }
 

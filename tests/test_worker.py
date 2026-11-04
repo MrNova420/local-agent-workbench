@@ -2318,6 +2318,68 @@ def test_approval_state_is_recorded_on_the_operation_without_a_duplicate_trace_r
     assert operations[0]["status"] == "completed"
 
 
+def test_uncertain_mcp_retry_requires_one_action_review_even_with_session_approval(service, tmp_path, monkeypatch):
+    events = []
+    service.emit = events.append
+
+    class ApprovalEngine:
+        def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
+            self.event = event
+            self.approve = approve
+            self.state = {}
+            self.runtime = object()
+            self.checkpoint = kwargs["task_checkpoint"]
+
+        def run(self, prompt, messages):
+            self.checkpoint["current"]["uncertain_operation"] = {
+                "operationId": "uncertain-1", "name": "mcp__calendar__create_event",
+                "status": "uncertain", "result": "response timed out",
+            }
+            self.event({"type": "tool_start", "operationId": "retry-1", "toolCallId": "retry-call",
+                        "name": "mcp__calendar__create_event", "arguments": {"title": "Review"}, "startedAt": 1})
+            assert self.approve("mcp__calendar__create_event", {"title": "Review"}) is True
+            self.event({"type": "tool_done", "operationId": "retry-1", "toolCallId": "retry-call",
+                        "name": "mcp__calendar__create_event", "status": "completed",
+                        "result": "created event-42", "affectedFiles": [], "completedAt": 2})
+            self.event({"type": "complete", "workflowOutcome": "blocked", "projectChanged": False,
+                        "verification": {"status": "blocked", "steps": []}})
+            return messages
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(worker, "AgentEngine", ApprovalEngine)
+    project = tmp_path / "uncertain-mcp-approval"
+    project.mkdir()
+    service.handle("run_start", {"options": {
+        "workspace": str(project), "prompt": "check the uncertain event", "model": "model-a:latest",
+        "context": 4096, "maxTokens": 128, "temperature": 0.2,
+        "access": "ask", "approvalMode": "per-session",
+    }})
+    controller = service.active
+    assert controller is not None
+
+    deadline = time.monotonic() + 2
+    request = None
+    while time.monotonic() < deadline:
+        request = next((item for item in events if item.get("type") == "approval_request"), None)
+        if request:
+            break
+        time.sleep(0.01)
+    assert request is not None
+    assert request["mode"] == "per-action"
+    assert request["reason"] == "uncertain_mcp_retry"
+    assert request["uncertainOperationId"] == "uncertain-1"
+    assert service.approval_reply(request["actionId"], True) is True
+    controller["thread"].join(3)
+
+    saved = service.sessions.load(controller["session"]["session_id"])
+    activity = next(item for item in saved["activity_events"] if item.get("operationId") == "retry-1")
+    assert activity["approvalMode"] == "per-action"
+    assert activity["approvalReason"] == "uncertain_mcp_retry"
+    assert activity["approvalStatus"] == "approved"
+
+
 def test_run_cancel_reports_whether_a_run_was_active(service):
     assert service.handle("run_cancel", {}) == {"cancelled": False}
     controller = {"cancel": threading.Event(), "engine": None, "pending": {}}
