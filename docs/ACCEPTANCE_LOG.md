@@ -1,3 +1,7 @@
+## 2026-11-04 search pagination source audit
+
+- Read-only source inspection confirmed that each `search_files` offset request currently walks the project from the beginning and reopens/rechecks prior files. This creates repeated I/O for later pages but does not impose a global result cap.
+- No code or tests were changed for this audit. Retaining open file streams across model calls would hold Windows handles; storing all prior hits/signatures grows memory with project size. A metadata-only prefix validation can avoid rereading content but still traverses prior paths and has filesystem metadata limits. Keep this as a measured optimization item; preserve current search correctness and uncapped results until a safer design is demonstrated.
 ## 2026-11-04 project-browser cursor integration
 
 - App `13cd0680f480137567c93cf9c3620f87f2ae315b` pins engine `94f89c05c976b849f3b9b49f5e9988fced11b60d` and keeps a lazy file-page cursor in the sidecar for the currently selected project. It reuses sequential pages across intervening app requests, replaces the cursor when the project changes, and follows metadata-based invalidation in the engine.
