@@ -1,3 +1,7 @@
+## 2026-11-04 project-browser cursor integration
+
+- App `13cd0680f480137567c93cf9c3620f87f2ae315b` pins engine `94f89c05c976b849f3b9b49f5e9988fced11b60d` and keeps a lazy file-page cursor in the sidecar for the currently selected project. It reuses sequential pages across intervening app requests, replaces the cursor when the project changes, and follows metadata-based invalidation in the engine.
+- Focused sidecar tests: **3 passed**, including sequential pages, project switching/isolation, and the 2,005-file no-hidden-cap traversal. Engine project-view/walker tests: **8 passed**; exact-pair build-config tests: **8 passed**; source pin verification passed. Full suites, package, visible workflow, and Flint acceptance were not run.
 ## 2026-11-04 sequential project listing cursor and compaction audit
 
 - Engine `fdf692d44916d7ef6f58c13b60dd979615507ff4` reuses a lazy file-walk cursor across sequential `list_files` pages within a task. It invalidates after observed directory/`.gitignore` changes, discards state on cancellation, preserves output-budget lookahead, and falls back for backward offsets or a different query. It adds no product file/page/context limit. The paired app pin is `274d4a8b258edfd390f47e1820de1e808c8daa19`.
