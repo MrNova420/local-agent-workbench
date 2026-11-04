@@ -546,6 +546,49 @@ def test_copy_run_keeps_external_folder_grants_bound_to_original_project(service
     assert captured["kwargs"]["permission_rules"] == [{**matching, "workspace": str(project).replace("\\", "/")}]
 
 
+def test_copy_run_journals_prompt_events_to_the_original_project_mirror(service, tmp_path, monkeypatch):
+    class PromptEvidenceEngine:
+        def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
+            self.event = event
+            self.state = {}
+            self.runtime = object()
+
+        def run(self, prompt, messages):
+            self.event({"type": "prompt_manifest", "request_index": 1,
+                        "messages": [{"role": "user", "content": prompt}]})
+            self.event({"type": "request_dispatched", "provider": "ollama", "request_index": 1})
+            self.event({"type": "request_error", "provider": "ollama", "request_index": 1,
+                        "phase": "waiting_response_headers", "cancelled": True,
+                        "error": "Cancelled before response headers."})
+            raise worker.RequestCancelled()
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(worker, "AgentEngine", PromptEvidenceEngine)
+    project = tmp_path / "copy-journal-source-project"
+    project.mkdir()
+    service.handle("run_start", {"options": {
+        "workspace": str(project), "prompt": "Inspect the project", "model": "model-a:latest",
+        "context": 4096, "maxTokens": 128, "temperature": 0.2,
+        "access": "copy", "approvalMode": "per-action", "taskIntent": "implement",
+    }})
+    controller = service.active
+    assert controller is not None
+    controller["thread"].join(3)
+
+    session_id = controller["session"]["session_id"]
+    project_journal = project / ".agent-workbench" / "sessions" / f"{session_id}.events.jsonl"
+    app_journal = service.sessions.app.root / f"{session_id}.events.jsonl"
+    assert project_journal.is_file()
+    project_events = [json.loads(line)["event"] for line in project_journal.read_text(encoding="utf-8").splitlines()]
+    app_events = [json.loads(line)["event"] for line in app_journal.read_text(encoding="utf-8").splitlines()]
+    assert [event["type"] for event in project_events] == [event["type"] for event in app_events]
+    assert any(event["type"] == "prompt_manifest" for event in project_events)
+    assert any(event["type"] == "request_dispatched" for event in project_events)
+    assert not (Path(controller["working"]) / ".agent-workbench" / "sessions" / f"{session_id}.events.jsonl").exists()
+
+
 def test_agent_plan_decisions_are_saved_to_checkpoint_and_activity(service, tmp_path, monkeypatch):
     project = tmp_path / "plan-decision-project"
     project.mkdir()

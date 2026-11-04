@@ -613,15 +613,18 @@ class MirroredSessionStore:
 
     def _read_events(self, session_id: str, workspace: str | None, sources: set[str]) -> tuple[list[dict[str, Any]], list[str]]:
         paths = []
+        issues: list[str] = []
         if "app" in sources:
             paths.append(self.app.root / (SessionStore._safe(session_id) + ".events.jsonl"))
         if "project" in sources and workspace:
             try:
                 paths.append(self._project_store(workspace).root / (SessionStore._safe(session_id) + ".events.jsonl"))
-            except (OSError, ValueError, KeyError):
+            except FileNotFoundError:
                 pass
+            except (OSError, ValueError, KeyError) as exc:
+                issues.append(f"project journal could not be resolved ({type(exc).__name__}); snapshot data was preserved.")
         found: dict[str, dict[str, Any]] = {}
-        issues: list[str] = []
+        conflicting_ids: set[str] = set()
         for path in paths:
             try:
                 with path.open("r", encoding="utf-8") as handle:
@@ -631,15 +634,38 @@ class MirroredSessionStore:
                         except json.JSONDecodeError:
                             issues.append(f"{path.name}: unreadable journal record at line {line_number}; raw data was preserved.")
                             continue
-                        if isinstance(row, dict) and isinstance(row.get("event_id"), str) and isinstance(row.get("event"), dict):
-                            found.setdefault(row["event_id"], row)
-                        else:
+                        if not (isinstance(row, dict) and isinstance(row.get("event_id"), str)
+                                and row["event_id"] and isinstance(row.get("event"), dict)):
                             issues.append(f"{path.name}: invalid journal record at line {line_number}; raw data was preserved.")
+                            continue
+                        raw_timestamp = row.get("recorded_at_ns")
+                        if isinstance(raw_timestamp, bool) or not isinstance(raw_timestamp, (int, str)):
+                            issues.append(f"{path.name}: invalid timestamp at line {line_number}; raw data was preserved.")
+                            continue
+                        try:
+                            timestamp = int(raw_timestamp)
+                        except (TypeError, ValueError, OverflowError):
+                            issues.append(f"{path.name}: invalid timestamp at line {line_number}; raw data was preserved.")
+                            continue
+                        if timestamp < 0 or (isinstance(raw_timestamp, str) and not raw_timestamp.strip().isdecimal()):
+                            issues.append(f"{path.name}: invalid timestamp at line {line_number}; raw data was preserved.")
+                            continue
+                        normalized = {**row, "recorded_at_ns": timestamp}
+                        event_id = row["event_id"]
+                        if event_id in conflicting_ids:
+                            continue
+                        previous = found.get(event_id)
+                        if previous is None:
+                            found[event_id] = normalized
+                        elif previous != normalized:
+                            found.pop(event_id, None)
+                            conflicting_ids.add(event_id)
+                            issues.append(f"{path.name}: conflicting journal records for event {event_id}; the event was skipped and both raw records were preserved.")
             except FileNotFoundError:
                 continue
             except OSError as exc:
                 issues.append(f"{path.name}: could not read journal ({type(exc).__name__}); snapshot data was preserved.")
-        return sorted(found.values(), key=lambda row: int(row.get("recorded_at_ns", 0))), issues
+        return sorted(found.values(), key=lambda row: row["recorded_at_ns"]), issues
 
     def _replay_events(self, state: dict[str, Any], workspace: str | None, sources: set[str]) -> dict[str, Any]:
         cursor = int(state.get("journal_cursor_ns", 0) or 0)

@@ -1,3 +1,11 @@
+## 2026-11-03 session recovery and journal-integrity checkpoint
+
+- Inspected current user data read-only and validated five saved sessions through the paired engine store: two older session snapshots from the preserved legacy `LocalAgentDesk` library and three newer `test2` sessions with project mirrors. `workspaces.json` contains `test` and `test2`; both directories exist.
+- Opened the existing installed beta.3 as one window using screenshot-backed Computer Use. Home visibly rendered both workspaces as available and all **5 SAVED** session cards. The app currently reports Ollama offline / no local models. No model was loaded, unloaded, or changed. This confirms the recovery data is visible in the installed app; it does not pass chat, project, inference, or update acceptance.
+- Added a copy-mode regression proving an interrupted request's prompt manifest, dispatch, and cancellation records are mirrored to the original project rather than the disposable working copy.
+- Hardened journal replay against invalid timestamps, divergent duplicate event IDs, and project-journal resolution errors. Invalid/conflicted rows are skipped with recovery issues; source journal files are left untouched. Focused checks: app persistence **32 passed**, copy-mode journal/workspace **2 passed**, engine partial-stream preservation **2 passed**. Full suites were not started.
+- The earlier stopped pre-inference run's app/project journal mismatch was not reproduced by the focused mock; its original cause remains unknown. Current source package `fb37158` / engine `038bcf7` is still not installed over the older beta.3 build. Full packaged chat/project workflow, Flint, cache reuse, updater/restart/data recovery, long-run and release gates remain open.
+
 ## 2026-11-02 Home session recovery and paged inventory package
 
 - App `fb37158` pins engine `038bcf7c4b0dc2306fc486d318eb747225cd4cbd`. Full checks after the Home session-list fix: engine **352 passed, 5 subtests**, renderer **115**, sidecar **132**, and TypeScript typecheck passed. Python suites report the upstream Starlette `python_multipart` pending-deprecation warning.

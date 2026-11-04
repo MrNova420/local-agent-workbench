@@ -563,6 +563,60 @@ class MirroredSessionStoreTests(unittest.TestCase):
             self.assertTrue(any("line 2" in issue for issue in loaded["recovery_issues"]))
             self.assertIn("{truncated", journal.read_text(encoding="utf-8"))
 
+    def test_invalid_journal_timestamp_does_not_block_recovery_of_valid_records(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "project"
+            root.mkdir()
+            store = MirroredSessionStore(Path(temp) / "app")
+            state = store.create(str(root), "model", 8192)
+            state["run_state"] = {"status": "running", "turn_id": "turn-invalid-time", "safe_messages": [],
+                                  "partial_content": "", "partial_thinking": ""}
+            store.save(state)
+            journal = Path(temp) / "app" / "sessions" / f"{state['session_id']}.events.jsonl"
+            journal.write_text(
+                '{"event_id":"valid","recorded_at_ns":10,"event":{"type":"text","text":"recovered"}}\n'
+                '{"event_id":"invalid-time","recorded_at_ns":"not-an-integer","event":{"type":"text","text":"must be reported"}}\n',
+                encoding="utf-8")
+
+            loaded = store.load(state["session_id"], str(root))["state"]
+
+            self.assertEqual(loaded["run_state"]["partial_content"], "recovered")
+            self.assertTrue(any("invalid timestamp" in issue for issue in loaded["recovery_issues"]))
+            self.assertIn("not-an-integer", journal.read_text(encoding="utf-8"))
+
+    def test_divergent_duplicate_journal_ids_are_reported_and_not_replayed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "project"
+            root.mkdir()
+            store = MirroredSessionStore(Path(temp) / "app")
+            state = store.create(str(root), "model", 8192)
+            state["run_state"] = {"status": "running", "turn_id": "turn-conflict", "safe_messages": [],
+                                  "partial_content": "", "partial_thinking": ""}
+            store.save(state)
+            event = {"_journal_event_id": "same-id", "_journal_recorded_at_ns": 10,
+                     "type": "text", "text": "one copy"}
+            store.append_events(state["session_id"], str(root), [event])
+            project_journal = root / ".agent-workbench" / "sessions" / f"{state['session_id']}.events.jsonl"
+            project_row = json.loads(project_journal.read_text(encoding="utf-8"))
+            project_row["event"]["text"] = "divergent copy"
+            project_journal.write_text(json.dumps(project_row) + "\n", encoding="utf-8")
+
+            loaded = store.load(state["session_id"], str(root))["state"]
+
+            self.assertEqual(loaded["run_state"]["partial_content"], "")
+            self.assertTrue(any("conflicting journal records" in issue for issue in loaded["recovery_issues"]))
+            self.assertIn("divergent copy", project_journal.read_text(encoding="utf-8"))
+
+    def test_project_journal_resolution_failure_is_reported_without_blocking_app_recovery(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "project"
+            root.mkdir()
+            store = MirroredSessionStore(Path(temp) / "app")
+            rows, issues = store._read_events("session-1", str(root), {"project"})
+
+            self.assertEqual(rows, [])
+            self.assertTrue(any("project journal could not be resolved" in issue for issue in issues))
+
     def test_failed_generation_keeps_text_received_before_provider_error(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "project"
