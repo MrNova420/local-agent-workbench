@@ -3,6 +3,11 @@
 - App source `5800a8f` now pins engine `c7dff32a1f34deb1c9938bc75aaa94a8dbc1804d`. Git status/diff/log wait without an implicit 10-second operation deadline, preserve complete output, and stop on the app's cancellation event. Git history supports caller-selected offset paging without a fixed 100-entry maximum and reports the next offset only when a lookahead confirms more commits.
 - Added delayed-process, cancellation/partial-output, 2,500-commit page, next-page, and Windows console-suppression regressions. These have not been run; no typecheck, package, visible workflow, or model request has been performed against this pair.
 
+## 2026-11-04 cancellable large-file write source pairing (verification queued)
+
+- App `5800a8f` now pins engine `506dbe97b45724509301af30ab3f709a8cd0ff82`. Replacement writes incrementally encode to a same-directory temporary file in cancellable chunks before atomic replace; append writes incrementally encode and roll back partial output if cancellation arrives before commit.
+- Added replacement/append cancellation regressions for preserving the old file and cleaning temporary/partial data. These have not been run; grouped engine, sidecar, renderer, typecheck, packaging, visible workflow, and Flint acceptance remain queued.
+
 ## 2026-11-04 context-checkpoint recovery hardening (verification queued)
 
 - Prompt-manifest journal replay now restores `context_checkpoint` due/armed/acknowledged state, thresholds, measured request ratio, estimated tokens, and budget. A structured plan event restores the acknowledged verified findings, completed/pending work, and next action. When a request crosses the threshold, the sidecar forces an immediate mirrored snapshot as well as its durable event record.
