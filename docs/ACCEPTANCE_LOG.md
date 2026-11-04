@@ -1,3 +1,8 @@
+## 2026-11-03 project session recovery visibility
+
+- Home and project session lists now use one recovery-status mapper. Project overview and saved-session rows surface mirror conflicts, uncertain operations, recovery issues, unavailable workspaces, and failed/interrupted outcomes before a session is reopened.
+- Focused renderer test: **3 passed**; `npm run typecheck` passed; `git diff --check` passed with a Windows line-ending notice. Full renderer/sidecar/engine suites and packaged visual acceptance were not run for this milestone.
+
 ## 2026-11-03 session recovery and journal-integrity checkpoint
 
 - Inspected current user data read-only and validated five saved sessions through the paired engine store: two older session snapshots from the preserved legacy `LocalAgentDesk` library and three newer `test2` sessions with project mirrors. `workspaces.json` contains `test` and `test2`; both directories exist.
