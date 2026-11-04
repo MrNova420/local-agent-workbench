@@ -344,6 +344,8 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any], *,
             plan_activity["acceptanceCriteria"] = copy.deepcopy(acceptance_criteria)
         if isinstance(event.get("decisions"), list):
             plan_activity["decisions"] = copy.deepcopy(event["decisions"])
+        if isinstance(event.get("progressCheckpoint"), dict):
+            plan_activity["progressCheckpoint"] = copy.deepcopy(event["progressCheckpoint"])
         state.setdefault("activity_events", []).append(plan_activity)
     elif kind == "context_compacted":
         state.setdefault("activity_events", []).append({

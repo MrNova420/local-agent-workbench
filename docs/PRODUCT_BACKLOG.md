@@ -308,3 +308,10 @@ Large tool outputs are now context-budgeted for inference while preserving the f
 
 - External file access uses concrete folder rules bound to a normalized selected-project identity. The sidecar captures only matching rules, and the engine independently filters against the original project root (including runs using disposable copies). Old app-global external grants are disabled with a repair warning while the saved file remains untouched. Ask is the picker default; Allow is explicit, Deny is hard, and nested deny beats grants. External structured writes remain blocked in Copy mode. Focused engine tests: 50 passed; worker tests: 65 passed including Copy-mode source binding; renderer typecheck passed. Packaged acceptance is pending.
 - Still open: meaningful real Windows containment for shell/MCP, packaged approval-modal verification, broader MCP/web/LSP/command capability parity, and full system/release acceptance. Shell approval and selected cwd are not a sandbox.
+
+### 2026-11-04 preemptive context-pressure handoff
+
+- Source now requests a durable progress checkpoint when the estimated request reaches 70% of the actual input budget; the request remains latched until context compaction lowers usage below 60%. Both values are derived from the real per-request budget ratio, not absolute context/output caps. This does not alter selected context/output/reasoning values or interrupt an active model stream.
+- Before project writes, commands, or MCP dispatch, the host requires a saved `update_plan.progress_checkpoint` with verified findings, completed work, pending work, and a next action. Reads and plan refinement continue. The same-task flow resumes after the handoff.
+- The request manifest is saved in activity, the chat/worksheet shows the threshold notice, and checkpoint details are displayed with Plan activity. Engine, sidecar persistence, and renderer regression tests are authored; execution is queued for the grouped verification pass. Packaged/live acceptance remains open.
+- Paired engine source commit: `042ffd5a7becabf27a0aaba6eff0079d3da1f4d1`; app `core-revision.txt` is synchronized to that exact revision.

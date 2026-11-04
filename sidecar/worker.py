@@ -474,6 +474,8 @@ class AgentService:
                     activity["acceptanceCriteria"] = copy.deepcopy(acceptance_criteria)
                 if isinstance(event.get("decisions"), list):
                     activity["decisions"] = copy.deepcopy(event["decisions"])
+                if isinstance(event.get("progressCheckpoint"), dict):
+                    activity["progressCheckpoint"] = copy.deepcopy(event["progressCheckpoint"])
                 rows.append(activity)
             elif kind == "context_compacted":
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],

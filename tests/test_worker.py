@@ -651,6 +651,10 @@ def test_agent_plan_decisions_are_saved_to_checkpoint_and_activity(service, tmp_
         "type": "plan", "source": "agent", "items": [{"title": "Implement", "status": "in_progress"}],
         "acceptanceCriteria": ["Deep links still work."], "decisions": [decision],
         "taskMode": "implement",
+        "progressCheckpoint": {"verifiedFindings": ["The existing router owns deep links."],
+                               "completedWork": ["Inspected route configuration."],
+                               "pendingWork": ["Add and verify the page route."],
+                               "nextAction": "Add the page route."},
     })
     service._publish_run_event(controller, SimpleNamespace(workspace=project), {
         "type": "plan", "source": "agent", "items": [{"title": "Implement", "status": "deferred"}],
@@ -663,6 +667,7 @@ def test_agent_plan_decisions_are_saved_to_checkpoint_and_activity(service, tmp_
     assert saved["task_checkpoint"]["current"]["plan_source"] == "agent"
     plan_activities = [row for row in saved["activity_events"] if row.get("kind") == "plan"]
     assert plan_activities[0]["decisions"] == [decision]
+    assert plan_activities[0]["progressCheckpoint"]["nextAction"] == "Add the page route."
     assert plan_activities[0]["taskMode"] == "implement"
     assert plan_activities[1]["taskMode"] == "plan_only"
 

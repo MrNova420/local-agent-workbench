@@ -143,6 +143,8 @@ export type ActivityRecord = {
   items?: Array<{ title?: string; text?: string; status?: string; source?: 'workbench' | 'agent'; group?: string }>;
   /** Concise task decisions, not private chain-of-thought. */
   decisions?: string[];
+  /** Concise saved progress handoff emitted before a context-pressure write gate opens. */
+  progressCheckpoint?: { verifiedFindings: string[]; completedWork: string[]; pendingWork: string[]; nextAction: string };
   acceptanceCriteria?: string[];
   omittedTurns?: number;
   omittedOperationGroups?: number;

@@ -492,6 +492,9 @@ class MirroredSessionStoreTests(unittest.TestCase):
                 {"_journal_event_id": "prompt", "_journal_recorded_at_ns": 6, "activityId": "task-request-1", "type": "prompt_manifest",
                  "request_index": 1, "configured_context": 65536, "input_budget": 57344,
                  "estimated_request_input_tokens": 4096, "message_count": 3,
+                 "context_checkpoint_due": True, "context_checkpoint_threshold_ratio": 0.70,
+                 "context_checkpoint_reset_ratio": 0.60,
+                 "context_checkpoint_ratio": 0.71, "context_checkpoint_acknowledged": False,
                  "messages": [{"index": 0, "role": "system", "source": "system_guidance_and_project_instructions", "characters": 800, "estimated_tokens": 400}],
                  "project_instruction_sources": [{"path": "AGENTS.md", "characters": 20, "estimated_tokens": 10}], "retrieved_project_files": ["index.html"],
                  "checkpoint_included": True, "compaction_notice_count": 0,
@@ -515,6 +518,10 @@ class MirroredSessionStoreTests(unittest.TestCase):
             self.assertEqual(len(prompt_rows), 1)
             self.assertEqual(prompt_rows[0]["id"], "task-request-1")
             self.assertEqual(prompt_rows[0]["promptManifest"]["retrieved_project_files"], ["index.html"])
+            self.assertTrue(prompt_rows[0]["promptManifest"]["context_checkpoint_due"])
+            self.assertEqual(prompt_rows[0]["promptManifest"]["context_checkpoint_threshold_ratio"], 0.70)
+            self.assertEqual(prompt_rows[0]["promptManifest"]["context_checkpoint_reset_ratio"], 0.60)
+            self.assertFalse(prompt_rows[0]["promptManifest"]["context_checkpoint_acknowledged"])
             self.assertEqual(messages[1]["content"], "Build the page")
             self.assertEqual(messages[3]["content"], "Wrote index.html")
             self.assertEqual(messages[-1]["content"], "Page is ready.")

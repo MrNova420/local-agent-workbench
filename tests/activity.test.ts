@@ -224,6 +224,45 @@ describe('durable live activity state', () => {
     expect(trace).toContain('4,096');
   });
 
+  it('shows a saved preemptive checkpoint notice when request pressure reaches the configured threshold', () => {
+    const record: ActivityRecord = {
+      id: 'task-request-pressure', sessionId: 's-1', turnId: 't-1', kind: 'prompt',
+      name: 'Model request 2', status: 'sent',
+      promptManifest: {
+        request_index: 2, configured_context: 65536, maximum_output_tokens: 8192,
+        input_budget: 57344, estimated_request_input_tokens: 40614,
+        context_checkpoint_due: true, context_checkpoint_threshold_ratio: 0.70,
+        context_checkpoint_reset_ratio: 0.60, context_checkpoint_ratio: 0.708,
+      },
+    };
+    const chat = renderToStaticMarkup(createElement(ActivityFeed, { entries: [record], mode: 'compact', surface: 'chat' }));
+    const sidebar = renderToStaticMarkup(createElement(ActivityFeed, { entries: [record], mode: 'compact', surface: 'sidebar' }));
+
+    expect(chat).toContain('progress checkpoint required before changes');
+    expect(sidebar).toContain('Progress checkpoint requested before the next project change');
+    expect(sidebar).toContain('71%');
+    expect(sidebar).toContain('Selected model limits are unchanged');
+    expect(sidebar).toContain('below 60%');
+  });
+
+  it('renders the checkpoint handoff inside the durable plan activity', () => {
+    const record: ActivityRecord = {
+      id: 'plan-checkpoint', sessionId: 's-1', turnId: 't-1', kind: 'plan',
+      name: 'Plan updated', status: 'completed',
+      progressCheckpoint: {
+        verifiedFindings: ['The route is handled in src/routes.ts'],
+        completedWork: ['Inspected route definitions'],
+        pendingWork: ['Add the new route'],
+        nextAction: 'Add the new route and verify it',
+      },
+    };
+    const trace = renderToStaticMarkup(createElement(ActivityFeed, { entries: [record], mode: 'compact', surface: 'sidebar' }));
+
+    expect(trace).toContain('Saved progress checkpoint');
+    expect(trace).toContain('src/routes.ts');
+    expect(trace).toContain('Add the new route and verify it');
+  });
+
   it('distinguishes saved provider request settings from prompt estimates and shows omitted reasoning overrides', () => {
     const record: ActivityRecord = {
       id: 'request-1', sessionId: 's-1', turnId: 't-1', kind: 'prompt', name: 'Model request 1', status: 'sent',
