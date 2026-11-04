@@ -5,6 +5,7 @@ import threading
 import time
 from types import SimpleNamespace
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -64,6 +65,52 @@ def test_workspace_file_pages_return_every_project_file_without_a_hidden_cap(ser
     assert first["next_offset"] == 500
     assert later["files"][-1]["path"] == "2004.txt"
     assert later["next_offset"] is None
+
+
+def test_workspace_file_pages_reuse_the_live_walk_across_sidecar_requests(service, tmp_path):
+    import project_view
+
+    project = tmp_path / "paged-project"
+    project.mkdir()
+    for name in ("a.txt", "b.txt", "c.txt", "d.txt", "e.txt", "f.txt"):
+        (project / name).write_text(name, encoding="utf-8")
+
+    traversed = []
+    real_walk = project_view.iter_project_files
+
+    def recording_walk(*args, **kwargs):
+        for path in real_walk(*args, **kwargs):
+            traversed.append(path.name)
+            yield path
+
+    with patch("project_view.iter_project_files", side_effect=recording_walk):
+        first = service.handle("workspace_files", {"workspace": str(project), "offset": 0, "limit": 2})
+        service.handle("models", {})
+        second = service.handle("workspace_files", {"workspace": str(project), "offset": 2, "limit": 2})
+
+    assert [row["path"] for row in first["files"]] == ["a.txt", "b.txt"]
+    assert [row["path"] for row in second["files"]] == ["c.txt", "d.txt"]
+    assert len(traversed) == 5
+    assert len(set(traversed)) == 5
+
+
+def test_workspace_file_page_cursor_is_replaced_when_the_selected_project_changes(service, tmp_path):
+    first_project = tmp_path / "first-project"
+    second_project = tmp_path / "second-project"
+    first_project.mkdir()
+    second_project.mkdir()
+    for name in ("a.txt", "b.txt", "c.txt", "d.txt"):
+        (first_project / name).write_text(name, encoding="utf-8")
+    for name in ("x.txt", "y.txt"):
+        (second_project / name).write_text(name, encoding="utf-8")
+
+    first_page = service.handle("workspace_files", {"workspace": str(first_project), "offset": 0, "limit": 2})
+    other_project_page = service.handle("workspace_files", {"workspace": str(second_project), "offset": 0, "limit": 1})
+    resumed_project_page = service.handle("workspace_files", {"workspace": str(first_project), "offset": 2, "limit": 2})
+
+    assert [row["path"] for row in first_page["files"]] == ["a.txt", "b.txt"]
+    assert [row["path"] for row in other_project_page["files"]] == ["x.txt"]
+    assert [row["path"] for row in resumed_project_page["files"]] == ["c.txt", "d.txt"]
 
 
 def test_global_session_library_finds_project_only_sessions_from_workspace_history(service, tmp_path):

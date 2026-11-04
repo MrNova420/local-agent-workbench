@@ -58,7 +58,7 @@ from disposable_workspace import (  # noqa: E402
 )
 from mcp_support import MCPManager  # noqa: E402
 from project_knowledge import ProjectKnowledge  # noqa: E402
-from project_view import preview_file_page  # noqa: E402
+from project_view import ProjectFilePageCursor, preview_file_page  # noqa: E402
 from project_diff import workspace_diff_text  # noqa: E402
 from persistence import MirroredSessionStore, WorkspaceHistory  # noqa: E402
 from telemetry import Telemetry  # noqa: E402
@@ -197,6 +197,8 @@ class AgentService:
         self.active_lock = threading.RLock()
         self.active: dict[str, Any] | None = None
         self.output_ids: queue.SimpleQueue[str] = queue.SimpleQueue()
+        self.project_file_page_lock = threading.RLock()
+        self.project_file_page_cursor: ProjectFilePageCursor | None = None
 
     def _save_active_session(self, controller: dict[str, Any]) -> dict[str, Any]:
         """Persist an immutable active-session snapshot without blocking its state lock."""
@@ -1077,7 +1079,12 @@ class AgentService:
             return result
         if command == "workspace_files":
             root = validate_selected_workspace(True, message["workspace"])
-            return preview_file_page(root, offset=message.get("offset", 0), limit=message.get("limit", 200))
+            with self.project_file_page_lock:
+                cursor = self.project_file_page_cursor
+                if cursor is None or cursor.root != root.resolve(strict=True):
+                    cursor = ProjectFilePageCursor(root)
+                    self.project_file_page_cursor = cursor
+                return preview_file_page(root, offset=message.get("offset", 0), limit=message.get("limit", 200), cursor=cursor)
         if command == "workspaces_list":
             return self.workspaces.list(str(message.get("query", "")))
         if command == "workspace_record":
