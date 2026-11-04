@@ -1386,3 +1386,7 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 ## 2026-11-04 unrestricted selected Hugging Face download batches
 
 - Removed the backend's arbitrary 500-file selection ceiling. The downloader still requires a non-empty list of strings, runs in its existing background worker, validates repository and file paths through the catalog, and checks cancellation between files. Added a 501-file mocked worker regression; it is authored but intentionally queued for the grouped verification pass. No model settings, app package, or live download were changed.
+
+## 2026-11-04 complete sidecar diagnostics
+
+- Removed the main-process 2,000-character slice from sidecar stderr chunks and stopped trimming each chunk before forwarding, preserving whitespace and full diagnostic text in the event stream. Renderer behavior still sends these service diagnostics to the developer console; this change does not claim a new user-facing log viewer. No test, typecheck, package, or app launch was performed; verification is queued.
