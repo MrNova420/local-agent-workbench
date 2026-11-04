@@ -1,3 +1,8 @@
+## 2026-11-04 stale queued-follow-up recovery source fix (verification queued)
+
+- App source `b6cfeda` pins engine `0da5a89b8c2f8f477928deada9e3e4f280a663d4`. If a previously displayed queue row disappears between run-start preflight and consumption, the sidecar now returns a structured unavailable result and refreshed queue snapshot; the renderer puts the unsent prompt back in the composer. This avoids turning stale queue identity into an IPC failure and keeps the user's text recoverable.
+- Added a sidecar regression for the preflight/consume race. It is intentionally unrun with the grouped verification pass. No app was launched and no model or runtime setting was touched. The installed beta.3 still predates this source.
+
 ## 2026-11-04 duplicate failure notice and token selection source fix (verification queued)
 
 - The installed beta.3 session `20261104-101040-65e859eb` for `Desktop\\test2` records a plan followed by `UnicodeEncodeError: 'utf-8' codec can't encode character '\\udc9d' in position 9209`; its journal has no prompt manifest or provider-dispatch event. The exact traceback was not captured, so the failing source line/input is not yet proven.
