@@ -1,6 +1,13 @@
-import type { ActivityRecord, WorkerEvent } from './protocol';
+import type { ActivityRecord, QueuedPrompt, WorkerEvent } from './protocol';
 
 export type ToolCallProgress = { requestIndex: number; callIndex: number; provider: string; toolName: string; argumentCharacters: number };
+
+export function reconcileQueuedPromptSnapshot<T extends { session_id: string; queued_prompts?: QueuedPrompt[] }>(
+  current: T | null, sessionId: string, queuedPrompts: QueuedPrompt[],
+): T | null {
+  if (!current || current.session_id !== sessionId) return current;
+  return { ...current, queued_prompts: [...queuedPrompts] };
+}
 
 export function isLiveActivity(record: ActivityRecord): boolean {
   if (record.kind === 'operation') return record.status === 'running';

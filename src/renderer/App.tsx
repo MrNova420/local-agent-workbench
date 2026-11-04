@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
 import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, ProjectFilePage, QueuedPrompt, RunOptions, SessionLiveSnapshot, SessionSummary, SkillSource, TaskIntent, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
-import { applyToolCallProgress, canSubmitActiveRunUpdate, clearSubmittedPrompt, isGlobalRunLifecycleEvent, latestActiveActivityForTurn, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter, type ToolCallProgress } from '../shared/run-state';
+import { applyToolCallProgress, canSubmitActiveRunUpdate, clearSubmittedPrompt, isGlobalRunLifecycleEvent, latestActiveActivityForTurn, nextRunPhase, reconcileQueuedPromptSnapshot, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter, type ToolCallProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordInputEstimate, recordStreamedText, restoreRunMetrics, type RunMetrics } from '../shared/run-metrics';
 import { requestContextStats } from '../shared/request-context';
 import { approvalModeDescription } from '../shared/approval-mode-copy';
@@ -1163,13 +1163,30 @@ export default function App() {
       promptRef.current?.focus();
     }
     catch (error) {
+      let queuedPromptWasConsumed = false;
+      if (queuedPrompt && session && workspace) {
+        try {
+          const latest = await request<Session | { conflict: true; recommended_source: 'project'; versions: Array<{ source: 'app' | 'project'; updated_at?: number }> }>({
+            command: 'session_resume', sessionId: session.session_id, workspace,
+          });
+          if ('conflict' in latest) {
+            setSessionConflict({ id: session.session_id, workspace, versions: latest.versions });
+          } else if (latest.session_id === session.session_id) {
+            const queued = latest.queued_prompts || [];
+            queuedPromptWasConsumed = !queued.some((item) => item.id === queuedPrompt.id);
+            setSession((current) => reconcileQueuedPromptSnapshot(current, session.session_id, queued));
+          }
+        } catch { /* Keep the visible queue when its authoritative copy cannot be read. */ }
+      }
       runStartPendingRef.current = false;
       setRunning(false); setRunStarting(false); setPhase('Run failed'); setWorkflowOutcome('failed');
       setPrompt((draft) => draft.trim() ? draft : task);
       promptRef.current?.focus();
       setMessages((current) => current.at(-1)?.role === 'user' && current.at(-1)?.content === task && !current.at(-1)?.turnId
         ? current.slice(0, -1) : current);
-      notify((error as Error).message, 'bad');
+      notify(queuedPromptWasConsumed
+        ? 'That follow-up was already consumed or removed. The saved session queue has been refreshed; review it before starting another task.'
+        : (error as Error).message, queuedPromptWasConsumed ? 'warn' : 'bad');
     }
   }
 

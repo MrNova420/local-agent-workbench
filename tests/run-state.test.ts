@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { applyToolCallProgress, canSubmitActiveRunUpdate, clearSubmittedPrompt, isGlobalRunLifecycleEvent, latestActiveActivityForTurn, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter } from '../src/shared/run-state';
-import type { ActivityRecord } from '../src/shared/protocol';
+import { applyToolCallProgress, canSubmitActiveRunUpdate, clearSubmittedPrompt, isGlobalRunLifecycleEvent, latestActiveActivityForTurn, nextRunPhase, reconcileQueuedPromptSnapshot, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter } from '../src/shared/run-state';
+import type { ActivityRecord, QueuedPrompt } from '../src/shared/protocol';
 
 describe('session event isolation', () => {
   it('rejects events from a previous or unselected session while allowing unscoped service events', () => {
@@ -27,6 +27,17 @@ describe('active-run composer actions', () => {
   it('clears only the draft that was submitted, preserving newer text typed while the request was pending', () => {
     expect(clearSubmittedPrompt('the submitted update', 'the submitted update')).toBe('');
     expect(clearSubmittedPrompt('a newer follow-up', 'the submitted update')).toBe('a newer follow-up');
+  });
+});
+
+describe('queued follow-up recovery', () => {
+  const queued = (id: string): QueuedPrompt => ({ id, prompt: `Prompt ${id}`, queued_at: 1 });
+
+  it('replaces a failed start session queue from the same captured session and ignores late updates for another session', () => {
+    const current = { session_id: 'session-a', queued_prompts: [queued('stale')] };
+    expect(reconcileQueuedPromptSnapshot(current, 'session-a', [])).toEqual({ session_id: 'session-a', queued_prompts: [] });
+    expect(reconcileQueuedPromptSnapshot(current, 'session-b', [queued('other')])).toBe(current);
+    expect(reconcileQueuedPromptSnapshot(null, 'session-a', [])).toBeNull();
   });
 });
 
