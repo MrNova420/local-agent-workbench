@@ -99,8 +99,8 @@ class AgentWorker {
       });
       child.stderr.setEncoding('utf8');
       child.stderr.on('data', (part: string) => {
-        const text = String(part).trim();
-        if (text) this.emit({ type: 'service_log', text: text.slice(0, 2000) });
+        const text = String(part);
+        if (text.trim()) this.emit({ type: 'service_log', text });
       });
       child.once('error', (error) => {
         clearTimeout(launchTimer); this.child = undefined; this.markIdle();
