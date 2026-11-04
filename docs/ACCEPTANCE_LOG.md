@@ -6,7 +6,7 @@
 
 ## 2026-11-04 Provider retry recovery (verification queued)
 
-- Engine `6da1ef6` now classifies transient provider failures by transport metadata rather than matching provider error wording. Ollama and llama.cpp preserve HTTP status and `Retry-After` values; recognized transient statuses and connection failures retry with a cancelable exponential wait and visible attempt/phase reporting, without a task deadline or retry-count cap. A partial text, reasoning, or tool-call stream is never automatically replayed. Context/allocation HTTP 500 responses are not classified as transient by default.
+- Engine `535f990` classifies transient provider failures by transport metadata rather than matching provider error wording. Ollama and llama.cpp preserve HTTP status and numeric or HTTP-date `Retry-After` values; recognized transient statuses and connection failures retry with a cancelable exponential wait and visible attempt/phase reporting, without a task deadline or retry-count cap. A partial text, reasoning, or tool-call stream is never automatically replayed. Context/allocation HTTP 500 responses and malformed delay values are not treated as transient instructions.
 - Regressions in `tests/test_provider_retry.py` cover transient retry, retry metadata, and partial-stream preservation. They remain queued; no test, package, app launch, or live model run occurred.
 
 ## 2026-11-04 stale queued-follow-up recovery source fix (verification queued)
