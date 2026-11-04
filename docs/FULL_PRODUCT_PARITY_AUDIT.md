@@ -1,7 +1,7 @@
 +# Full Product Parity Audit
 
 **Reviewed:** 2026-11-04  
-**Repositories:** Electron Workbench (`workbench/core-chat-activity`); paired engine `ed39ccdc11d71dfb566038174546552c0232b69c` (`workbench/approval-tool-continuation`)
+**Repositories:** Electron Workbench `2b42d8e` (`workbench/core-chat-activity`); paired engine `ed39ccdc11d71dfb566038174546552c0232b69c` (`workbench/approval-tool-continuation`)
 **Purpose:** compare the whole user-facing product and agent workflow with OpenCode and Codex, then keep implementation priorities tied to observable source behavior.
 
 This is a product capability comparison, not source-level equivalence. OpenCode's public documentation is the reference for shipped V1 behavior. OpenCode V2 documentation is development reference and is not treated as shipped V1. Codex CLI is open source; Codex desktop behavior is documented selectively, so this audit does not infer private implementation details from the public Agents API.
