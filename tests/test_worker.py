@@ -1389,7 +1389,7 @@ def test_steering_dispatch_does_not_block_cancel_from_sidecar_input(service, mon
     monkeypatch.setattr(service, "dispatch", dispatch)
     monkeypatch.setattr(worker, "AgentService", lambda: service)
     monkeypatch.setattr(worker.sys, "stdin", io.StringIO(
-        '{"command":"session_steer"}\n{"command":"run_cancel"}\n'))
+        '{"command":"session_steer"}\n{"command":"run_cancel","sessionId":"session-a","turnId":"turn-a"}\n'))
     output = io.StringIO()
     monkeypatch.setattr(worker.sys, "stdout", output)
 
@@ -1705,8 +1705,10 @@ def test_stop_after_operation_command_marks_engine(service):
             self.requested = True
 
     engine = Engine()
-    service.active = {"engine": engine}
-    assert service.handle("run_stop_after_operation", {}) == {"requested": True}
+    service.active = {"engine": engine, "session": {"session_id": "session-stop"}, "turn_id": "turn-stop"}
+    assert service.handle("run_stop_after_operation", {"sessionId": "session-stop", "turnId": "new-turn"}) == {"requested": False, "stale": True}
+    assert engine.requested is False
+    assert service.handle("run_stop_after_operation", {"sessionId": "session-stop", "turnId": "turn-stop"}) == {"requested": True, "stale": False}
     assert engine.requested is True
 
 
@@ -2854,8 +2856,11 @@ def test_uncertain_mcp_retry_requires_one_action_review_even_with_session_approv
 
 
 def test_run_cancel_reports_whether_a_run_was_active(service):
-    assert service.handle("run_cancel", {}) == {"cancelled": False}
-    controller = {"cancel": threading.Event(), "engine": None, "pending": {}}
+    assert service.handle("run_cancel", {"sessionId": "none", "turnId": "none"}) == {"cancelled": False, "stale": True}
+    controller = {"cancel": threading.Event(), "engine": None, "pending": {},
+                  "session": {"session_id": "session-cancel"}, "turn_id": "turn-cancel"}
     service.active = controller
-    assert service.handle("run_cancel", {}) == {"cancelled": True}
+    assert service.handle("run_cancel", {"sessionId": "session-cancel", "turnId": "old-turn"}) == {"cancelled": False, "stale": True}
+    assert not controller["cancel"].is_set()
+    assert service.handle("run_cancel", {"sessionId": "session-cancel", "turnId": "turn-cancel"}) == {"cancelled": True, "stale": False}
     assert controller["cancel"].is_set()

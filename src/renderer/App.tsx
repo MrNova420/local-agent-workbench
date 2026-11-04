@@ -209,6 +209,7 @@ export default function App() {
   const [recoverySession, setRecoverySession] = useState<Session | null>(null);
   const [cancelChoiceOpen, setCancelChoiceOpen] = useState(false);
   const [cancelChoicePending, setCancelChoicePending] = useState<'cancel' | 'finish' | null>(null);
+  const [cancelChoiceTarget, setCancelChoiceTarget] = useState<{ sessionId: string; turnId: string } | null>(null);
   const [closeChoiceOpen, setCloseChoiceOpen] = useState(false);
   const [closeChoicePending, setCloseChoicePending] = useState<'keep' | 'hide' | 'cancel-close' | null>(null);
   const [trace, setTrace] = useState<TraceRow[]>([]);
@@ -429,6 +430,7 @@ export default function App() {
       }
       const loaded = response as Session;
       setSessionConflict(null);
+      activeTurnIdRef.current = typeof loaded.run_state?.turn_id === 'string' ? loaded.run_state.turn_id : '';
       liveSnapshotCursorRef.current = { sessionId: loaded.session_id, activityRevision: 0, textRevision: 0, busy: false };
       if (loaded.active_in_process) {
         setRunning(true);
@@ -1309,22 +1311,32 @@ export default function App() {
     }
   }
 
-  async function cancelRun() { setCancelChoiceOpen(true); }
+  async function cancelRun() {
+    if (!session?.session_id || !activeTurnIdRef.current) {
+      notify('The active run identity is still loading. Wait for its turn to attach before choosing a stop action.', 'warn');
+      return;
+    }
+    setCancelChoiceTarget({ sessionId: session.session_id, turnId: activeTurnIdRef.current });
+    setCancelChoiceOpen(true);
+  }
 
   async function chooseCancelAction(action: 'continue' | 'cancel' | 'finish') {
-    if (action === 'continue') { setCancelChoiceOpen(false); return; }
+    if (action === 'continue') { setCancelChoiceOpen(false); setCancelChoiceTarget(null); return; }
+    const target = cancelChoiceTarget;
+    if (!target) { setCancelChoiceOpen(false); return; }
     setCancelChoicePending(action);
     try {
       if (action === 'cancel') {
-        const result = await request<{ cancelled: boolean }>({ command: 'run_cancel' });
+        const result = await request<{ cancelled: boolean; stale?: boolean }>({ command: 'run_cancel', ...target });
         if (result.cancelled) setPhase('Cancelling request');
-        else notify('The run had already ended; there was nothing left to cancel.', 'warn');
+        else notify(result.stale ? 'That run is no longer active; any newer task was left untouched.' : 'The run had already ended; there was nothing left to cancel.', 'warn');
       } else {
-        const result = await request<{ requested: boolean }>({ command: 'run_stop_after_operation' });
+        const result = await request<{ requested: boolean; stale?: boolean }>({ command: 'run_stop_after_operation', ...target });
         if (result.requested) setPhase('Finishing active operation');
-        else notify('The run had already ended; there is no active operation to finish.', 'warn');
+        else notify(result.stale ? 'That run is no longer active; any newer task was left untouched.' : 'The run had already ended; there is no active operation to finish.', 'warn');
       }
       setCancelChoiceOpen(false);
+      setCancelChoiceTarget(null);
     } catch (error) { notify(`Could not update the run: ${(error as Error).message}`, 'bad'); }
     finally { setCancelChoicePending(null); }
   }

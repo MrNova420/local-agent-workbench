@@ -28,12 +28,14 @@ class AgentWorker {
   private listeners = new Set<(event: WorkerEvent) => void>();
   private starting?: Promise<void>;
   private runActive = false;
+  private activeRun?: { sessionId: string; turnId: string };
   private idleWaiters = new Set<() => void>();
 
   onEvent(listener: (event: WorkerEvent) => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   private emit(event: WorkerEvent) { for (const listener of this.listeners) listener(event); }
   isRunActive() { return this.runActive; }
-  private markIdle() { this.runActive = false; for (const resolve of this.idleWaiters) resolve(); this.idleWaiters.clear(); }
+  private markIdle() { this.runActive = false; this.activeRun = undefined; for (const resolve of this.idleWaiters) resolve(); this.idleWaiters.clear(); }
+  currentRun() { return this.activeRun ? { ...this.activeRun } : undefined; }
   waitForRunIdle() { return this.runActive ? new Promise<void>((resolve) => this.idleWaiters.add(resolve)) : Promise.resolve(); }
 
   start() {
@@ -92,6 +94,10 @@ class AgentWorker {
             }
           } else if (message.type === 'event') {
             const agentEvent = message.event as WorkerEvent;
+            if (agentEvent.type === 'run_started'
+              && typeof agentEvent.sessionId === 'string' && typeof agentEvent.turnId === 'string') {
+              this.activeRun = { sessionId: agentEvent.sessionId, turnId: agentEvent.turnId };
+            }
             if (agentEvent.type === 'run_idle') this.markIdle();
             this.emit(agentEvent);
           }
@@ -335,7 +341,9 @@ app.whenReady().then(async () => {
     }
     try {
       if (service.isRunActive()) {
-        const result = await service.request<{ cancelled: boolean }>({ command: 'run_cancel' });
+        const target = service.currentRun();
+        if (!target) throw new Error('The active run identity is still loading. Wait for it to attach before closing and cancelling.');
+        const result = await service.request<{ cancelled: boolean }>({ command: 'run_cancel', ...target });
         if (!result.cancelled && service.isRunActive()) throw new Error('The agent sidecar did not accept cancellation while its run is still active.');
         await service.waitForRunIdle();
       }

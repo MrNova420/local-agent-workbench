@@ -1623,16 +1623,26 @@ class AgentService:
                     self.ollama_preload_lock.release()
             return start_result if isinstance(start_result, dict) else {"started": True}
         if command == "run_cancel":
-            return {"cancelled": self.cancel()}
+            session_id, turn_id = message.get("sessionId"), message.get("turnId")
+            if not isinstance(session_id, str) or not session_id or not isinstance(turn_id, str) or not turn_id:
+                return {"cancelled": False, "stale": True}
+            cancelled = self.cancel(session_id, turn_id)
+            return {"cancelled": cancelled, "stale": not cancelled}
         if command == "run_stop_after_operation":
+            session_id, turn_id = message.get("sessionId"), message.get("turnId")
+            if not isinstance(session_id, str) or not session_id or not isinstance(turn_id, str) or not turn_id:
+                return {"requested": False, "stale": True}
             with self.active_lock:
                 controller = self.active
-                if controller:
-                    controller["stop_after_operation"] = True
-                    engine = controller.get("engine")
-                    if engine:
-                        engine.finish_after_operation()
-            return {"requested": controller is not None}
+                state = controller.get("session") if isinstance(controller, dict) else None
+                if (not isinstance(state, dict) or state.get("session_id") != session_id
+                        or controller.get("turn_id") != turn_id):
+                    return {"requested": False, "stale": True}
+                controller["stop_after_operation"] = True
+                engine = controller.get("engine")
+            if engine:
+                engine.finish_after_operation()
+            return {"requested": True, "stale": False}
         if command == "approval_reply":
             approved = message.get("approved")
             if not isinstance(approved, bool):
@@ -2520,12 +2530,18 @@ class AgentService:
         })
         return "The user stopped the run while this question was waiting." if cancelled else answer
 
-    def cancel(self) -> bool:
+    def cancel(self, session_id: str | None = None, turn_id: str | None = None) -> bool:
         with self.active_lock:
             controller = self.active
+            state = controller.get("session") if isinstance(controller, dict) else None
+            if session_id is not None or turn_id is not None:
+                if (not isinstance(state, dict) or state.get("session_id") != session_id
+                        or controller.get("turn_id") != turn_id):
+                    return False
+            if controller:
+                controller["cancel"].set()
         if not controller:
             return False
-        controller["cancel"].set()
         engine = controller.get("engine")
         if engine:
             engine.cancel()
