@@ -28,6 +28,13 @@ export function appendTranscriptSegment(previous: string, chunk: string, separat
   return previous + separator + chunk;
 }
 
+/** Seal the previous provider request's assistant row before a new request starts. */
+export function finalizeStreamingAssistantMessage<T extends LiveTranscriptMessage>(messages: T[]): T[] {
+  const last = messages.at(-1);
+  if (!last || last.role !== 'assistant' || !last.streaming) return messages;
+  return [...messages.slice(0, -1), { ...last, streaming: false } as T];
+}
+
 export function restoreTranscriptMessages(rows: PersistedTranscriptRow[], turns: PersistedTranscriptTurn[] = []): TranscriptMessage[] {
   const savedTurns = turns.filter((turn) => turn.transcript_saved !== false);
   let userTurnIndex = 0;

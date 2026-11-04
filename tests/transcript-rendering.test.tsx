@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { Markdown } from '../src/renderer/Markdown';
-import { appendTranscriptSegment, reconcileLiveAssistantMessage, restoreTranscriptMessages } from '../src/shared/transcript';
+import { appendTranscriptSegment, finalizeStreamingAssistantMessage, reconcileLiveAssistantMessage, restoreTranscriptMessages } from '../src/shared/transcript';
 
 describe('resumed transcript rendering', () => {
   it('retains the complete long reasoning buffer when revisiting a saved turn', () => {
@@ -27,6 +27,20 @@ describe('resumed transcript rendering', () => {
     expect(reconciled).toHaveLength(2);
     expect(reconciled[1]).toMatchObject({ content: 'complete answer', thinking: 'planning', turnId: 'turn-1', streaming: true });
     expect(rows[1].content).toBe('partial');
+  });
+
+  it('preserves a completed reasoning segment when a later provider request starts in the same turn', () => {
+    const firstRequest = [{
+      role: 'assistant' as const, content: '', thinking: 'First request reasoning stays visible.', turnId: 'turn-1', streaming: true,
+    }];
+    const finalized = finalizeStreamingAssistantMessage(firstRequest);
+    const secondRequest = reconcileLiveAssistantMessage(finalized, 'turn-1', {
+      content: 'The implementation is ready.', thinking: 'Second request reasoning.',
+    });
+
+    expect(secondRequest).toHaveLength(2);
+    expect(secondRequest[0]).toMatchObject({ thinking: 'First request reasoning stays visible.', streaming: false });
+    expect(secondRequest[1]).toMatchObject({ thinking: 'Second request reasoning.', content: 'The implementation is ready.', streaming: true });
   });
 
   it('separates assistant response segments that resume after a tool call', () => {

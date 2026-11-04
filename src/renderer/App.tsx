@@ -8,7 +8,7 @@ import { approvalModeDescription } from '../shared/approval-mode-copy';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, isReasoningBudgetValid, MAX_REASONING_BUDGET_TOKENS, normalizeReasoningChoice, readReasoningBudgetPreference, readRunTokenPreferences } from '../shared/model-controls';
 import { featuredInstalledModels } from '../shared/model-recommendations';
 import { normalizeGpuStats } from '../shared/resource-metrics';
-import { appendTranscriptSegment, reconcileLiveAssistantMessage, restoreTranscriptMessages } from '../shared/transcript';
+import { appendTranscriptSegment, finalizeStreamingAssistantMessage, reconcileLiveAssistantMessage, restoreTranscriptMessages } from '../shared/transcript';
 import { LocalModelOrbit } from './ModelOrbit';
 import { ActivityFeed } from './ActivityFeed';
 import { applyActivityEvent, mergeActivitySnapshot, shouldRefreshWorkspaceForActivity } from '../shared/activity';
@@ -757,6 +757,7 @@ export default function App() {
       if (event.type === 'ollama_import_cancelled') notify('Safetensors import cancelled.', 'warn');
       if (event.type === 'phase') {
         setPhase((current) => nextRunPhase(current, event));
+        if (event.phase === 'waiting') setMessages((current) => finalizeStreamingAssistantMessage(current));
         if (event.phase === 'reasoning' || event.phase === 'generating') setRunMetrics((current) => {
           const measured = recordFirstToken(current, event.elapsed);
           return measured.isGenerating ? measured : beginGeneration(measured);
