@@ -1875,6 +1875,7 @@ function ModelLibraryModal({ model, models, modelLabels, context, reasoning, dow
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<HubModel[]>([]);
   const [nextSearchCursor, setNextSearchCursor] = useState<string | null>(null);
+  const [searchedQuery, setSearchedQuery] = useState('');
   const [repo, setRepo] = useState<HubModel | null>(null);
   const [files, setFiles] = useState<HubFile[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
@@ -1903,11 +1904,13 @@ function ModelLibraryModal({ model, models, modelLabels, context, reasoning, dow
   }, [notify]);
 
   async function searchHub(cursor?: string) {
-    if (!query.trim()) return;
-    setBusy(true); setOperation('search'); if (!cursor) { setResults([]); setNextSearchCursor(null); setRepo(null); setFiles([]); } setDownloadText('Searching the Hub…');
+    const searchTerm = query.trim();
+    if (!searchTerm) return;
+    const continuation = cursor && searchTerm === searchedQuery ? cursor : undefined;
+    setBusy(true); setOperation('search'); if (!continuation) { setResults([]); setNextSearchCursor(null); setRepo(null); setFiles([]); setSearchedQuery(searchTerm); } setDownloadText('Searching the Hub…');
     try {
-      const page = await window.agent.request<HubSearchPage>({ command: 'hf_search', query, ...(cursor ? { cursor } : {}) });
-      setResults((current) => cursor ? [...current, ...page.models.filter((row) => !current.some((known) => known.repo === row.repo))] : page.models);
+      const page = await window.agent.request<HubSearchPage>({ command: 'hf_search', query: searchTerm, ...(continuation ? { cursor: continuation } : {}) });
+      setResults((current) => continuation ? [...current, ...page.models.filter((row) => !current.some((known) => known.repo === row.repo))] : page.models);
       setNextSearchCursor(page.next_cursor); setDownloadText('');
     }
     catch (error) { notify(`Hugging Face search failed: ${(error as Error).message}`, 'bad'); setDownloadText('Search failed.'); }
