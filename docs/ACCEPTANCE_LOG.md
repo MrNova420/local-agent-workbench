@@ -1,3 +1,8 @@
+## 2026-11-04 structured question replies bound to active turn (verification queued)
+
+- App `65d966a` adds session and turn identity to the question dialog state and `question_reply` protocol. The sidecar validates both against its active controller before resolving the pending question; stale or missing identity returns an unanswered/stale result.
+- Added sidecar regressions for wrong-session, wrong-turn, and correct-turn answers. Tests, typecheck, package, and visible question-flow acceptance remain queued. No app or model was launched.
+
 ## 2026-11-04 stop decisions bound to active turn (verification queued)
 
 - App `e515fde` / engine `255af48f9cc4f93c6623454261c2f3d419f7f427` carries the active session and turn identity with Cancel and Finish After Operation choices. The renderer captures identity when opening the required decision dialog; the main-process close-and-cancel path obtains identity from the `run_started` event; the sidecar matches both IDs under its active-run lock before signaling cancellation or requesting a stop at the operation boundary.
