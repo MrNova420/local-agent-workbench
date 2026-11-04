@@ -1,3 +1,8 @@
+## 2026-11-04 Git inspection responsiveness source pairing (verification queued)
+
+- App source `5800a8f` now pins engine `987d1c7ea49a5c0c35c3186c3eca93ddf93321be`. Git status/diff/log wait without an implicit 10-second operation deadline, preserve complete output, and stop on the app's cancellation event. Git history now supports caller-selected offset paging without a fixed 100-entry maximum.
+- Added delayed-process, cancellation/partial-output, 2,500-commit page, and Windows console-suppression regressions. These have not been run; no typecheck, package, visible workflow, or model request has been performed against this pair.
+
 ## 2026-11-04 context-checkpoint recovery hardening (verification queued)
 
 - Prompt-manifest journal replay now restores `context_checkpoint` due/armed/acknowledged state, thresholds, measured request ratio, estimated tokens, and budget. A structured plan event restores the acknowledged verified findings, completed/pending work, and next action. When a request crosses the threshold, the sidecar forces an immediate mirrored snapshot as well as its durable event record.
