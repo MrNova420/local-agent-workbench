@@ -255,3 +255,9 @@ Approved commands may change project files without producing structured `write_f
 - Engine commit `8f2afe62671af4235b2150ab4f80a9c2af8828a7` contains isolation enforcement and regression coverage. Focused engine permission/tool tests: 50 passed. Sidecar worker tests: 65 passed, including a Copy-mode source-identity regression. Renderer typecheck passed. Broader suites, packaged approval UI, and visible workspace-switch acceptance remain queued.
 
 - App source removes the arbitrary 500-file ceiling on explicitly selected Hugging Face downloads; path validation, background execution, progress, and per-file cancellation remain. Its regression is queued with the grouped verification pass.
+
+## 2026-11-04 agent-loop parity update
+
+OpenCode V1's source separates the outer request loop from stream processing and returns explicit continue/stop/compact control outcomes. Its V2 development reference goes further with session-owned durable admission and replay. Workbench currently has those responsibilities divided between `AgentEngine.run`, the sidecar run controller, session snapshots, and append-only activity journals. Do not replace this working local architecture wholesale: continue toward one authoritative per-session run coordinator that serializes input admission, tracks request/tool/approval states, reconciles uncertain effects, and reattaches the UI from replayable state. This remains a parity design target, not completed work.
+
+Latest source milestone: app `71f50a7` / engine `255af48`. Pending tool arguments now have matching Ollama and llama.cpp preview events and recoverable UI activity. Full test, typecheck, package, visible, and live-model evidence remains queued. Priority remains core loop reliability and truthful operation flow; orbit, analytics, themes, and other polish stay in backlog.
