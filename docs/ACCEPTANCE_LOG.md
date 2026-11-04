@@ -4,6 +4,11 @@
 - Engine `ed39ccd` now asks for a fresh one-action decision before the fourth identical tool call when the prior three completed with the same result. Auto approval does not bypass this review. Declining blocks only that exact action until newer same-task user guidance; other tools can proceed. Identical calls in one batch are serialized. This adds no total retry, task, context, output, or runtime cap.
 - Engine regressions are authored but unrun. App commit `2b42d8e` wires the renderer/sidecar review reason and no-mirror fail-closed path; these changes are not packaged or regression-tested. No model was started and no inference setting changed.
 
+## 2026-11-04 Provider retry recovery (verification queued)
+
+- Engine `6da1ef6` now classifies transient provider failures by transport metadata rather than matching provider error wording. Ollama and llama.cpp preserve HTTP status and `Retry-After` values; recognized transient statuses and connection failures retry with a cancelable exponential wait and visible attempt/phase reporting, without a task deadline or retry-count cap. A partial text, reasoning, or tool-call stream is never automatically replayed. Context/allocation HTTP 500 responses are not classified as transient by default.
+- Regressions in `tests/test_provider_retry.py` cover transient retry, retry metadata, and partial-stream preservation. They remain queued; no test, package, app launch, or live model run occurred.
+
 ## 2026-11-04 stale queued-follow-up recovery source fix (verification queued)
 
 - App source `b6cfeda` pins engine `0da5a89b8c2f8f477928deada9e3e4f280a663d4`. If a previously displayed queue row disappears between run-start preflight and consumption, the sidecar now returns a structured unavailable result and refreshed queue snapshot; the renderer puts the unsent prompt back in the composer. This avoids turning stale queue identity into an IPC failure and keeps the user's text recoverable.
