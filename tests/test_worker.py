@@ -1514,6 +1514,17 @@ def test_model_info_exposes_exact_ollama_reasoning_values(service):
     assert result["tool_support"] == "supported"
 
 
+def test_model_info_exposes_boolean_reasoning_toggle_when_ollama_reports_capability_only(service):
+    service.runtime.info = {
+        "model_info": {"test.context_length": 262144},
+        "capabilities": ["completion", "tools", "thinking"],
+    }
+
+    result = service.handle("model_info", {"model": "model-a:latest"})
+
+    assert result["reasoning"] == {"support": "toggle", "default": None, "values": [False, True]}
+
+
 def test_model_info_reports_known_missing_tool_capability(service):
     service.runtime.info = {"model_info": {}, "capabilities": ["completion"]}
     result = service.handle("model_info", {"model": "model-a:latest"})

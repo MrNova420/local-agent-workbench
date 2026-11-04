@@ -1143,14 +1143,14 @@ class AgentService:
                 (value for key, value in details.items() if key.endswith(".context_length") and isinstance(value, int)),
                 default=None,
             )
+            raw_capabilities = info.get("capabilities")
+            capabilities = sorted({value for value in raw_capabilities if isinstance(value, str)}) if isinstance(raw_capabilities, list) else []
             raw_thinking = info.get("thinking")
-            values = raw_thinking.get("values", []) if isinstance(raw_thinking, dict) else []
+            values = raw_thinking.get("values", []) if isinstance(raw_thinking, dict) else ([False, True] if "thinking" in capabilities else [])
             values = [value for value in values if isinstance(value, (str, bool))] if isinstance(values, list) else []
             default = raw_thinking.get("default") if isinstance(raw_thinking, dict) else None
             if not isinstance(default, (str, bool)) or default not in values:
                 default = None
-            raw_capabilities = info.get("capabilities")
-            capabilities = sorted({value for value in raw_capabilities if isinstance(value, str)}) if isinstance(raw_capabilities, list) else []
             tool_support = "supported" if "tools" in capabilities else "unsupported" if isinstance(raw_capabilities, list) else "unknown"
             support = "levels" if any(isinstance(value, str) for value in values) else "toggle" if True in values and False in values else "none" if values == [False] else "unknown"
             return {
