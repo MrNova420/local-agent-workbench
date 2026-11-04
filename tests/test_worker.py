@@ -52,6 +52,26 @@ def test_dynamic_models_and_full_advertised_context(service):
     }
 
 
+def test_hugging_face_download_accepts_user_selected_batches_over_500(service, tmp_path):
+    downloaded = []
+    events = []
+
+    def download(_repo, _revision, filename, _cancel, _emit):
+        downloaded.append(filename)
+        return tmp_path / filename
+
+    service.hf = SimpleNamespace(download=download)
+    service.emit = events.append
+    files = [f"part-{index}.bin" for index in range(501)]
+
+    result = service._start_hf_download({"repo": "owner/model", "revision": "main", "files": files})
+    service.hf_download_thread.join(timeout=5)
+
+    assert result == {"started": True, "repo": "owner/model", "revision": "main", "files": 501}
+    assert downloaded == files
+    assert events[-1]["type"] == "hf_download_job_complete"
+
+
 def test_workspace_file_pages_return_every_project_file_without_a_hidden_cap(service, tmp_path):
     project = tmp_path / "large-project"
     project.mkdir()

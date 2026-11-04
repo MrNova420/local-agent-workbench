@@ -1614,8 +1614,8 @@ class AgentService:
             raise RuntimeError("A Hugging Face download is already running.")
         repo, revision = str(message.get("repo", "")), str(message.get("revision", ""))
         files = message.get("files")
-        if not isinstance(files, list) or not files or len(files) > 500 or any(not isinstance(name, str) for name in files):
-            raise ValueError("Select between 1 and 500 repository files to download.")
+        if not isinstance(files, list) or not files or any(not isinstance(name, str) for name in files):
+            raise ValueError("Select one or more repository files to download.")
         self.hf_download_cancel = threading.Event()
 
         def work() -> None:

@@ -325,3 +325,7 @@ Large tool outputs are now context-budgeted for inference while preserving the f
 - Before project writes, commands, or MCP dispatch, the host requires a saved `update_plan.progress_checkpoint` with verified findings, completed work, pending work, and a next action. Reads and plan refinement continue. The same-task flow resumes after the handoff.
 - The request manifest is saved in activity, the chat/worksheet shows the threshold notice, and checkpoint details are displayed with Plan activity. Engine, sidecar persistence, and renderer regression tests are authored; execution is queued for the grouped verification pass. Packaged/live acceptance remains open.
 - Paired engine source commit: `042ffd5a7becabf27a0aaba6eff0079d3da1f4d1`; app `core-revision.txt` is synchronized to that exact revision.
+
+### 2026-11-04 selected Hugging Face batch
+
+The arbitrary 500-file download selection ceiling has been removed. The worker remains cancellable between files and validates each requested path through the Hugging Face catalog. A mocked batch-over-500 regression is authored and queued; run it with the grouped suites. No live download was performed.

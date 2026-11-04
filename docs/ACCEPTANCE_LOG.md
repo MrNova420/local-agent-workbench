@@ -1382,3 +1382,7 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 - Activity cards now restore a user's expanded/collapsed choice by session and operation ID across chat/sidebar rendering and app reopen. Inline mode remains expanded by default only when no user choice exists. Large arguments, stdout/stderr, and results also restore the user's progressive visible-character position per operation/output stream. Activity payloads and complete results remain in the session; only presentation preferences are stored in renderer-local settings.
 - Added regressions for session/operation/stream isolation, progressive output positions, and unavailable/corrupt UI preference storage. They are authored and queued; no renderer test, typecheck, package, or visible reopen check was run.
 
+
+## 2026-11-04 unrestricted selected Hugging Face download batches
+
+- Removed the backend's arbitrary 500-file selection ceiling. The downloader still requires a non-empty list of strings, runs in its existing background worker, validates repository and file paths through the catalog, and checks cancellation between files. Added a 501-file mocked worker regression; it is authored but intentionally queued for the grouped verification pass. No model settings, app package, or live download were changed.

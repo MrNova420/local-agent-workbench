@@ -607,3 +607,7 @@ The engine now returns authoritative plan-change state, next open item, and acce
 - Paired engine commit `042ffd5a7becabf27a0aaba6eff0079d3da1f4d1` now requests a structured saved progress handoff at 70% of the measured request input budget, with a 60% reset band to avoid repeated prompts during the same compaction cycle. The app pin is synchronized. It does not change inference settings or interrupt streaming.
 - Built-in writes/commands and MCP dispatch are host-gated until the handoff is saved. Reads, project inspection, and plan updates remain available. The checkpoint appears in durable task state and Plan activity; request pressure is exposed in saved request-manifest activity.
 - Regression tests and packaging/visible acceptance are queued and have not yet been run for this change. Do not treat source implementation as runtime or release verification.
+
+## 2026-11-04 Hugging Face batch selection source status
+
+- Removed the arbitrary 500-file cap from explicit Hugging Face file downloads. The existing background worker retains non-empty/string validation, catalog path validation, per-file cancellation, and per-file progress. A mocked 501-file regression is authored but not run; it belongs to the grouped verification pass. No live download or model setting change was made.
