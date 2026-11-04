@@ -2,7 +2,7 @@
 
 - A source audit found that Redirect now and Queue next cleared the composer after their async sidecar request completed, even if the user had typed a newer follow-up while that request was pending. The UI now clears only the exact draft submitted and retains any newer text for the next action.
 - Red/green: the new regression failed before implementation because the helper was absent; focused `tests/run-state.test.ts` passes **28/28**. `npm run typecheck` and `git diff --check` pass. Full suites, packaged chat, and live Flint acceptance were not run.
-- App `e0eb671` remains paired with engine `038bcf7c4b0dc2306fc486d318eb747225cd4cbd`. Inference settings and model state were not changed.
+- App `e771db0` remains paired with engine `038bcf7c4b0dc2306fc486d318eb747225cd4cbd`. Inference settings and model state were not changed.
 
 ## 2026-11-03 active-run startup composer race
 
