@@ -1156,9 +1156,9 @@ export default function App() {
     setTrace([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setRunning(true); setRunStarting(true); setPhase('Connecting to local runtime');
     setStartedAt(Date.now()); setElapsed(0); setRunMetrics(emptyRunMetrics()); setFirstOperationSeconds(null); setFirstFileWriteSeconds(null);
     try {
-      const startResult = await request<{ started: boolean; queuedPromptAlreadyStarted?: boolean; queuedPrompts?: QueuedPrompt[] }>({ command: 'run_start', options: run });
+      const startResult = await request<{ started: boolean; queuedPromptAlreadyStarted?: boolean; queuedPromptUnavailable?: boolean; queuedPrompts?: QueuedPrompt[] }>({ command: 'run_start', options: run });
       runStartPendingRef.current = false;
-      if (startResult.queuedPromptAlreadyStarted) {
+      if (startResult.queuedPromptAlreadyStarted || startResult.queuedPromptUnavailable) {
         setRunning(false); setRunStarting(false); setPhase('Ready');
         setMessages((current) => current.at(-1)?.role === 'user' && current.at(-1)?.content === task && !current.at(-1)?.turnId
           ? current.slice(0, -1) : current);
@@ -1167,7 +1167,9 @@ export default function App() {
             ? reconcileQueuedPromptSnapshot(current, session.session_id, startResult.queuedPrompts!) : current);
         }
         await loadSession(session.session_id, workspace);
-        notify('This queued follow-up was already started. No duplicate task was launched; the saved session has been refreshed.', 'warn');
+        notify(startResult.queuedPromptAlreadyStarted
+          ? 'This queued follow-up was already started. No duplicate task was launched; the saved session has been refreshed.'
+          : 'This queued follow-up was removed before it started. No task was launched; the saved queue has been refreshed.', 'warn');
         return;
       }
       setRunStarting(false);

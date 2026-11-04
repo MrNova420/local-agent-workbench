@@ -1763,11 +1763,12 @@ class AgentService:
             if not any(row["id"] == queued_prompt_id for row in queued_rows):
                 prior_turn = next((row for row in reversed(state.get("turns", []))
                                    if isinstance(row, dict) and row.get("queued_prompt_id") == queued_prompt_id), None)
+                self.emit({"type": "session_queue_update", "sessionId": state["session_id"],
+                           "workspace": str(source), "queuedPrompts": copy.deepcopy(queued_rows)})
                 if prior_turn is not None:
-                    self.emit({"type": "session_queue_update", "sessionId": state["session_id"],
-                               "workspace": str(source), "queuedPrompts": copy.deepcopy(queued_rows)})
                     return {"started": False, "queuedPromptAlreadyStarted": True,
                             "turnId": prior_turn.get("turn_id"), "queuedPrompts": queued_rows}
+                return {"started": False, "queuedPromptUnavailable": True, "queuedPrompts": queued_rows}
             consume_queued_prompt(state, queued_prompt_id, prompt)
         state.update(
             model=model, model_id=model, provider_id=provider.provider_id, provider=provider.provider_id,
