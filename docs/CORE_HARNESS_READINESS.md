@@ -630,6 +630,12 @@ The engine now returns authoritative plan-change state, next open item, and acce
 - Built-in writes/commands and MCP dispatch are host-gated until the handoff is saved. Reads, project inspection, and plan updates remain available. The checkpoint appears in durable task state and Plan activity; request pressure is exposed in saved request-manifest activity.
 - Regression tests and packaging/visible acceptance are queued and have not yet been run for this change. Do not treat source implementation as runtime or release verification.
 
+### 2026-11-04 checkpoint continuation integration
+
+- Engine commit `1c81638cfbf24336e8664ef287f709af67f5f556` now asks for a saved continuity checkpoint before another extended response or project operation once the measured input budget crosses the existing adaptive threshold. A checkpoint-only `update_plan` call preserves the current plan and task mode. If the same response repeats without saving the handoff, the run ends as recoverable `checkpoint_missing`; the transcript, plan, and completed operations remain available, and no operation is replayed.
+- Focused engine verification: `python -m pytest tests/test_prompt_manifest.py -q` — **9 passed**. Renderer workflow outcome tests: **8 passed**; TypeScript typecheck passed. The last full renderer run before this change passed **135 tests**. Full paired engine/sidecar suites, packaging, and visible/Flint acceptance remain pending for the grouped acceptance pass.
+- This improves checkpoint continuity; it does not persist private hidden reasoning the model did not emit, guarantee that a local model will obey a checkpoint request, or prove long-run task productivity. No model or inference setting was changed.
+
 ## 2026-11-04 Hugging Face batch selection source status
 
 - Removed the arbitrary 500-file cap from explicit Hugging Face file downloads. The existing background worker retains non-empty/string validation, catalog path validation, per-file cancellation, and per-file progress. A mocked 501-file regression is authored but not run; it belongs to the grouped verification pass. No live download or model setting change was made.

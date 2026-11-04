@@ -6,6 +6,8 @@ export function terminalWorkflowSummary(outcome: unknown): string | null {
       return 'The provider repeatedly ended with the same partial response at the selected output-token limit. The setting was preserved; review the saved response and continue from the checkpoint.';
     case 'implementation_incomplete':
       return 'The run ended after the same response repeated without new observable project progress. Its plan and checkpoint are saved so you can review them and continue safely.';
+    case 'checkpoint_missing':
+      return 'The model did not save a requested continuity checkpoint at the selected context pressure. The transcript, current plan, and completed operations are preserved; continue from the saved state without replaying completed actions.';
     case 'blocked':
       return 'The run stopped with a blocker. A project action may have been denied, access may be read-only, or an external operation may have an uncertain result. Review the saved activity and inspect any uncertain effect before retrying; the Workbench did not replay it automatically.';
     case 'interrupted':
@@ -23,7 +25,7 @@ export function terminalWorkflowSummary(outcome: unknown): string | null {
 
 export function canContinueFromOutcome(outcome: unknown): boolean {
   return typeof outcome === 'string'
-    && ['blocked', 'response_missing', 'response_truncated', 'implementation_incomplete', 'failed', 'interrupted', 'cancelled', 'stopped'].includes(outcome);
+    && ['blocked', 'response_missing', 'response_truncated', 'implementation_incomplete', 'checkpoint_missing', 'failed', 'interrupted', 'cancelled', 'stopped'].includes(outcome);
 }
 
 export function buildSafeContinuationPrompt(goal?: string): string {

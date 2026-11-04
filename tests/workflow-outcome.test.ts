@@ -19,6 +19,12 @@ describe('terminal workflow summaries', () => {
     expect(terminalWorkflowSummary('implementation_incomplete')).toContain('checkpoint are saved');
   });
 
+  it('offers recovery when context pressure checkpointing is missed', () => {
+    expect(terminalWorkflowSummary('checkpoint_missing')).toContain('continuity checkpoint');
+    expect(terminalWorkflowSummary('checkpoint_missing')).toContain('completed operations are preserved');
+    expect(canContinueFromOutcome('checkpoint_missing')).toBe(true);
+  });
+
   it('explains blocked runs and preserves the access or denial boundary', () => {
     expect(terminalWorkflowSummary('blocked')).toContain('denied');
     expect(terminalWorkflowSummary('blocked')).toContain('uncertain result');
