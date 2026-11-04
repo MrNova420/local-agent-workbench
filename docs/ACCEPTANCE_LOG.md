@@ -1,3 +1,8 @@
+## 2026-11-04 duplicate question reply race (verification queued)
+
+- App `258e064` makes pending question answers single-acceptance: after the first reply marks the pending result complete, a duplicate returns `answered: false` and cannot replace the saved answer.
+- Added a same-turn duplicate-answer regression. It remains unrun with the grouped verification pass; no app/model run occurred.
+
 ## 2026-11-04 structured question replies bound to active turn (verification queued)
 
 - App `65d966a` adds session and turn identity to the question dialog state and `question_reply` protocol. The sidecar validates both against its active controller before resolving the pending question; stale or missing identity returns an unanswered/stale result.
@@ -1466,3 +1471,4 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 
 - App `93326f0` persists a stable client request ID and settings fingerprint with ordinary task turns. Replaying the same exact submission returns the existing turn and reports whether it is still active; changing the prompt/workspace/settings under that ID is rejected. Queued prompts retain their queue-item identity path, and queue/steering request IDs remain unchanged. No inference settings, automatic retry counts, model steps, or task duration were changed.
 - Added sidecar regression cases for active replay and conflicting-settings reuse. They are queued; no tests, typecheck, build, package, or app/model run was performed for this milestone. `git diff --check` is the only verification performed.
+
