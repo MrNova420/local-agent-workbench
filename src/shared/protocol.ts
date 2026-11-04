@@ -162,11 +162,13 @@ export type ActivityRecord = {
   providerRequest?: Record<string, unknown>;
   /** Provider-returned token and timing counters for this specific request. */
   providerUsage?: Record<string, unknown>;
-  /** Safe streaming metadata; partial model arguments are deliberately never stored. */
+  /** Explicitly partial, non-executable preview of model tool arguments while they stream. */
   provider?: string;
   requestIndex?: number;
   callIndex?: number;
   argumentCharacters?: number;
+  argumentPreview?: string;
+  argumentPreviewTruncated?: boolean;
 };
 
 export type ActivityEventEnvelope = {

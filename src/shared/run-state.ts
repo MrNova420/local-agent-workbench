@@ -1,6 +1,6 @@
 import type { ActivityRecord, QueuedPrompt, WorkerEvent } from './protocol';
 
-export type ToolCallProgress = { requestIndex: number; callIndex: number; provider: string; toolName: string; argumentCharacters: number };
+export type ToolCallProgress = { requestIndex: number; callIndex: number; provider: string; toolName: string; argumentCharacters: number; argumentPreview: string; argumentPreviewTruncated: boolean };
 
 export function reconcileQueuedPromptSnapshot<T extends { session_id: string; queued_prompts?: QueuedPrompt[] }>(
   current: T | null, sessionId: string, queuedPrompts: QueuedPrompt[],
@@ -56,6 +56,8 @@ export function applyToolCallProgress(current: ToolCallProgress[], event: Worker
     callIndex: Number.isFinite(callIndex) ? callIndex : 0,
     provider: String(event.provider || 'local runtime'), toolName: String(event.tool_name || ''),
     argumentCharacters: Number.isFinite(argumentCharacters) ? Math.max(0, argumentCharacters) : 0,
+    argumentPreview: typeof event.argument_preview === 'string' ? event.argument_preview : '',
+    argumentPreviewTruncated: event.argument_preview_truncated === true,
   };
   const index = current.findIndex((item) => item.requestIndex === preview.requestIndex && item.callIndex === preview.callIndex);
   if (index < 0) return [...current, preview];

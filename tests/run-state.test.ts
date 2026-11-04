@@ -64,15 +64,16 @@ describe('live activity selection', () => {
 });
 
 describe('streamed tool-call preview', () => {
-  it('updates one request preview by index without exposing partial arguments', () => {
+  it('updates one request preview by index and marks partial arguments as non-executable text', () => {
     const first = applyToolCallProgress([], { type: 'tool_call_progress', provider: 'ollama', request_index: 2,
       call_index: 0, tool_name: 'write_file', argument_characters: 320 });
     const next = applyToolCallProgress(first, { type: 'tool_call_progress', provider: 'ollama', request_index: 2,
-      call_index: 0, tool_name: 'write_file', argument_characters: 640, arguments_preview: 'secret or partial file data' });
+      call_index: 0, tool_name: 'write_file', argument_characters: 640, argument_preview: '{"path":"src/app.ts",', argument_preview_truncated: true });
 
     expect(next).toHaveLength(1);
     expect(next[0].argumentCharacters).toBe(640);
-    expect(next[0]).not.toHaveProperty('arguments_preview');
+    expect(next[0].argumentPreview).toBe('{"path":"src/app.ts",');
+    expect(next[0].argumentPreviewTruncated).toBe(true);
     expect(applyToolCallProgress(next, { type: 'tool_call_progress', provider: 'ollama', request_index: 2,
       call_index: 1, tool_name: 'read_file', argument_characters: 15 })).toHaveLength(2);
     expect(applyToolCallProgress(next, { type: 'text', text: 'no change' })).toEqual(next);

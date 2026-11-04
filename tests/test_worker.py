@@ -375,6 +375,12 @@ def test_followup_prompt_queue_updates_only_its_active_session(service, tmp_path
     service.active = controller
     emitted = []
     monkeypatch.setattr(service, "emit", emitted.append)
+    journal_rows = []
+    append_events = service.sessions.append_events
+    def capture_events(session_id, workspace, events):
+        journal_rows.extend(dict(row) for row in events)
+        return append_events(session_id, workspace, events)
+    monkeypatch.setattr(service.sessions, "append_events", capture_events)
 
     result = service.handle("session_queue_prompt", {
         "sessionId": state["session_id"], "workspace": str(project), "prompt": "Continue with tests",
@@ -1880,16 +1886,19 @@ def test_tool_call_progress_is_live_safe_and_durable(service, tmp_path, monkeypa
     service._publish_run_event(controller, SimpleNamespace(workspace=project), {
         "type": "tool_call_progress", "provider": "ollama", "request_index": 0,
         "call_index": 0, "tool_name": "write_file", "argument_characters": 512,
+        "argument_preview": '{"path":"src/app.ts",', "argument_preview_truncated": True,
     })
     service._publish_run_event(controller, SimpleNamespace(workspace=project), {
         "type": "tool_call_progress", "provider": "ollama", "request_index": 0,
         "call_index": 0, "tool_name": "write_file", "argument_characters": 1024,
+        "argument_preview": '{"path":"src/app.ts","content":"partial', "argument_preview_truncated": True,
     })
     assert len(controller["journal_pending"]) == 1
     controller["last_journal_flush"] = 0
     service._publish_run_event(controller, SimpleNamespace(workspace=project), {
         "type": "tool_call_progress", "provider": "ollama", "request_index": 0,
         "call_index": 0, "tool_name": "write_file", "argument_characters": 1024,
+        "argument_preview": '{"path":"src/app.ts","content":"partial', "argument_preview_truncated": True,
     })
 
     assert any(event.get("type") == "tool_call_progress" for event in emitted)
@@ -1899,9 +1908,15 @@ def test_tool_call_progress_is_live_safe_and_durable(service, tmp_path, monkeypa
     progress = next(event for event in saved.get("activity_events", []) if event.get("kind") == "tool_preparation")
     assert progress["name"] == "write_file"
     assert progress["argumentCharacters"] == 1024
+    assert progress["argumentPreview"] == '{"path":"src/app.ts","content":"partial'
+    assert progress["argumentPreviewTruncated"] is True
     assert sum(event.get("kind") == "tool_preparation" for event in saved.get("activity_events", [])) == 1
     assert "arguments" not in progress
-    assert not any(event.get("type") == "tool_call_progress" for event in saved.get("run_state", {}).get("events", []))
+    journal_progress = next(event for event in journal_rows if event.get("type") == "tool_call_progress")
+    assert journal_progress["argument_preview"] == '{"path":"src/app.ts","content":"partial'
+    assert journal_progress["argument_preview_truncated"] is True
+    assert "arguments" not in journal_progress
+    assert not any("arguments" in event for event in journal_rows)
 
     service._publish_run_event(controller, SimpleNamespace(workspace=project), {
         "type": "tool_batch", "request_index": 0, "assistantMessage": {"role": "assistant"}, "calls": [],

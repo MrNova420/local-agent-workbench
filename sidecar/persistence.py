@@ -218,6 +218,8 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any], *,
                     "status": "preparing", "provider": str(event.get("provider") or "unknown"),
                     "requestIndex": int(event.get("request_index", 0)), "callIndex": int(event.get("call_index", 0)),
                     "argumentCharacters": max(0, int(event.get("argument_characters", 0))),
+                    "argumentPreview": str(event.get("argument_preview", "")),
+                    "argumentPreviewTruncated": event.get("argument_preview_truncated") is True,
                     "timestamp": event.get("timestamp", event.get("at", time.time()))}
         if row is None:
             state.setdefault("activity_events", []).append(progress)

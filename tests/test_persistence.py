@@ -176,10 +176,13 @@ class MirroredSessionStoreTests(unittest.TestCase):
         _replay_run_event(state, {"type": "tool_call_progress", "activityId": "tool-call:turn-progress:0:1",
                                   "turnId": "turn-progress", "workspace": "C:/project", "provider": "ollama",
                                   "request_index": 0, "call_index": 1, "tool_name": "write_file",
-                                  "argument_characters": 768, "timestamp": 12})
+                                  "argument_characters": 900, "argument_preview": '{"path":"src/new.py",',
+                                  "argument_preview_truncated": True, "timestamp": 12})
         row = state["activity_events"][0]
         self.assertEqual((row["kind"], row["name"], row["status"]), ("tool_preparation", "write_file", "preparing"))
-        self.assertEqual(row["argumentCharacters"], 768)
+        self.assertEqual(row["argumentCharacters"], 900)
+        self.assertEqual(row["argumentPreview"], '{"path":"src/new.py",')
+        self.assertTrue(row["argumentPreviewTruncated"])
         self.assertNotIn("arguments", row)
         _replay_run_event(state, {"type": "tool_batch", "request_index": 0,
                                   "assistantMessage": {"role": "assistant"}, "calls": []})

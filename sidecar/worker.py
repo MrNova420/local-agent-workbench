@@ -412,6 +412,8 @@ class AgentService:
                             "requestIndex": int(event.get("request_index", 0)),
                             "callIndex": int(event.get("call_index", 0)),
                             "argumentCharacters": max(0, int(event.get("argument_characters", 0))),
+                            "argumentPreview": str(event.get("argument_preview", "")),
+                            "argumentPreviewTruncated": event.get("argument_preview_truncated") is True,
                             "timestamp": event.get("at", time.time())}
                 if activity is None:
                     activity = progress
@@ -618,11 +620,12 @@ class AgentService:
                              "workspace": str(turn.workspace), "timestamp": event.get("at", time.time()),
                              "_journal_event_id": uuid.uuid4().hex, "_journal_recorded_at_ns": time.time_ns()}
             if kind == "tool_call_progress":
-                # The provider event intentionally contains only tool identity and size,
-                # never partial arguments. Keep this safe summary through recovery.
+                # Persist only the provider's explicitly partial, bounded text preview;
+                # the complete arguments are retained only after structured validation.
                 journal_event = {key: value for key, value in journal_event.items()
                                  if key in {"type", "provider", "request_index", "call_index", "tool_name",
-                                            "argument_characters", "at", "activityId", "sessionId", "turnId",
+                                            "argument_characters", "argument_preview", "argument_preview_truncated",
+                                            "at", "activityId", "sessionId", "turnId",
                                             "workspace", "timestamp", "_journal_event_id", "_journal_recorded_at_ns"}}
             if event.get("type") == "generation_usage" and isinstance(run_state, dict):
                 journal_event["first_token_seconds"] = run_state.get("request_first_token_seconds")
