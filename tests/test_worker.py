@@ -476,6 +476,53 @@ def test_active_inference_steering_is_persisted_before_request_interrupt(service
     assert emitted[-1]["status"] == "interrupting"
 
 
+def test_steering_request_replay_does_not_duplicate_user_update_or_interrupt(service, tmp_path, monkeypatch):
+    project = tmp_path / "idempotent-steering-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    state["task_checkpoint"] = worker.begin_task(None, prompt="Build the feature", turn_id="turn-steer",
+                                                workspace=str(project), settings={})
+    state["run_state"] = {"status": "running", "turn_id": "turn-steer", "safe_messages": []}
+    interrupt = threading.Event()
+    controller = {"session": state, "checkpoint_lock": threading.RLock(), "accepting_steering": True,
+                  "pending_steers": [], "turn_id": "turn-steer", "inference_active": True,
+                  "steering_interrupt": interrupt}
+    service.active = controller
+    emitted = []
+    monkeypatch.setattr(service, "emit", emitted.append)
+    request = {"sessionId": state["session_id"], "workspace": str(project),
+               "prompt": "Implement the agreed change", "clientRequestId": "steer-request-1"}
+
+    first = service.handle("session_steer", request)
+    interrupt.clear()
+    replay = service.handle("session_steer", request)
+
+    updates = state["task_checkpoint"]["current"]["user_updates"]
+    assert len(updates) == 1
+    assert updates[0]["id"] == first["updateId"] == replay["updateId"]
+    assert replay["deduplicated"] is True
+    assert replay["status"] == first["status"] == "interrupting"
+    assert not interrupt.is_set(), "replaying an already accepted steer must not interrupt the provider again"
+    assert len([event for event in emitted if event.get("type") == "steering_update"]) == 1
+
+
+def test_steering_request_id_cannot_be_reused_for_different_text(service, tmp_path, monkeypatch):
+    project = tmp_path / "steering-request-id-conflict"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    state["task_checkpoint"] = worker.begin_task(None, prompt="Build the feature", turn_id="turn-steer-conflict",
+                                                workspace=str(project), settings={})
+    state["run_state"] = {"status": "running", "turn_id": "turn-steer-conflict", "safe_messages": []}
+    service.active = {"session": state, "checkpoint_lock": threading.RLock(), "accepting_steering": True,
+                      "pending_steers": [], "turn_id": "turn-steer-conflict"}
+    monkeypatch.setattr(service, "emit", lambda event: None)
+    base = {"sessionId": state["session_id"], "workspace": str(project), "clientRequestId": "steer-request-2"}
+    service.handle("session_steer", {**base, "prompt": "First instruction"})
+
+    with pytest.raises(ValueError, match="already used for different steering text"):
+        service.handle("session_steer", {**base, "prompt": "Different instruction"})
+
+
 def test_steering_messages_are_delivered_in_order_before_same_task_continues(service, tmp_path, monkeypatch):
     events = []
     service.emit = events.append

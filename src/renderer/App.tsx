@@ -264,6 +264,7 @@ export default function App() {
   const endRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const queueRequestRef = useRef<{ sessionId: string; draft: string; requestId: string } | null>(null);
+  const steerRequestRef = useRef<{ sessionId: string; draft: string; requestId: string } | null>(null);
   const assistantSegmentBreakRef = useRef(false);
   const runStartPendingRef = useRef(false);
   const activeTurnIdRef = useRef('');
@@ -1239,13 +1240,23 @@ export default function App() {
   async function steerActiveTask() {
     if (!canSubmitActiveRunUpdate(running, runStarting) || steeringSubmitting || !session || !workspace || !prompt.trim()) return;
     const submittedDraft = prompt;
+    const previousSteerRequest = steerRequestRef.current;
+    const requestId = previousSteerRequest?.sessionId === session.session_id && previousSteerRequest.draft === submittedDraft
+      ? previousSteerRequest.requestId : window.crypto.randomUUID();
+    steerRequestRef.current = { sessionId: session.session_id, draft: submittedDraft, requestId };
     setSteeringSubmitting(true);
     try {
-      const result = await request<{ status?: string }>({ command: 'session_steer', sessionId: session.session_id, workspace, prompt: submittedDraft.trim() });
+      const result = await request<{ status?: string; deduplicated?: boolean }>({
+        command: 'session_steer', sessionId: session.session_id, workspace,
+        prompt: submittedDraft.trim(), clientRequestId: requestId,
+      });
       setPrompt((current) => clearSubmittedPrompt(current, submittedDraft));
       promptRef.current?.focus();
-      notify(result.status === 'interrupting'
-        ? 'Update saved. The active model response is being redirected; its partial output will be kept and this same task will continue.'
+      if (steerRequestRef.current?.requestId === requestId) steerRequestRef.current = null;
+      notify(result.deduplicated
+        ? 'This update was already saved for the active task; it was not added twice.'
+        : result.status === 'interrupting'
+          ? 'Update saved. The active model response is being redirected; its partial output will be kept and this same task will continue.'
         : 'Update saved for the active task. It will be applied at the next safe boundary.');
     } catch (error) { notify(`Could not steer the active task: ${(error as Error).message}`, 'bad'); }
     finally { setSteeringSubmitting(false); }

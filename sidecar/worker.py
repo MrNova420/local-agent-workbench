@@ -883,6 +883,11 @@ class AgentService:
         clean = prompt.strip() if isinstance(prompt, str) else ""
         if not clean:
             raise ValueError("Steering input must contain text.")
+        client_request_id = message.get("clientRequestId")
+        if client_request_id is not None and (not isinstance(client_request_id, str) or not client_request_id.strip() or len(client_request_id) > 256):
+            raise ValueError("Steering request identity must be a non-empty string of at most 256 characters.")
+        if isinstance(client_request_id, str):
+            client_request_id = client_request_id.strip()
         session_id = str(message.get("sessionId", ""))
         selected_workspace = validate_selected_workspace(True, str(message.get("workspace", "")))
         with self.active_lock:
@@ -894,13 +899,28 @@ class AgentService:
             raise RuntimeError("Steering is limited to the task's captured chat session.")
         if Path(state["workspace"]).resolve(strict=True) != selected_workspace:
             raise ValueError("The active task belongs to a different project.")
-        update = {"id": uuid.uuid4().hex, "turn_id": controller["turn_id"], "instruction": clean,
-                  "status": "pending", "created_at": time.time()}
         with controller.setdefault("steering_persist_lock", threading.Lock()):
             with controller["checkpoint_lock"]:
                 if not controller.get("accepting_steering", False):
                     raise RuntimeError("This task is finishing; use the saved message as a follow-up after it completes.")
                 checkpoint = state.setdefault("task_checkpoint", {})
+                current = current_task(checkpoint)
+                task_history = checkpoint.get("task_history", [])
+                saved_tasks = [*([row for row in task_history if isinstance(row, dict)] if isinstance(task_history, list) else []), current]
+                prior_updates = [update for task in saved_tasks for update in
+                                 (task.get("user_updates", []) if isinstance(task.get("user_updates", []), list) else [])]
+                prior_update = next((row for row in reversed(prior_updates)
+                                     if isinstance(row, dict) and client_request_id
+                                     and row.get("client_request_id") == client_request_id), None)
+                if prior_update is not None:
+                    if prior_update.get("instruction") != clean:
+                        raise ValueError("This steering request identity was already used for different steering text.")
+                    return {"accepted": True, "updateId": prior_update.get("id"),
+                            "status": "pending", "deduplicated": True}
+                update = {"id": uuid.uuid4().hex, "turn_id": controller["turn_id"], "instruction": clean,
+                          "status": "pending", "created_at": time.time()}
+                if client_request_id:
+                    update["client_request_id"] = client_request_id
                 record_user_update(checkpoint, update)
                 pending = controller.setdefault("pending_steers", [])
                 pending.append(copy.deepcopy(update))
