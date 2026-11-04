@@ -68,6 +68,8 @@ function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expande
       ? `${row.progress.filesScanned.toLocaleString()} file${row.progress.filesScanned === 1 ? '' : 's'} inspected` : null,
     typeof row.progress.bytesRead === 'number' && Number.isFinite(row.progress.bytesRead)
       ? `${row.progress.bytesRead.toLocaleString()} bytes read` : null,
+    typeof row.progress.bytesWritten === 'number' && Number.isFinite(row.progress.bytesWritten)
+      ? `${row.progress.bytesWritten.toLocaleString()} bytes written` : null,
     typeof row.progress.matches === 'number' && Number.isFinite(row.progress.matches)
       ? `${row.progress.matches.toLocaleString()} match${row.progress.matches === 1 ? '' : 'es'}` : null,
   ].filter((value): value is string => value !== null) : [];

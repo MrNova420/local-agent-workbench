@@ -1460,6 +1460,11 @@ def test_activity_events_checkpoint_complete_results_and_unstarted_calls(service
     service._publish_run_event(controller, turn, {"type": "operation_output", "operationId": "op-a", "stream": "stdout", "text": "full log " * 3000})
     service._publish_run_event(controller, turn, {"type": "tool_done", "operationId": "op-a", "toolCallId": "call-a",
                                  "name": "run_command", "result": "complete result " * 2000, "affectedFiles": [], "completedAt": 2})
+    service._publish_run_event(controller, turn, {"type": "tool_start", "operationId": "op-b", "toolCallId": "call-b",
+                                 "name": "write_file", "arguments": {"path": "src/a.py"}, "startedAt": 2.5})
+    service._publish_run_event(controller, turn, {"type": "tool_progress", "operationId": "op-b",
+                                 "progress": {"message": "Writing · 4,194,304 UTF-8 bytes written", "bytesWritten": 4194304, "phase": "writing"},
+                                 "timestamp": 2.75})
     service._publish_run_event(controller, turn, {"type": "tool_done", "operationId": "op-b", "toolCallId": "call-b",
                                  "name": "write_file", "result": "second result", "affectedFiles": ["src/a.py"], "completedAt": 3})
 
@@ -1468,12 +1473,15 @@ def test_activity_events_checkpoint_complete_results_and_unstarted_calls(service
     checkpoint_tools = [message for message in saved["run_state"]["safe_messages"] if message.get("role") == "tool"]
     assert len(activity["output"]["stdout"]) > 12000
     assert len(activity["result"]) > 12000
+    write_activity = next(item for item in saved["activity_events"] if item["operationId"] == "op-b")
     assert activity["progress"]["filesScanned"] == 256
+    assert write_activity["progress"]["bytesWritten"] == 4194304
+    assert write_activity["progress"]["phase"] == "writing"
     assert checkpoint_tools[0]["content"] == "complete result " * 2000
     assert checkpoint_tools[1]["content"] == "second result"
     assert sum(message.get("role") == "assistant" and bool(message.get("tool_calls")) for message in saved["run_state"]["safe_messages"]) == 1
     assert any(event["type"] == "activity_event" for event in emitted)
-    assert any(event["type"] == "activity_event" and event.get("activity", {}).get("progress", {}).get("filesScanned") == 256 for event in emitted)
+    assert any(event["type"] == "activity_event" and event.get("activity", {}).get("progress", {}).get("bytesWritten") == 4194304 for event in emitted)
 
 
 def test_parallel_active_reads_are_tracked_and_recovered_individually(service, tmp_path, monkeypatch):

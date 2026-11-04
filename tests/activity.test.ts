@@ -81,6 +81,16 @@ describe('durable live activity state', () => {
     expect(markup).toContain(progress.message);
     expect(mergeActivitySnapshot([], current)[0].progress?.filesScanned).toBe(256);
   });
+  it('renders live bytes-written progress for large file operations', () => {
+    const operation: ActivityRecord = { id: 'op-write', operationId: 'op-write', turnId: 'turn-1',
+      sessionId: 'session-1', kind: 'operation', name: 'write_file', status: 'running' };
+    const progress = { message: 'Writing · 4,194,304 UTF-8 bytes written', bytesWritten: 4194304, phase: 'writing' };
+    const current = applyActivityEvent([], { type: 'activity_event', activity: { ...operation, progress } });
+    const markup = renderToStaticMarkup(createElement(ActivityFeed, { entries: current, mode: 'compact', surface: 'chat' }));
+    expect(markup).toContain(progress.message);
+    expect(markup).toContain('4,194,304 bytes written');
+    expect(mergeActivitySnapshot([], current)[0].progress?.bytesWritten).toBe(4194304);
+  });
   it('keeps full scan progress inspectable when compact rows visually shorten it', () => {
     const progress = { message: 'Searching files · 12,345 inspected · 98,765 bytes read · 432 matches on this page',
       filesScanned: 12345, bytesRead: 98765, matches: 432, timestamp: 123 };
