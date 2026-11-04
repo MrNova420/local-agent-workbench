@@ -72,6 +72,19 @@ def test_hugging_face_download_accepts_user_selected_batches_over_500(service, t
     assert events[-1]["type"] == "hf_download_job_complete"
 
 
+def test_hugging_face_search_forwards_opaque_page_cursor(service):
+    captured = []
+    service.hf = SimpleNamespace(search_page=lambda query, cursor=None: captured.append((query, cursor)) or {
+        "models": [{"repo": "owner/model", "revision": "rev", "downloads": 1, "likes": 0, "gated": False}],
+        "next_cursor": "https://huggingface.co/api/models?cursor=opaque",
+    })
+
+    result = service.handle("hf_search", {"query": "coder", "cursor": "https://huggingface.co/api/models?cursor=opaque"})
+
+    assert captured == [("coder", "https://huggingface.co/api/models?cursor=opaque")]
+    assert result["next_cursor"].endswith("cursor=opaque")
+
+
 def test_workspace_file_pages_return_every_project_file_without_a_hidden_cap(service, tmp_path):
     project = tmp_path / "large-project"
     project.mkdir()

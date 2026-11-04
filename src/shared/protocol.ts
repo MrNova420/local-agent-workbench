@@ -64,7 +64,7 @@ export type WorkerCommand =
   | { command: 'tool_catalog' }
   | { command: 'permission_rules_get' }
   | { command: 'permission_rules_set'; rules: Array<{ tool: string; decision: 'allow' | 'ask' | 'deny'; path_glob?: string; command_prefix?: string | string[]; workspace?: string }> }
-  | { command: 'hf_search'; query: string }
+  | { command: 'hf_search'; query: string; cursor?: string }
   | { command: 'hf_repo_files'; repo: string; revision: string }
   | { command: 'hf_download_start'; repo: string; revision: string; files: string[] }
   | { command: 'hf_download_cancel' }

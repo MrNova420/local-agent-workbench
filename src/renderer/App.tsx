@@ -1864,6 +1864,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
 }
 
 type HubModel = { repo: string; revision: string; downloads: number; likes: number; gated: boolean };
+type HubSearchPage = { models: HubModel[]; next_cursor: string | null };
 type HubFile = { path: string; format: string; size: number | null; is_lfs: boolean; revision: string };
 
 function ModelLibraryModal({ model, models, modelLabels, context, reasoning, downloadedDirectory, onModel, onRefresh, onClose, notify }: {
@@ -1873,6 +1874,7 @@ function ModelLibraryModal({ model, models, modelLabels, context, reasoning, dow
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<HubModel[]>([]);
+  const [nextSearchCursor, setNextSearchCursor] = useState<string | null>(null);
   const [repo, setRepo] = useState<HubModel | null>(null);
   const [files, setFiles] = useState<HubFile[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
@@ -1900,10 +1902,14 @@ function ModelLibraryModal({ model, models, modelLabels, context, reasoning, dow
     return unsubscribe;
   }, [notify]);
 
-  async function searchHub() {
+  async function searchHub(cursor?: string) {
     if (!query.trim()) return;
-    setBusy(true); setOperation('search'); setResults([]); setRepo(null); setFiles([]); setDownloadText('Searching the Hub…');
-    try { setResults(await window.agent.request<HubModel[]>({ command: 'hf_search', query })); setDownloadText(''); }
+    setBusy(true); setOperation('search'); if (!cursor) { setResults([]); setNextSearchCursor(null); setRepo(null); setFiles([]); } setDownloadText('Searching the Hub…');
+    try {
+      const page = await window.agent.request<HubSearchPage>({ command: 'hf_search', query, ...(cursor ? { cursor } : {}) });
+      setResults((current) => cursor ? [...current, ...page.models.filter((row) => !current.some((known) => known.repo === row.repo))] : page.models);
+      setNextSearchCursor(page.next_cursor); setDownloadText('');
+    }
     catch (error) { notify(`Hugging Face search failed: ${(error as Error).message}`, 'bad'); setDownloadText('Search failed.'); }
     finally { setBusy(false); setOperation('idle'); }
   }
@@ -1990,7 +1996,7 @@ function ModelLibraryModal({ model, models, modelLabels, context, reasoning, dow
     <div className="library-current"><span>SELECTED MODEL</span><code>{modelLabels[model] || shortModel(model)}</code><span>Context {fmt(context)} · reasoning {reasoning == null ? 'default' : String(reasoning)}</span></div>
     {featuredModels.length > 0 && <section className="featured-model-picks" aria-label="Recommended installed local models"><div className="featured-model-heading"><b>YOUR RECOMMENDED LOCAL PICKS</b><span>Exact installed tags · selecting does not load or download</span></div><div className="featured-model-grid">{featuredModels.map((row) => <button type="button" className={`featured-model-card ${model === row.id ? 'selected' : ''}`} key={row.id} onClick={() => onModel(row.id)}><span><b>{row.label}</b><small>{row.note}</small></span><code>{row.id}</code></button>)}</div></section>}
     <div className="settings-fields select-fields"><label className="settings-field"><span>Hugging Face model search</span><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void searchHub(); }} placeholder="Search model names or authors"/></label><div className="settings-field library-search-action"><span>Public and gated repositories</span><Button kind="bright" disabled={busy || !query.trim()} onClick={() => void searchHub()}>Search Hugging Face</Button></div></div>
-    {results.length > 0 && <div className="library-columns"><div className="library-results">{results.map((row) => <button className={`library-result ${repo?.repo === row.repo ? 'selected' : ''}`} key={row.repo} onClick={() => void inspectRepo(row)}><strong>{row.repo}</strong><small>{fmt(row.downloads)} downloads · {row.gated ? 'gated' : 'public'} · {row.revision.slice(0, 10)}</small></button>)}</div>{repo && <div className="library-files"><div className="library-files-heading"><strong>{repo.repo}</strong><small>Revision {repo.revision}</small></div>{files.map((file) => <label className="library-file" key={file.path}><input type="checkbox" checked={selectedFiles.includes(file.path)} onChange={(event) => setSelectedFiles((current) => event.target.checked ? [...current, file.path] : current.filter((name) => name !== file.path))}/><span><b>{file.path}</b><small>{file.format.toUpperCase()} · {file.size == null ? 'size unknown' : `${(file.size / 1024 ** 3).toFixed(2)} GB`}</small></span></label>)}<div className="library-download-row"><span>{selectedFiles.length} file(s) · {(selectedBytes / 1024 ** 3).toFixed(2)} GB listed</span><Button kind="bright" disabled={busy || !selectedFiles.length} onClick={() => void downloadFiles()}>Download selected</Button></div></div>}</div>}
+    {results.length > 0 && <div className="library-columns"><div className="library-results">{results.map((row) => <button className={`library-result ${repo?.repo === row.repo ? 'selected' : ''}`} key={row.repo} onClick={() => void inspectRepo(row)}><strong>{row.repo}</strong><small>{fmt(row.downloads)} downloads · {row.gated ? 'gated' : 'public'} · {row.revision.slice(0, 10)}</small></button>)}{nextSearchCursor && <Button kind="outline" disabled={busy} onClick={() => void searchHub(nextSearchCursor)}>Load more Hugging Face models</Button>}</div>{repo && <div className="library-files"><div className="library-files-heading"><strong>{repo.repo}</strong><small>Revision {repo.revision}</small></div>{files.map((file) => <label className="library-file" key={file.path}><input type="checkbox" checked={selectedFiles.includes(file.path)} onChange={(event) => setSelectedFiles((current) => event.target.checked ? [...current, file.path] : current.filter((name) => name !== file.path))}/><span><b>{file.path}</b><small>{file.format.toUpperCase()} · {file.size == null ? 'size unknown' : `${(file.size / 1024 ** 3).toFixed(2)} GB`}</small></span></label>)}<div className="library-download-row"><span>{selectedFiles.length} file(s) · {(selectedBytes / 1024 ** 3).toFixed(2)} GB listed</span><Button kind="bright" disabled={busy || !selectedFiles.length} onClick={() => void downloadFiles()}>Download selected</Button></div></div>}</div>}
     {downloadText && <div className="library-progress" role="status"><span>{downloadText}</span>{['download', 'load', 'import'].includes(operation) && <Button kind="danger" onClick={() => void cancelOperation()}>Cancel operation</Button>}</div>}
     <div className="library-safetensors"><div><strong>Safetensors through Ollama</strong><small>Import a downloaded repository folder or choose a local model directory. Ollama accepts only supported architectures.</small></div><input aria-label="Ollama model name" value={safetensorsName} onChange={(event) => setSafetensorsName(event.target.value)} maxLength={64}/><Button kind="outline" disabled={busy} onClick={() => void addSafetensorsToOllama()}>Import directory</Button></div>
     <div className="modal-actions"><Button kind="quiet" onClick={onClose}>Close</Button></div>

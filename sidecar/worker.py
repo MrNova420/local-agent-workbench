@@ -1025,7 +1025,10 @@ class AgentService:
             self.permission_rules_warning = None
             return copy.deepcopy(self.permission_rules)
         if command == "hf_search":
-            return self.hf.search(str(message.get("query", "")))
+            cursor = message.get("cursor")
+            if cursor is not None and not isinstance(cursor, str):
+                raise ValueError("Hugging Face continuation link must be text.")
+            return self.hf.search_page(str(message.get("query", "")), cursor=cursor)
         if command == "hf_repo_files":
             return self.hf.repo_files(str(message["repo"]), str(message["revision"]))
         if command == "hf_download_start":
