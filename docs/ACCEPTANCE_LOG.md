@@ -13,6 +13,11 @@
 - App `6811745` pins engine `b40f45028fd161fdde86be40f4c127522246f00f`. File replacement and append operations report cumulative UTF-8 bytes written under their operation IDs; the sidecar stores progress on that activity row and the renderer shows it in compact chat/sidebar rows and expanded details.
 - Added engine, sidecar persistence, and renderer coverage. These checks remain unrun; packaged visible long-file workflow acceptance remains open.
 
+## 2026-11-04 exact tool-result budget source pairing (verification queued)
+
+- App `6811745` pins engine `e44552d6fffc774137c1cffd1bc7f37783c6a569`. The fallback read/tool-result byte allowance now follows the computed remaining budget directly rather than forcing at least 512 bytes, avoiding an excerpt that can exceed a small remaining request allowance.
+- Added a queued one-token budget regression. No tests or model requests were run; the source change does not alter configured context or output tokens.
+
 ## 2026-11-04 context-checkpoint recovery hardening (verification queued)
 
 - Prompt-manifest journal replay now restores `context_checkpoint` due/armed/acknowledged state, thresholds, measured request ratio, estimated tokens, and budget. A structured plan event restores the acknowledged verified findings, completed/pending work, and next action. When a request crosses the threshold, the sidecar forces an immediate mirrored snapshot as well as its durable event record.
