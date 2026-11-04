@@ -1500,6 +1500,11 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 
 - App `31abc4f` keeps pagination bound to the query that produced the Hub cursor. If the user edits the query before requesting another page, the next action starts a fresh search instead of mixing results from two queries. This is source-only and queued for renderer verification.
 
+## 2026-11-04 process CPU unit correction
+
+- The system CPU tile remains a machine-wide percentage bounded to 0–100. Sidecar and inference-worker `psutil` process CPU values use 100% per fully occupied logical core and can exceed 100%; the UI now converts both to core equivalents, preserves the decimal reading, and explains the unit in the resource inspector. This prevents a multi-core process reading from being presented as machine CPU load.
+- Focused renderer utility regression: `npm exec vitest run tests/resource-format.test.ts` — **4 passed**. `npm run typecheck` passed. This is source verification only; no package or visible app acceptance was performed.
+
 ## 2026-11-04 paged Hugging Face repository trees
 
 - Repository file browsing now follows Hub next links for the selected repository and pinned revision, exposes additional file pages, and keeps already selected files selected while pages load. Continuation links must remain on the configured origin and exact tree path. This addresses Hub tree pagination, documented by the Hugging Face client: https://huggingface.co/docs/huggingface_hub/v1.27.0/en/package_reference/hf_api . Catalog and sidecar regression cases are authored and queued. App `642ae81` pins engine `18986f38ab3e680ae3c686e14f9a70e1e25fdbb4`. No test, typecheck, package, Hub download, or live model run was performed.

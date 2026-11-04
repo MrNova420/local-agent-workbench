@@ -8,7 +8,7 @@ import { approvalModeDescription } from '../shared/approval-mode-copy';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, isReasoningBudgetValid, MAX_REASONING_BUDGET_TOKENS, normalizeReasoningChoice, readReasoningBudgetPreference, readRunTokenPreferences } from '../shared/model-controls';
 import { featuredInstalledModels } from '../shared/model-recommendations';
 import { normalizeGpuStats } from '../shared/resource-metrics';
-import { runtimeWorkerCpuCoreEquivalents } from '../shared/resource-format';
+import { processCpuCoreEquivalents } from '../shared/resource-format';
 import { appendTranscriptSegment, finalizeStreamingAssistantMessage, readExpandedReasoning, reconcileLiveAssistantMessage, restoreTranscriptMessages, writeExpandedReasoning } from '../shared/transcript';
 import { LocalModelOrbit } from './ModelOrbit';
 import { ActivityFeed } from './ActivityFeed';
@@ -1074,7 +1074,7 @@ export default function App() {
         processing: currentSlot.is_processing === true,
       } : null,
       serviceRss: typeof snapshot.service_rss_bytes === 'number' ? `${(snapshot.service_rss_bytes / 1024 ** 3).toFixed(2)} GB` : '—',
-      serviceCpu: typeof snapshot.service_cpu_percent === 'number' ? Math.round(snapshot.service_cpu_percent) : null,
+      serviceCpu: typeof snapshot.service_cpu_percent === 'number' ? snapshot.service_cpu_percent : null,
       runtimeWorkerCount: typeof snapshot.runtime_worker_count === 'number' ? snapshot.runtime_worker_count : 0,
       runtimeWorkerCpu: typeof snapshot.runtime_worker_cpu_percent === 'number' ? Math.round(snapshot.runtime_worker_cpu_percent) : null,
       runtimeWorkerRss: typeof snapshot.runtime_worker_rss_bytes === 'number' ? `${(snapshot.runtime_worker_rss_bytes / 1024 ** 3).toFixed(2)} GB` : '—',
@@ -1730,7 +1730,7 @@ function Landing({ workspaces, workspaceSearch, workspaceHistoryStatus, sessions
         <Button kind="outline" onClick={onLibrary}>Browse Hugging Face / add local models</Button>
         {connected === 'no' && <div className="setup-help" role="status"><b>Ollama is not responding</b><span>Use the official Windows installer, then check the connection again. Existing model data is not changed.</span><div><Button kind="outline" onClick={onInstallOllama}>Open Ollama setup</Button><button onClick={onRefresh}>Check connection</button></div></div>}
         {connected === 'yes' && modelCatalogStatus === 'ready' && models.length === 0 && <div className="setup-help"><b>No local models found</b><span>Add an Ollama model or download a Hugging Face GGUF to get started.</span><div><Button kind="outline" onClick={onLibrary}>Add a model</Button></div></div>}
-        <div className="engine-foot"><span><Icon name="cpu"/> {telemetry.serviceCpu == null ? 'SERVICE READY' : `SERVICE ${telemetry.serviceCpu}% CPU`}</span><span><Icon name="memory"/> {telemetry.serviceRss} SIDECAR</span><span>{sessionHistoryStatus === 'loading' ? 'SYNCING SESSIONS' : sessionHistoryStatus === 'error' ? `${sessions.length} SAVED SESSIONS · LAST SYNC FAILED` : `${sessions.length} SAVED SESSIONS`}</span></div>
+        <div className="engine-foot"><span title="Process CPU is shown as core equivalents; 1.0 means one fully occupied logical core."><Icon name="cpu"/> {telemetry.serviceCpu == null ? 'SERVICE READY' : `SERVICE ${processCpuCoreEquivalents(telemetry.serviceCpu)} CORES`}</span><span><Icon name="memory"/> {telemetry.serviceRss} SIDECAR</span><span>{sessionHistoryStatus === 'loading' ? 'SYNCING SESSIONS' : sessionHistoryStatus === 'error' ? `${sessions.length} SAVED SESSIONS · LAST SYNC FAILED` : `${sessions.length} SAVED SESSIONS`}</span></div>
       </div>
     </div>
   </section>;
@@ -1936,9 +1936,9 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
             <div className="resource-tile"><small>GPU LOAD</small><strong>{telemetry.gpuUtil == null ? '—' : `${telemetry.gpuUtil}%`}</strong><div className="meter"><i style={{ width: `${Math.min(100, telemetry.gpuUtil ?? 0)}%` }}/></div></div>
             <div className="resource-tile"><small>VRAM · {telemetry.gpu}</small><strong>{telemetry.vramUsed == null ? '—' : fmt(telemetry.vramUsed)} / {telemetry.vramTotal == null ? '—' : fmt(telemetry.vramTotal)} MiB</strong><div className="meter"><i style={{ width: `${telemetry.vramPercent ?? 0}%` }}/></div></div>
             <div className="resource-tile"><small>GPU POWER</small><strong>{telemetry.gpuPower == null ? '—' : `${telemetry.gpuPower.toFixed(2)} W`}</strong><span>BOARD DRAW</span></div>
-            <div className="resource-tile"><small>INFERENCE WORKER CPU</small><strong>{telemetry.runtimeWorkerCount ? `${runtimeWorkerCpuCoreEquivalents(telemetry.runtimeWorkerCpu)?.toLocaleString() ?? '—'} core equivalents` : 'Not detected'}</strong><span>{telemetry.runtimeWorkerCount} shared process{telemetry.runtimeWorkerCount === 1 ? '' : 'es'} · {telemetry.runtimeWorkerRss} RAM</span></div>
+            <div className="resource-tile"><small>INFERENCE WORKER CPU</small><strong>{telemetry.runtimeWorkerCount ? `${processCpuCoreEquivalents(telemetry.runtimeWorkerCpu)?.toLocaleString() ?? '—'} core equivalents` : 'Not detected'}</strong><span>{telemetry.runtimeWorkerCount} shared process{telemetry.runtimeWorkerCount === 1 ? '' : 'es'} · {telemetry.runtimeWorkerRss} RAM</span></div>
             <div className="resource-tile"><small>RUNTIME GPU MEMORY</small><strong>{telemetry.runtimeGpuMemory == null ? 'Unavailable' : `${fmt(telemetry.runtimeGpuMemory)} MiB`}</strong><span>PROCESS VRAM · NOT MODEL-SPECIFIC</span></div>
-            <div className="resource-tile"><small>AGENT SERVICE</small><strong>{telemetry.serviceCpu == null ? '—' : `${telemetry.serviceCpu}% CPU`}</strong><span>{telemetry.serviceRss} RAM</span></div>
+            <div className="resource-tile"><small>AGENT SERVICE CPU</small><strong>{telemetry.serviceCpu == null ? '—' : `${processCpuCoreEquivalents(telemetry.serviceCpu)} core equivalents`}</strong><span title="psutil process CPU is normalized per fully occupied logical core and can exceed 100% across multiple cores.">Process CPU · 1.0 = one fully occupied logical core</span><span>{telemetry.serviceRss} RAM</span></div>
           </div>
         </div>
       </aside>
