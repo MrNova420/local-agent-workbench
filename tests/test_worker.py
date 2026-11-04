@@ -1327,6 +1327,15 @@ def test_sessions_are_filtered_by_exact_project_root(service, tmp_path):
     assert (first / ".agent-workbench" / "sessions" / f"{a['session_id']}.json").is_file()
 
 
+def test_session_new_preserves_positive_context_below_the_old_minimum(service, tmp_path):
+    project = tmp_path / "small-context"
+    project.mkdir()
+    session = service.handle("session_new", {
+        "workspace": str(project), "model": "model-a:latest", "context": 512,
+    })
+    assert session["context"] == 512
+
+
 def test_workspace_history_and_session_conflict_resolution(service, tmp_path):
     project = tmp_path / "project"
     project.mkdir()
@@ -2211,8 +2220,11 @@ def test_engine_failure_is_saved_with_the_session(service, tmp_path, monkeypatch
 
     saved = service.sessions.load(session_id)
     assert saved["last_error"]["message"] == "Synthetic provider stream failure"
+    assert "Synthetic provider stream failure" in saved["last_error"]["diagnostic"]
     assert saved["run_state"]["status"] == "failed"
     assert saved["run_state"]["workflow_outcome"] == "response_missing"
+    assert sum(event.get("type") == "error" and event.get("error") == "Synthetic provider stream failure"
+               for event in events) == 1
 
 
 def test_incomplete_provider_stream_preserves_partial_reasoning_and_request_failure(service, tmp_path, monkeypatch):

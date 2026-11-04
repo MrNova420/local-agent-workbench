@@ -35,7 +35,7 @@ export function readRunTokenPreferences(raw: string | null): RunTokenPreferences
   try {
     const parsed = JSON.parse(raw) as Partial<RunTokenPreferences>;
     return {
-      context: Number.isSafeInteger(parsed.context) && Number(parsed.context) >= 1024 ? Number(parsed.context) : DEFAULT_RUN_TOKEN_PREFERENCES.context,
+      context: Number.isSafeInteger(parsed.context) && Number(parsed.context) >= 1 ? Number(parsed.context) : DEFAULT_RUN_TOKEN_PREFERENCES.context,
       maxTokens: Number.isSafeInteger(parsed.maxTokens) && Number(parsed.maxTokens) >= 1 ? Number(parsed.maxTokens) : DEFAULT_RUN_TOKEN_PREFERENCES.maxTokens,
     };
   } catch {
@@ -72,11 +72,11 @@ export function buildModelLabels(modelIds: string[], overrides: Record<string, s
   }));
 }
 
-const BASE_TIERS = [4096, 8192, 16384, 32768, 65536, 100000, 131072, 200000, 262144, 300000, 500000, 750000, 1000000, 1500000, 2000000, 3000000, 5000000, 10000000];
+const BASE_TIERS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 1536, 2048, 3072, 4096, 8192, 16384, 32768, 65536, 100000, 131072, 200000, 262144, 300000, 500000, 750000, 1000000, 1500000, 2000000, 3000000, 5000000, 10000000];
 
 function buildTiers(): number[] {
   const values = new Set(BASE_TIERS);
-  for (let value = 4096; value <= 16_777_216; value *= 2) values.add(value);
+  for (let value = 1; value <= 16_777_216; value *= 2) values.add(value);
   return [...values].sort((a, b) => a - b);
 }
 
@@ -85,8 +85,10 @@ function presetRows(limit: number | null, kind: 'context' | 'output'): TokenPres
   if (limit !== null) tiers.add(limit);
   return [...tiers].sort((a, b) => a - b).map((value) => ({
     value,
-    label: value === limit ? `${value.toLocaleString()} · ${kind} maximum` : value.toLocaleString(),
-    disabled: limit !== null && value > limit,
+    label: value === limit ? `${value.toLocaleString()} · advertised ${kind} maximum`
+      : limit !== null && value > limit ? `${value.toLocaleString()} · above advertised ${kind} maximum (${limit.toLocaleString()})`
+      : value.toLocaleString(),
+    disabled: false,
   }));
 }
 

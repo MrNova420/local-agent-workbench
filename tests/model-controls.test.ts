@@ -19,7 +19,9 @@ describe('model capability controls', () => {
     expect(presets.context.find((item) => item.value === 2_500_000)?.label).toContain('context maximum');
     expect(presets.context.some((item) => item.value === 1_000_000)).toBe(true);
     expect(presets.context.some((item) => item.value === 2_000_000)).toBe(true);
-    expect(presets.context.find((item) => item.value === 3_000_000)?.disabled).toBe(true);
+    expect(presets.context.find((item) => item.value === 3_000_000)?.disabled).toBe(false);
+    expect(presets.context.find((item) => item.value === 3_000_000)?.label).toContain('above advertised context maximum');
+    expect(presets.context.some((item) => item.value === 512)).toBe(true);
   });
 
   it('builds output tiers independently from context and marks unknown limits', () => {
@@ -27,7 +29,8 @@ describe('model capability controls', () => {
     const unknown = buildTokenPresets({ contextLimit: 32_768, outputLimit: null });
 
     expect(known.output.find((item) => item.value === 1_500_000)?.label).toContain('output maximum');
-    expect(known.output.find((item) => item.value === 2_000_000)?.disabled).toBe(true);
+    expect(known.output.find((item) => item.value === 2_000_000)?.disabled).toBe(false);
+    expect(known.output.find((item) => item.value === 2_000_000)?.label).toContain('above advertised output maximum');
     expect(unknown.outputLimitKnown).toBe(false);
     expect(unknown.output.some((item) => item.value === 32_768)).toBe(true);
     expect(unknown.output.some((item) => item.value === 1_000_000 && !item.disabled)).toBe(true);
@@ -63,6 +66,11 @@ describe('model capability controls', () => {
   it('preserves custom token choices without silently clamping them', () => {
     expect(readRunTokenPreferences(JSON.stringify({ context: 300000, maxTokens: 12000 })))
       .toEqual({ context: 300000, maxTokens: 12000 });
+  });
+
+  it('preserves deliberately small positive context values', () => {
+    expect(readRunTokenPreferences(JSON.stringify({ context: 512, maxTokens: 2048 })))
+      .toEqual({ context: 512, maxTokens: 2048 });
   });
 
   it('preserves unlimited or exact custom thinking budgets and validates the server integer range', () => {

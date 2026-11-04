@@ -725,8 +725,8 @@ class AgentService:
         keep_alive = str(message.get("keepAlive", "30m"))
         if not model or model.startswith("gguf::") or model not in self.runtime.models():
             raise ValueError("Choose an installed Ollama model to preload.")
-        if not isinstance(context, int) or isinstance(context, bool) or context < 1024:
-            raise ValueError("Preload context must be an integer of at least 1,024 tokens.")
+        if not isinstance(context, int) or isinstance(context, bool) or context < 1:
+            raise ValueError("Preload context must be a positive integer.")
         if not keep_alive:
             raise ValueError("Keep-alive must match the selected model setting.")
         if keep_alive == "0":
@@ -1221,9 +1221,11 @@ class AgentService:
         if command == "session_new":
             root = validate_selected_workspace(True, message["workspace"])
             model = str(message.get("model", "")).strip()
-            context = int(message.get("context", 0))
-            if not model or context < 1024:
-                raise ValueError("Choose an installed model and an explicit context of at least 1,024 tokens.")
+            context = message.get("context")
+            if isinstance(context, bool) or not isinstance(context, int) or context < 1:
+                raise ValueError("Context must be a positive whole number of tokens.")
+            if not model:
+                raise ValueError("Choose an installed model and a positive context size.")
             state = self.sessions.create(str(root), model, context)
             mode = str(message.get("activityMode", "compact"))
             if mode not in {"compact", "sidebar", "inline"}:
@@ -1254,8 +1256,8 @@ class AgentService:
             context = settings.get("context")
             max_tokens = settings.get("maxTokens")
             temperature = settings.get("temperature")
-            if not isinstance(context, int) or isinstance(context, bool) or context < 1024:
-                raise ValueError("Context must be at least 1,024 tokens.")
+            if not isinstance(context, int) or isinstance(context, bool) or context < 1:
+                raise ValueError("Context must be a positive whole number of tokens.")
             if not isinstance(max_tokens, int) or isinstance(max_tokens, bool) or max_tokens < 1:
                 raise ValueError("Maximum output tokens must be positive.")
             if not isinstance(temperature, (int, float)) or isinstance(temperature, bool) or not 0 <= float(temperature) <= 2:
@@ -1651,10 +1653,10 @@ class AgentService:
         if not self.llama_config.get("binary"):
             raise ValueError("Select a llama.cpp server executable in Model Library settings first.")
         record = self._gguf_record(str(message.get("model", "")))
-        context = int(message.get("context", 0))
+        context = message.get("context")
         reasoning = message.get("reasoning")
-        if context < 1024:
-            raise ValueError("Choose a context of at least 1,024 tokens before loading.")
+        if isinstance(context, bool) or not isinstance(context, int) or context < 1:
+            raise ValueError("Choose a positive context size before loading.")
         self.llama_load_cancel = threading.Event()
 
         def work() -> None:
@@ -1716,6 +1718,15 @@ class AgentService:
         model = str(options.get("model", "")).strip()
         if not prompt or not model:
             raise ValueError("A task and model are required.")
+        context = options.get("context")
+        max_tokens = options.get("maxTokens")
+        temperature = options.get("temperature")
+        if isinstance(context, bool) or not isinstance(context, int) or context < 1:
+            raise ValueError("Context must be a positive whole number of tokens.")
+        if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 1:
+            raise ValueError("Maximum output tokens must be a positive whole number.")
+        if not isinstance(temperature, (int, float)) or isinstance(temperature, bool) or not 0 <= float(temperature) <= 2:
+            raise ValueError("Temperature must be between 0 and 2.")
         requested_provider = options.get("providerId", options.get("provider_id"))
         provider = self.providers.resolve(model, str(requested_provider) if requested_provider else None)
         is_gguf = provider.provider_id == "llama.cpp"
@@ -1724,8 +1735,8 @@ class AgentService:
             llama_status = self.llama.status()
             if not llama_status["running"] or llama_status["model"] != record["path"]:
                 raise ValueError("Load this GGUF from Model Library before starting a task.")
-            if llama_status["context"] != int(options["context"]):
-                raise ValueError(f"The loaded GGUF context is {llama_status['context']:,}; load it with the selected {int(options['context']):,} token context first.")
+            if llama_status["context"] != context:
+                raise ValueError(f"The loaded GGUF context is {llama_status['context']:,}; load it with the selected {context:,} token context first.")
             if llama_status.get("reasoning") != options.get("reasoning"):
                 raise ValueError("The loaded GGUF reasoning setting differs from this run. Load it with the selected reasoning setting first.")
         elif model not in self.runtime.models():
@@ -1759,7 +1770,7 @@ class AgentService:
             if reasoning not in capabilities.get("values", []):
                 raise ValueError("The selected model does not advertise that reasoning choice.")
         session_id = options.get("sessionId")
-        state = self._load_session_state(str(session_id)) if session_id else self.sessions.create(str(source), model, int(options["context"]))
+        state = self._load_session_state(str(session_id)) if session_id else self.sessions.create(str(source), model, context)
         if Path(state["workspace"]).resolve(strict=True) != source:
             raise ValueError("Selected session belongs to a different project. Open that project's workspace explicitly first.")
         queued_prompt_id = options.get("queuedPromptId")
@@ -1779,9 +1790,9 @@ class AgentService:
             consume_queued_prompt(state, queued_prompt_id, prompt)
         state.update(
             model=model, model_id=model, provider_id=provider.provider_id, provider=provider.provider_id,
-            context=int(options["context"]), access=access,
-            approval_mode="per-action" if approval_mode == "auto" else approval_mode, max_tokens=int(options["maxTokens"]),
-            temperature=float(options["temperature"]), keep_alive=str(options.get("keepAlive", "30m")),
+            context=context, access=access,
+            approval_mode="per-action" if approval_mode == "auto" else approval_mode, max_tokens=max_tokens,
+            temperature=float(temperature), keep_alive=str(options.get("keepAlive", "30m")),
             reasoning=reasoning,
             reasoning_budget_tokens=reasoning_budget_tokens,
             harness_profile=harness_profile,
@@ -1790,7 +1801,7 @@ class AgentService:
         )
         if approval_mode != "per-session":
             state["session_approval_granted"] = False
-        if state["context"] < 1024 or state["max_tokens"] < 1 or not 0 <= state["temperature"] <= 2:
+        if state["context"] < 1 or state["max_tokens"] < 1 or not 0 <= state["temperature"] <= 2:
             raise ValueError("Context, output token, or temperature setting is outside the supported range.")
         working = source
         if access == "copy":
@@ -2179,6 +2190,7 @@ class AgentService:
                 self.emit({"type": "error", "error": "The engine returned without a terminal completion event.",
                            "sessionId": state["session_id"], "turnId": controller["turn_id"], "workspace": str(turn.workspace)})
         except Exception as exc:
+            diagnostic = traceback.format_exc()
             with controller["checkpoint_lock"]:
                 controller["accepting_queue"] = False
             finish_task(state.get("task_checkpoint", {}), "failed", blocker=f"{type(exc).__name__}: {exc}")
@@ -2189,18 +2201,27 @@ class AgentService:
                 state["run_state"]["workflow_outcome"] = "failed"
                 state["run_state"]["active_operation"] = None
                 state["run_state"]["active_operations"] = {}
-            state["last_error"] = {"message": f"{type(exc).__name__}: {exc}", "occurred_at": time.time()}
+            state["last_error"] = {"message": f"{type(exc).__name__}: {exc}", "diagnostic": diagnostic,
+                                    "occurred_at": time.time()}
             try:
                 self._save_active_session(controller)
                 self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
             except Exception as save_error:
                 self.emit({"type": "error", "error": f"{exc}; session save failed: {save_error}"})
-            error_event = {"type": "error", "error": f"{type(exc).__name__}: {exc}", "sessionId": state["session_id"]}
+            error_event = {"type": "error", "error": f"{type(exc).__name__}: {exc}",
+                           "diagnostic": diagnostic, "sessionId": state["session_id"]}
+            published = False
             try:
                 self._publish_run_event(controller, turn, error_event)
+                published = True
             except Exception:
                 pass
-            self.emit(error_event)
+            # _publish_run_event emits the event after journaling it. Emitting
+            # it again here produced duplicate failure notifications in chat.
+            # Keep one direct fallback only when persistence/publication itself
+            # failed before the event reached the renderer.
+            if not published:
+                self.emit(error_event)
         finally:
             with controller.setdefault("steering_persist_lock", threading.Lock()):
                 with controller["checkpoint_lock"]:
