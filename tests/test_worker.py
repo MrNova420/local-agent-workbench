@@ -2736,6 +2736,8 @@ def test_ask_user_pauses_for_answer_and_resumes_with_saved_tool_result(service, 
                                                "turnId": "old-turn", "answer": "React"}) == {"answered": False, "stale": True}
     assert service.handle("question_reply", {"questionId": question_id, "sessionId": "session-question",
                                                "turnId": "turn-question", "answer": "React"}) == {"answered": True, "stale": False}
+    assert service.handle("question_reply", {"questionId": question_id, "sessionId": "session-question",
+                                               "turnId": "turn-question", "answer": "Vue"}) == {"answered": False, "stale": True}
     thread.join(2)
 
     assert not thread.is_alive()

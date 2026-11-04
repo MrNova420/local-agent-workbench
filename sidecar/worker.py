@@ -2509,6 +2509,8 @@ class AgentService:
             return False
         condition, result = pending
         with condition:
+            if result.get("done"):
+                return False
             result.update(done=True, answer=answer)
             condition.notify_all()
         return True
