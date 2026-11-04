@@ -1469,6 +1469,12 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 
 - Removed the main-process 2,000-character slice from sidecar stderr chunks and stopped trimming each chunk before forwarding, preserving whitespace and full diagnostic text in the event stream. Renderer behavior still sends these service diagnostics to the developer console; this change does not claim a new user-facing log viewer. No test, typecheck, package, or app launch was performed; verification is queued.
 
+## 2026-11-04 per-request cache evidence in the Live Work Sheet
+
+- The Live Work Sheet now shows the latest provider request's exact prompt/cache pair and request index separately from the turn aggregate. A reported zero remains distinguishable from a missing cache counter, including while the next request is in flight. Restored session metrics retain the last request's identity and values. Aggregate reuse is called complete only when all recorded prompt requests returned usage.
+- Regression checks: focused `npx vitest run tests/run-metrics.test.ts` — **10 passed**; renderer suite through `npm test` — **134 passed**; `npm run typecheck` passed. The combined command also forwarded Vitest's `--run` option to pytest and therefore did not execute the Python suite; Python tests are still pending. No model was loaded, and no context, output, reasoning, keep-alive, or runtime cache setting changed. No packaged or visible UI acceptance was performed.
+- The prior Flint turn's two reported zero-cache values are evidence that those two requests reused zero prompt tokens according to Ollama; they do not establish that Ollama KV reuse is globally disabled. Actual KV allocation bytes/type remain unavailable in Ollama's response telemetry.
+
 ## 2026-11-04 cursor-based Hugging Face search
 
 - Hub search now returns a page plus the server-provided opaque next link; the renderer offers Load more until the Hub has no next page. Continuation links are checked against the configured origin and model endpoint before a token-bearing request. The page size is a fetch batch, not a total search cap. The Hub API and official search guide describe model-list iteration; source: https://huggingface.co/docs/hub/api and https://huggingface.co/docs/huggingface_hub/main/guides/search . App `07f965d` pins engine `e282fddcdf078be03f09b62d11e4c260b5a68738`. Catalog and sidecar regression cases are authored but queued; no test, typecheck, package, or live Hub request was run.

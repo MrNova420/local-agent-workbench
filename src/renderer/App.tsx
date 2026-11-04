@@ -833,12 +833,12 @@ export default function App() {
         const withFirstToken = typeof event.first_token_seconds === 'number'
           ? recordFirstToken(current, event.first_token_seconds)
           : current;
-        return addGenerationUsage(withFirstToken, event.usage);
+        return addGenerationUsage(withFirstToken, event.usage, event.request_index);
       });
       if (event.type === 'inference_settings') {
         const estimatedInput = Number(event.estimated_input_tokens);
         setAppliedSettings({ model: String(event.model), provider: String(event.provider || ''), context: Number(event.requested_context), maxOutput: Number(event.max_output_tokens), reasoning: event.reasoning_override == null ? null : event.reasoning_override as boolean | string, reasoningBudgetTokens: typeof event.reasoning_budget_tokens === 'number' ? event.reasoning_budget_tokens : null, estimatedInput: Number.isFinite(estimatedInput) ? estimatedInput : null });
-        setRunMetrics((current) => recordInputEstimate(current, event.estimated_input_tokens));
+        setRunMetrics((current) => recordInputEstimate(current, event.estimated_input_tokens, event.request_index));
       }
       if (event.type === 'complete') {
         setToolCallProgress([]);
@@ -1845,9 +1845,13 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
   const latestPromptActivity = activeTurnId
     ? [...(activitiesByTurn.get(activeTurnId) || [])].reverse().find((activity) => activity.kind === 'prompt')
     : undefined;
+  const activeTurnRequestCount = activeTurnId
+    ? (activitiesByTurn.get(activeTurnId) || []).filter((activity) => activity.kind === 'prompt').length
+    : 0;
   const latestRequestContext = requestContextStats(latestPromptActivity);
   const latestActiveActivity = latestActiveActivityForTurn(activities, activeTurnId);
   const promptCacheComplete = runMetrics.usageResponses > 0
+    && (!activeTurnRequestCount || runMetrics.usageResponses === activeTurnRequestCount)
     && runMetrics.promptTokenReports === runMetrics.usageResponses
     && runMetrics.cachedPromptReports === runMetrics.usageResponses;
   const [sheetLayout, setSheetLayout] = useState<RunSheetLayout>(() => {
@@ -1903,7 +1907,8 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
             <div className="kv-cache-grid">
               <div title="Provider prompt token count when returned; otherwise the harness's request estimate. Budget is the selected context budget after tool, output, and system reservations."><small>LATEST REQUEST INPUT / BUDGET</small><strong>{latestRequestContext.usedTokens === null ? 'Not reported yet' : `${latestRequestContext.source === 'estimate' ? '~' : ''}${fmt(latestRequestContext.usedTokens)} / ${latestRequestContext.inputBudget === null ? '—' : fmt(latestRequestContext.inputBudget)} tokens${latestRequestContext.utilization === null ? '' : ` · ${(latestRequestContext.utilization * 100).toFixed(1)}%`}`}</strong><span>{latestRequestContext.remainingTokens === null ? 'Remaining input budget unavailable' : `${fmt(latestRequestContext.remainingTokens)} tokens remaining · ${latestRequestContext.source === 'provider' ? 'provider count' : 'estimated count'}`}</span></div>
               <div><small>PROMPT TOKENS · THIS RUN</small><strong>{runMetrics.promptTokens ? fmt(runMetrics.promptTokens) : 'Not reported yet'}</strong></div>
-              <div><small>CACHED PROMPT TOKENS · THIS RUN</small><strong>{promptCacheComplete && runMetrics.promptTokens ? `${fmt(runMetrics.cachedPromptTokens)} / ${fmt(runMetrics.promptTokens)} · ${Math.round(runMetrics.cachedPromptTokens / runMetrics.promptTokens * 100)}%` : runMetrics.cachedPromptReports ? `${fmt(runMetrics.cachedPromptTokens)} cached · ${runMetrics.cachedPromptReports}/${runMetrics.usageResponses} responses reported` : 'Provider did not report yet'}</strong></div>
+              <div><small>CACHED PROMPT TOKENS · THIS TURN</small><strong>{promptCacheComplete && runMetrics.promptTokens ? `${fmt(runMetrics.cachedPromptTokens)} / ${fmt(runMetrics.promptTokens)} · ${Math.round(runMetrics.cachedPromptTokens / runMetrics.promptTokens * 100)}%` : runMetrics.cachedPromptReports ? `${fmt(runMetrics.cachedPromptTokens)} cached · ${runMetrics.cachedPromptReports}/${activeTurnRequestCount || runMetrics.usageResponses} requests reported` : activeTurnRequestCount ? `No cache count · ${runMetrics.usageResponses}/${activeTurnRequestCount} requests reported usage` : 'Provider did not report yet'}</strong></div>
+              <div title="Cache count from the most recently completed provider request in this turn. A missing counter stays unknown; it is never inferred as zero."><small>LATEST REQUEST REUSE</small><strong>{runMetrics.lastRequestIndex == null ? 'No request yet' : `${runMetrics.lastRequestCacheReported ? `${fmt(runMetrics.lastRequestCachedPromptTokens ?? 0)} / ${runMetrics.lastRequestPromptTokens == null ? '—' : fmt(runMetrics.lastRequestPromptTokens)} tokens` : 'Cache counter not reported'}`}</strong><span>{runMetrics.lastRequestIndex == null ? 'Per provider response' : `Request ${runMetrics.lastRequestIndex}${runMetrics.lastRequestCacheReported && runMetrics.lastRequestPromptTokens ? ` · ${Math.round((runMetrics.lastRequestCachedPromptTokens ?? 0) / runMetrics.lastRequestPromptTokens * 100)}% reused` : ''}`}</span></div>
               <div><small>UNCACHED PROMPT TOKENS · THIS RUN</small><strong>{promptCacheComplete ? fmt(Math.max(0, runMetrics.promptTokens - runMetrics.cachedPromptTokens)) : 'Unavailable until all responses report counts'}</strong></div>
               <div><small>PROMPT EVAL TIME · THIS RUN</small><strong>{runMetrics.promptEvalNanoseconds ? `${(runMetrics.promptEvalNanoseconds / 1e9).toFixed(2)} s` : 'Not reported'}</strong></div>
               <div><small>MODEL LOAD TIME · THIS RUN</small><strong>{runMetrics.modelLoadNanoseconds ? `${(runMetrics.modelLoadNanoseconds / 1e9).toFixed(2)} s` : 'Not reported'}</strong></div>

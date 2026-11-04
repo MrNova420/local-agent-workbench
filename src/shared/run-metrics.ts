@@ -3,6 +3,9 @@ export type RunMetrics = {
   outputTokens: number;
   promptTokens: number;
   lastRequestPromptTokens: number | null;
+  lastRequestIndex: number | null;
+  lastRequestCachedPromptTokens: number | null;
+  lastRequestCacheReported: boolean;
   estimatedInputTokens: number | null;
   cachedPromptTokens: number;
   usageResponses: number;
@@ -23,6 +26,9 @@ export function emptyRunMetrics(): RunMetrics {
     outputTokens: 0,
     promptTokens: 0,
     lastRequestPromptTokens: null,
+    lastRequestIndex: null,
+    lastRequestCachedPromptTokens: null,
+    lastRequestCacheReported: false,
     estimatedInputTokens: null,
     cachedPromptTokens: 0,
     usageResponses: 0,
@@ -44,19 +50,27 @@ export function restoreRunMetrics(events: unknown): RunMetrics {
     if (!item || typeof item !== 'object') return metrics;
     const row = item as Record<string, unknown>;
     const delay = row.first_token_seconds;
-    const withInputEstimate = recordInputEstimate(metrics, row.estimated_input_tokens);
+    const withInputEstimate = recordInputEstimate(metrics, row.estimated_input_tokens, row.request_index);
     const withFirstToken = typeof delay === 'number' && Number.isFinite(delay) && delay >= 0
       ? recordFirstToken(withInputEstimate, delay)
       : withInputEstimate;
-    return addGenerationUsage(withFirstToken, row.usage);
+    return addGenerationUsage(withFirstToken, row.usage, row.request_index);
   }, emptyRunMetrics());
 }
 
-export function recordInputEstimate(metrics: RunMetrics, value: unknown): RunMetrics {
+export function recordInputEstimate(metrics: RunMetrics, value: unknown, requestIndex?: unknown): RunMetrics {
   const estimate = typeof value === 'number' && Number.isFinite(value) && value >= 0
     ? Math.floor(value)
     : null;
-  return { ...metrics, estimatedInputTokens: estimate, lastRequestPromptTokens: null };
+  const index = typeof requestIndex === 'number' && Number.isInteger(requestIndex) && requestIndex > 0 ? requestIndex : null;
+  return {
+    ...metrics,
+    estimatedInputTokens: estimate,
+    lastRequestPromptTokens: null,
+    lastRequestIndex: index,
+    lastRequestCachedPromptTokens: null,
+    lastRequestCacheReported: false,
+  };
 }
 
 export function recordFirstToken(metrics: RunMetrics, elapsedSeconds: unknown): RunMetrics {
@@ -84,7 +98,7 @@ export function endGeneration(metrics: RunMetrics, nowMs = Date.now()): RunMetri
   };
 }
 
-export function addGenerationUsage(metrics: RunMetrics, usage: unknown): RunMetrics {
+export function addGenerationUsage(metrics: RunMetrics, usage: unknown, requestIndex?: unknown): RunMetrics {
   if (!usage || typeof usage !== 'object') return endGeneration(metrics);
   const row = usage as Record<string, unknown>;
   const hasPromptTokens = typeof row.prompt_eval_count === 'number' && Number.isFinite(row.prompt_eval_count);
@@ -102,6 +116,10 @@ export function addGenerationUsage(metrics: RunMetrics, usage: unknown): RunMetr
     promptTokens: metrics.promptTokens + promptTokens,
     cachedPromptTokens: metrics.cachedPromptTokens + cachedPromptTokens,
     lastRequestPromptTokens: hasPromptTokens ? promptTokens : metrics.lastRequestPromptTokens,
+    lastRequestIndex: typeof requestIndex === 'number' && Number.isInteger(requestIndex) && requestIndex > 0
+      ? requestIndex : metrics.lastRequestIndex,
+    lastRequestCachedPromptTokens: hasCachedPromptTokens ? cachedPromptTokens : null,
+    lastRequestCacheReported: hasCachedPromptTokens,
     promptEvalNanoseconds: metrics.promptEvalNanoseconds + promptEvalNanoseconds,
     modelLoadNanoseconds: metrics.modelLoadNanoseconds + modelLoadNanoseconds,
   };

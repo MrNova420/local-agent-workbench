@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { addGenerationUsage, beginGeneration, emptyRunMetrics, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensPerSecond, recordStreamedText, recordFirstToken, restoreRunMetrics } from '../src/shared/run-metrics';
+import { addGenerationUsage, beginGeneration, emptyRunMetrics, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensPerSecond, recordInputEstimate, recordStreamedText, recordFirstToken, restoreRunMetrics } from '../src/shared/run-metrics';
 
 describe('per-run Ollama measurements', () => {
   it('restores exact prompt/output/cache usage and the last request estimate from saved events', () => {
     const restored = restoreRunMetrics([
       { first_token_seconds: 12, estimated_input_tokens: 4100, usage: { prompt_eval_count: 4000, prompt_eval_cached_count: 2500, eval_count: 30, eval_duration: 10_000_000_000 } },
-      { first_token_seconds: 9, estimated_input_tokens: 4300, usage: { prompt_eval_count: 4200, prompt_eval_cached_count: 3000, eval_count: 20, eval_duration: 10_000_000_000 } },
+      { first_token_seconds: 9, estimated_input_tokens: 4300, request_index: 2, usage: { prompt_eval_count: 4200, prompt_eval_cached_count: 3000, eval_count: 20, eval_duration: 10_000_000_000 } },
     ]);
 
     expect(restored.firstTokenMs).toBe(12_000);
@@ -17,6 +17,30 @@ describe('per-run Ollama measurements', () => {
     expect(restored.usageResponses).toBe(2);
     expect(restored.promptTokenReports).toBe(2);
     expect(restored.cachedPromptReports).toBe(2);
+    expect(restored.lastRequestIndex).toBe(2);
+    expect(restored.lastRequestCachedPromptTokens).toBe(3000);
+    expect(restored.lastRequestCacheReported).toBe(true);
+  });
+
+  it('keeps an exact zero cache report distinct from an unreported counter per request', () => {
+    const first = addGenerationUsage(emptyRunMetrics(), {
+      prompt_eval_count: 7385, prompt_eval_cached_count: 0, eval_count: 12, eval_duration: 1_000_000_000,
+    }, 1);
+    expect(first.lastRequestIndex).toBe(1);
+    expect(first.lastRequestPromptTokens).toBe(7385);
+    expect(first.lastRequestCachedPromptTokens).toBe(0);
+    expect(first.lastRequestCacheReported).toBe(true);
+
+    const secondEstimate = recordInputEstimate(first, 7903, 2);
+    expect(secondEstimate.lastRequestIndex).toBe(2);
+    expect(secondEstimate.lastRequestCacheReported).toBe(false);
+    expect(secondEstimate.lastRequestCachedPromptTokens).toBeNull();
+
+    const second = addGenerationUsage(secondEstimate, { prompt_eval_count: 7903, eval_count: 8, eval_duration: 1_000_000_000 }, 2);
+    expect(second.lastRequestIndex).toBe(2);
+    expect(second.lastRequestPromptTokens).toBe(7903);
+    expect(second.lastRequestCacheReported).toBe(false);
+    expect(second.cachedPromptReports).toBe(1);
   });
   it('keeps the first model-token delay for the whole task', () => {
     const first = recordFirstToken(emptyRunMetrics(), 38.5);
