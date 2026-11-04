@@ -1,6 +1,6 @@
 # Product Backlog
 
-Current app implementation is `e3f2007` with paired documentation/pin commit `4c56b99`, pinned to engine `80c619e7fcabf4e3f5ac7b2595db9274d1774e15`. Engine full suite passed (**381 + 5 subtests**); app suites passed (**123 Vitest, 139 sidecar**), typecheck and exact-pin verification passed, `npm run package` succeeded, and the packaged worker passed `ready/ping/shutdown`. These checks do not establish visible chat/worksheet recovery, live Flint compaction/reasoning enforcement, installer/updater acceptance, or stable release readiness. No project/file/context/output/runtime caps were added.
+The latest app source commit is `9c0b894`; it was pinned to engine `042ffd5a7becabf27a0aaba6eff0079d3da1f4d1` before the current paired changes. Historical suite/package results in this file apply only to their recorded revisions. Engine `7af239c` adds safe same-task continuation after uncertain MCP results and surrogate-safe request-size accounting; the app pin and documentation are being synchronized. Regression tests are authored but intentionally queued with the requested final verification batch. Visible chat, packaged workflow, live Flint, updater/restart recovery, and release readiness remain open.
 
 
 - **2026-11-04 search pagination performance:** Implemented task-scoped lazy continuation for adjacent `search_files` pages. It resumes from saved byte/line position, preserves one lookahead result, and restarts on backward/repeated offsets, changed query, or observed file/directory/ignore changes. It stores metadata only, not file contents or open handles, and has no implicit result or scan ceiling. The exact paired app pin is committed and source-verified; focused engine tools/walker/project-view checks pass (**64**) and app build-config checks pass (**8**). Packaged/visible search acceptance remains pending. Follow-up optimization may reduce per-page metadata validation cost for very large searches without introducing hidden caps.
@@ -78,6 +78,8 @@ The product target is full 1:1 user-facing feature and workflow parity with Code
 - Verify packaged selection, warm-up status, repeat preload, context persistence, unchanged reasoning default, and safe skip with an externally loaded model before calling the feature complete.
 
 ## Active development order: core project work
+
+- **2026-11-04 uncertain MCP continuation and Unicode accounting:** Engine `7af239c` keeps an ambiguous MCP operation from being retried, blocks the remaining batch, continues with MCP disabled so the model can safely inspect local state and return a user-visible status, and records the final outcome as blocked rather than completed. The unresolved operation is carried into compacted checkpoints. Prompt-manifest and tool-result size accounting now tolerate lone surrogates. Source regression cases are authored; test/package/visible acceptance remains queued.
 
 These core items take priority over visual polish, orbit popovers, usage dashboards, and other quality-of-life backlog work. Verification and visible packaged acceptance remain grouped for the final gate, as requested.
 

@@ -1319,3 +1319,9 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 - The paired engine now requests a durable progress checkpoint when the estimated request reaches 70% of its actual input budget. The request remains latched until usage falls below a 60% reset band after compaction. No inference setting is lowered and active streaming is not interrupted.
 - The host requires a structured `update_plan.progress_checkpoint` before the next write, command, or MCP dispatch. Reads and planning remain available; the same task continues after the checkpoint. The checkpoint is visible in saved Plan activity and the prompt-manifest card.
 - Regression cases were added for pressure latching/reset, the mutation gate, prompt injection, manifest recovery, and visible activity rendering. Per the current work instruction, these tests have not been run yet; full suites, package rebuild, and visible Flint acceptance remain queued.
+## 2026-11-04 paired engine change queued for verification
+
+- Engine `7af239c` continues the same task after an uncertain MCP result without replaying the remote call: remaining calls from that batch are recorded as blocked, MCP schemas stay disabled for the task, safe local work can continue, and a final response records a blocked outcome while preserving the exact uncertain operation in the compactable checkpoint.
+- The engine also applies surrogate-safe UTF-8 byte accounting to prompt provenance and large tool-result excerpts, closing another request-preparation path where malformed imported session text could interrupt a run.
+- Source regressions were added for the uncertain-call continuation and lone-surrogate measurements. No tests, package build, or runtime checks have been run for this revision; they remain in the final verification batch.
+
