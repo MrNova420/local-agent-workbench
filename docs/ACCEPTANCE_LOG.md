@@ -1,8 +1,13 @@
+## 2026-11-04 sequential project listing cursor and compaction audit
+
+- Engine `fdf692d44916d7ef6f58c13b60dd979615507ff4` reuses a lazy file-walk cursor across sequential `list_files` pages within a task. It invalidates after observed directory/`.gitignore` changes, discards state on cancellation, preserves output-budget lookahead, and falls back for backward offsets or a different query. It adds no product file/page/context limit. The paired app pin is `274d4a8b258edfd390f47e1820de1e808c8daa19`.
+- Focused tool, walker, and project-view tests: **57 passed**; Python compile and diff checks passed. Exact-pair build-config tests: **8 passed**; source pin verification passed. Full suites, package, visible workflow, and Flint live acceptance were not run.
+- Read-only compaction audit found no reproducible source defect: saved canonical history/checkpoint remains intact, compact requests carry omission markers and recovery instructions, and transcript/checkpoint/tool results have paged retrieval. Existing tests cover large emitted reasoning and decisions across 4K–1M test contexts. Real long-run Flint compaction and packaged transcript/worksheet recovery remain unverified.
 ## 2026-11-04 active-run composer draft preservation
 
 - A source audit found that Redirect now and Queue next cleared the composer after their async sidecar request completed, even if the user had typed a newer follow-up while that request was pending. The UI now clears only the exact draft submitted and retains any newer text for the next action.
 - Red/green: the new regression failed before implementation because the helper was absent; focused `tests/run-state.test.ts` passes **28/28**. `npm run typecheck` and `git diff --check` pass. Full suites, packaged chat, and live Flint acceptance were not run.
-- App `e771db0` remains paired with engine `038bcf7c4b0dc2306fc486d318eb747225cd4cbd`. Inference settings and model state were not changed.
+- The paired app pin is `274d4a8b258edfd390f47e1820de1e808c8daa19` and engine revision is `fdf692d44916d7ef6f58c13b60dd979615507ff4`. Inference settings and model state were not changed.
 
 ## 2026-11-03 active-run startup composer race
 
