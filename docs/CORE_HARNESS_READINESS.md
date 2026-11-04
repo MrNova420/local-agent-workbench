@@ -1,8 +1,8 @@
 # Core harness readiness: audit, design, and execution gates
 
-## Current status (2026-11-03)
+## Current status (2026-11-04)
 
-The current source pair is app implementation `e3f2007` on `workbench/core-chat-activity` / engine `7c49751d03aedf289a399f848521b6775cfb3667`; `core-revision.txt` pins the exact engine commit. The engine includes independent-write batching, operation retention across cancel/finish, state-based Auto classification, and surrogate-safe session snapshots. The app preserves reasoning across provider requests and refreshes the saved follow-up list after a failed queued start, without replaying the task. Current full suites pass: **378 engine tests + 5 subtests; 123 Vitest and 139 sidecar tests**. Typecheck and exact-pin verification pass. The Windows x64 package rebuilt and the bundled sidecar ready/ping/shutdown smoke passes.
+The current source pair is app implementation `e3f2007` on `workbench/core-chat-activity` / engine `80c619e7fcabf4e3f5ac7b2595db9274d1774e15`; `core-revision.txt` pins the exact engine commit. The engine now treats reasoning-only text as saved transcript, not durable implementation progress; continuation depends on checkpoint/operation/verification evidence. It also handles lone surrogates safely in checkpoint fingerprints and context-size estimation. Engine full suite: **381 passed + 5 subtests**. The paired app suites, typecheck, exact-pin verification, and package rebuild for this new pair are pending.
 
 The prior screenshot-backed Home inspection showed **2 available workspaces and 5 saved sessions** in the installed beta.3; matching app-library records and project copies were present then. This is historical Home/data visibility evidence, not current packaged acceptance. The older renderer/recovery changes remain in source; their test counts are recorded in `ACCEPTANCE_LOG.md`. The 2026-11-02 pre-inference journal discrepancy remains historically unreproduced; the copy-mode regression confirms journal agreement for a mocked interrupted request but does not identify the original cause.
 

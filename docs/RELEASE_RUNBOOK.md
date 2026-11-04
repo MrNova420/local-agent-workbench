@@ -51,6 +51,8 @@ Never force-move a published tag to repair an artifact. If an artifact is wrong,
 
 As checked against the public [GitHub releases page](https://github.com/MrNova420/local-agent-workbench/releases) on 2026-11-03, `v0.1.0-beta.2` is still Latest. `v0.1.0-beta.3` remains draft-only, so it is not discoverable by the public updater. App implementation `e3f2007` / engine pin `7c49751d03aedf289a399f848521b6775cfb3667` has passing full local suites, typecheck, exact-pin check, package build, and bundled-worker startup/ping/shutdown. It has not passed visible workflow, live Flint, or installed updater/recovery acceptance and has not been published. The draft beta.3 tag/version must not be reused or force-moved; after all pre-tag gates pass, select a strictly higher version and rebuild that exact commit. Documentation and planning work alone do not advance the app version. User-reported end-to-end website development is also recorded in `ACCEPTANCE_LOG.md`; current-build screenshots and cross-platform packages remain separate acceptance items.
 
+The newer local source pair is app `e3f2007` with engine `80c619e7fcabf4e3f5ac7b2595db9274d1774e15`. Its paired tests, typecheck, exact pin check, app-directory packaging, and bundled-worker handshake pass as recorded in `ACCEPTANCE_LOG.md`; it is not installed or published. Visible acceptance, live Flint compaction, installer build, and updater/recovery acceptance remain release gates.
+
 ## Upstream references
 
 - [Electron: updating applications](https://www.electronjs.org/docs/latest/tutorial/updates)
