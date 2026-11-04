@@ -1505,6 +1505,11 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 - The system CPU tile remains a machine-wide percentage bounded to 0–100. Sidecar and inference-worker `psutil` process CPU values use 100% per fully occupied logical core and can exceed 100%; the UI now converts both to core equivalents, preserves the decimal reading, and explains the unit in the resource inspector. This prevents a multi-core process reading from being presented as machine CPU load.
 - Focused renderer utility regression: `npm exec vitest run tests/resource-format.test.ts` — **4 passed**. `npm run typecheck` passed. This is source verification only; no package or visible app acceptance was performed.
 
+## 2026-11-04 public Git history privacy check
+
+- Checked the public `main` and workbench branches and beta.2/beta.3 tags. Across 97 reachable revisions containing the old Home location element, each version contains only the redaction placeholder; no unredacted element was found. The historical screenshot path is referenced by an older README revision but the screenshot object is not present in the repository history. The public history currently has no identified location payload to purge, so no force-push or tag rewrite was performed.
+- This check covers Git-tracked content reachable from the currently published branch/tag refs. It does not inspect GitHub release attachments, external caches, forks, or local files outside the repository.
+
 ## 2026-11-04 paged Hugging Face repository trees
 
 - Repository file browsing now follows Hub next links for the selected repository and pinned revision, exposes additional file pages, and keeps already selected files selected while pages load. Continuation links must remain on the configured origin and exact tree path. This addresses Hub tree pagination, documented by the Hugging Face client: https://huggingface.co/docs/huggingface_hub/v1.27.0/en/package_reference/hf_api . Catalog and sidecar regression cases are authored and queued. App `642ae81` pins engine `18986f38ab3e680ae3c686e14f9a70e1e25fdbb4`. No test, typecheck, package, Hub download, or live model run was performed.

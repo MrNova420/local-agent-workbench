@@ -6,6 +6,8 @@ The current paired source is on `workbench/core-chat-activity`, pinned to engine
 
 The resource inspector now labels sidecar and inference-worker process CPU in core equivalents; only machine-wide CPU is shown as a 0–100% system percentage. This corrects the prior ambiguity where a multi-core process value could be read as system load. The focused formatter regression and TypeScript typecheck pass; a rebuilt package and visible UI verification are still required.
 
+The public Git history check covered `main`, the workbench branch, and beta.2/beta.3 tags: all 97 reachable app revisions containing the old Home location element contain only its redaction placeholder, and the historical screenshot file is not a Git object. No sensitive location payload was found in those refs, so history rewriting was not warranted. GitHub release attachments, forks, and external caches were not part of this check.
+
 Queued-follow-up recovery is also hardened: if a queue item becomes stale between renderer display and run-start validation, the sidecar returns a structured reconciliation result and the renderer restores the prompt text to the composer instead of surfacing a failed chat request. A regression is authored but unrun. The beta.3 installation predates this source change.
 
 Queue add/remove now follows the same durability rule: acknowledgement requires at least one saved mirror, and a failed active queue mutation is rolled back in memory so the composer can retain and retry the prompt. The new regression is queued for grouped verification.
