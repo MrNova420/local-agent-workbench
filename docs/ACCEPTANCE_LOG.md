@@ -1273,3 +1273,10 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 - Full paired suites pass: engine **352 passed, 5 subtests**; app **115 Vitest + 131 sidecar pytest**; TypeScript typecheck passes. Both Python suites emit only the existing Starlette `python_multipart` pending-deprecation warning.
 - Ollama's `prompt_eval_cached_count` is forwarded and durably recorded in generation usage where the provider reports it. The UI labels missing reports as unknown. Ollama does not expose actual KV allocation size/type through this response, so the app reports those runtime details as unavailable rather than claiming they're measured. Live Flint cache reuse and model-runner KV allocation are not yet established by packaged UI evidence.
 - Device currently has Local Agent Workbench `0.1.0` installed at `%LOCALAPPDATA%\\LocalAgentWorkbench`; no Workbench/Electron process was running at inspection. Building the paired installer and refreshing the installed copy are the next steps. Visible UI/Flint acceptance remains open.
+## 2026-11-03 independent file-write batching
+
+- Paired engine `621b070753bb3383eb00dcff586b5ce288c6865e` can execute independent, non-overlapping structured file writes together only under a non-interactive approved path. Interactive `ask`, plan/copy access, per-action approvals, ambiguous or overlapping paths, and mixed batches remain sequential. Per-file append locks allow unrelated appends to proceed concurrently while same-file/hardlink appends remain ordered.
+- Cancellation preserves each submitted operation's completed/uncertain result and stops before another model request; chat tool responses remain in model-call order. No context/output/reasoning settings or project-wide/file-size limits changed.
+- Focused engine checks: `python -m pytest tests/test_operation_stream.py tests/test_tools.py -q` — **112 passed**; `python -m py_compile desktop_engine.py` and `git diff --check` passed. Full suites, packaged installer, visible project workflow, and Flint acceptance were not run. This is not release-readiness evidence.
+
+\n
