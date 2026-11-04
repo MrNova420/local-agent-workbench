@@ -1337,3 +1337,8 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 - Queued follow-ups now store their queue ID on the durable turn record. If a repeated/stale Start-next request arrives after that queue item was already consumed, the sidecar returns a structured already-started result instead of throwing `That queued prompt no longer exists` or creating a second task. The renderer refreshes the saved session and queue from the authoritative session state.
 - A worker regression covers an already-recorded queue ID, no second active run, queue refresh, and run-lock release. It is authored and queued; no tests, typecheck, package, or visible multi-window acceptance were run for this change.
 
+## 2026-11-04 Unicode-safe interrupted recovery prompt
+
+- The recovery prompt serialized uncertain operation details with `ensure_ascii=False`. A lone surrogate in an imported path or streamed tool argument therefore raised `UnicodeEncodeError` during prompt construction, before the resumed task could start. Recovery now JSON-escapes these code units while the canonical session and returned uncertain-operation record retain the original value.
+- Added a regression that stores an unpaired surrogate in an uncertain operation, resumes the session, and checks the escaped prompt plus lossless session reload. It is authored and queued; no test, package, or live recovery run has been performed.
+

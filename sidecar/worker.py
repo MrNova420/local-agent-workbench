@@ -1436,7 +1436,10 @@ class AgentService:
             else:
                 continuation = "Continue the interrupted task from its last safe checkpoint. Do not repeat any operation that already has a result. An in-flight operation may have partially completed; inspect its current effect before proposing a retry and ask for approval as usual."
             if uncertain_operations:
-                continuation += "\n\nUncertain operation details (review each before repeating):\n" + json.dumps(uncertain_operations, ensure_ascii=False, indent=2)
+                # Operation arguments may contain lone UTF-16 surrogates from a
+                # Windows path or model stream. JSON ASCII escaping keeps the
+                # recovery prompt and subsequent UTF-8 session checkpoint valid.
+                continuation += "\n\nUncertain operation details (review each before repeating):\n" + json.dumps(uncertain_operations, ensure_ascii=True, indent=2)
             state["last_recovery"] = {"action": action, "interrupted_turn_id": run_state.get("turn_id"), "at": time.time()}
             run_state["status"] = "recovered"
             run_state["recovered_at"] = time.time()

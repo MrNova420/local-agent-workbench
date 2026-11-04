@@ -1344,6 +1344,25 @@ def test_interrupted_recovery_retry_warns_and_restore_does_not_run(service, tmp_
     assert restored["state"]["run_state"]["status"] == "restored"
 
 
+def test_interrupted_recovery_preserves_lone_surrogate_operation_data(service, tmp_path):
+    project = tmp_path / "surrogate-recovery-project"
+    project.mkdir()
+    session = service.sessions.create(str(project), "model-a:latest", 262144)
+    invalid_path = "generated-\udc9d.py"
+    session["run_state"] = {
+        "status": "interrupted", "turn_id": "turn-surrogate", "safe_messages": session["messages"],
+        "uncertain_operation": {"name": "write_file", "arguments": {"path": invalid_path}},
+    }
+    service.sessions.save(session)
+
+    recovered = service.handle("session_recover", {"sessionId": session["session_id"], "action": "resume"})
+    reloaded = service.sessions.load(session["session_id"], str(project))["state"]
+
+    assert recovered["uncertain_operation"]["arguments"]["path"] == invalid_path
+    assert r"\udc9d" in recovered["prompt"]
+    assert reloaded["run_state"]["uncertain_operation"]["arguments"]["path"] == invalid_path
+
+
 def test_stop_after_operation_command_marks_engine(service):
     class Engine:
         requested = False
