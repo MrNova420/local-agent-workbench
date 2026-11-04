@@ -1,3 +1,9 @@
+## 2026-11-04 stop decisions bound to active turn (verification queued)
+
+- App `e515fde` / engine `255af48f9cc4f93c6623454261c2f3d419f7f427` carries the active session and turn identity with Cancel and Finish After Operation choices. The renderer captures identity when opening the required decision dialog; the main-process close-and-cancel path obtains identity from the `run_started` event; the sidecar matches both IDs under its active-run lock before signaling cancellation or requesting a stop at the operation boundary.
+- Missing or stale identity fails closed. A delayed dialog response for an old turn cannot cancel a newer turn. The app-close path also refuses to claim it cancelled when run identity has not attached yet.
+- Wrong-turn and identity-mismatch regressions were updated but deliberately not run. `git diff --check` passed before commit. Typecheck, app/sidecar suites, package, visible cancel/close choices, and active-run acceptance remain queued. No model or app was launched.
+
 ## 2026-11-04 OpenCode loop parity and repeated action review (verification queued)
 
 - The full product comparison was extended to the OpenCode V1 prompt/processor loop and the Workbench engine/sidecar lifecycle. OpenCode's processor uses snapshots before provider streaming, typed tool state transitions and a repeated-action permission guard; Workbench already has request-boundary steering, same-task checkpointing, durable tool results and prose no-progress detection, but lacked repeated structured-action detection. Review also found that an approval could still be shown after both session mirrors failed; the sidecar now prevents that action and marks its activity unavailable.
