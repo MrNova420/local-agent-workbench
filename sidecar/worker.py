@@ -1469,13 +1469,15 @@ class AgentService:
                 if not self.run_lock.acquire(blocking=False):
                     raise RuntimeError("A task is already running.")
                 try:
-                    self._start_run(options)
+                    start_result = self._start_run(options)
+                    if isinstance(start_result, dict) and start_result.get("started") is False:
+                        self.run_lock.release()
                 except Exception:
                     self.run_lock.release()
                     raise
             finally:
                 self.ollama_preload_lock.release()
-            return {"started": True}
+            return start_result if isinstance(start_result, dict) else {"started": True}
         if command == "run_cancel":
             return {"cancelled": self.cancel()}
         if command == "run_stop_after_operation":
@@ -1698,7 +1700,7 @@ class AgentService:
         self.ollama_import_thread.start()
         return {"started": True, "name": name}
 
-    def _start_run(self, options: dict[str, Any]) -> None:
+    def _start_run(self, options: dict[str, Any]) -> dict[str, Any] | None:
         source = validate_selected_workspace(True, options.get("workspace", ""))
         prompt = str(options.get("prompt", "")).strip()
         model = str(options.get("model", "")).strip()
@@ -1754,6 +1756,15 @@ class AgentService:
         if queued_prompt_id is not None:
             if not isinstance(queued_prompt_id, str) or not queued_prompt_id:
                 raise ValueError("Queued prompt identity is invalid.")
+            queued_rows = _validated_queued_prompts(state)
+            if not any(row["id"] == queued_prompt_id for row in queued_rows):
+                prior_turn = next((row for row in reversed(state.get("turns", []))
+                                   if isinstance(row, dict) and row.get("queued_prompt_id") == queued_prompt_id), None)
+                if prior_turn is not None:
+                    self.emit({"type": "session_queue_update", "sessionId": state["session_id"],
+                               "workspace": str(source), "queuedPrompts": copy.deepcopy(queued_rows)})
+                    return {"started": False, "queuedPromptAlreadyStarted": True,
+                            "turnId": prior_turn.get("turn_id"), "queuedPrompts": queued_rows}
             consume_queued_prompt(state, queued_prompt_id, prompt)
         state.update(
             model=model, model_id=model, provider_id=provider.provider_id, provider=provider.provider_id,
@@ -1826,7 +1837,7 @@ class AgentService:
         if not isinstance(turn_records, list):
             turn_records = state["turns"] = []
         prior_user_messages = sum(1 for row in state.get("messages", []) if isinstance(row, dict) and row.get("role") == "user")
-        turn_records.append({"turn_id": turn_id, "prompt": prompt, "started_at": turn_started_at,
+        turn_record = {"turn_id": turn_id, "prompt": prompt, "started_at": turn_started_at,
                              "workspace": str(working), "approval_mode": approval_mode, "status": "running",
                              "settings": {"model": model, "provider_id": provider.provider_id,
                                  "context": state["context"], "max_tokens": state["max_tokens"],
@@ -1837,7 +1848,10 @@ class AgentService:
                                  "harness_profile": harness_profile, "task_intent": task_intent,
                                  "skills_enabled": skills_enabled, "skill_sources": list(skill_sources),
                                  "permission_rules": copy.deepcopy(captured_permission_rules)},
-                             "transcript_saved": False, "prior_user_messages": prior_user_messages})
+                             "transcript_saved": False, "prior_user_messages": prior_user_messages}
+        if isinstance(queued_prompt_id, str):
+            turn_record["queued_prompt_id"] = queued_prompt_id
+        turn_records.append(turn_record)
         state["run_state"] = {
             "status": "running", "turn_id": turn_id, "prompt": prompt, "started_at": turn_started_at,
             "safe_messages": [*copy.deepcopy(state.get("messages", [])), {"role": "user", "content": prompt}],

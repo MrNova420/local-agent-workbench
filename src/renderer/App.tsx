@@ -50,7 +50,7 @@ type Session = {
   activity_events?: ActivityRecord[];
   queued_prompts?: QueuedPrompt[];
   session_approval_granted?: boolean;
-  turns?: Array<{ turn_id?: string; prompt?: string; started_at?: number; finished_at?: number; status?: string; transcript_saved?: boolean }>;
+  turns?: Array<{ turn_id?: string; queued_prompt_id?: string; prompt?: string; started_at?: number; finished_at?: number; status?: string; transcript_saved?: boolean }>;
   plan?: PlanItem[];
   usage_events?: Array<{ turn_id?: string; request_index?: number; first_token_seconds?: number; estimated_input_tokens?: number; usage?: Record<string, unknown> }>;
   recovery_issues?: string[];
@@ -1156,8 +1156,20 @@ export default function App() {
     setTrace([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setRunning(true); setRunStarting(true); setPhase('Connecting to local runtime');
     setStartedAt(Date.now()); setElapsed(0); setRunMetrics(emptyRunMetrics()); setFirstOperationSeconds(null); setFirstFileWriteSeconds(null);
     try {
-      await request({ command: 'run_start', options: run });
+      const startResult = await request<{ started: boolean; queuedPromptAlreadyStarted?: boolean; queuedPrompts?: QueuedPrompt[] }>({ command: 'run_start', options: run });
       runStartPendingRef.current = false;
+      if (startResult.queuedPromptAlreadyStarted) {
+        setRunning(false); setRunStarting(false); setPhase('Ready');
+        setMessages((current) => current.at(-1)?.role === 'user' && current.at(-1)?.content === task && !current.at(-1)?.turnId
+          ? current.slice(0, -1) : current);
+        if (session && startResult.queuedPrompts) {
+          setSession((current) => current?.session_id === session.session_id
+            ? reconcileQueuedPromptSnapshot(current, session.session_id, startResult.queuedPrompts!) : current);
+        }
+        await loadSession(session.session_id, workspace);
+        notify('This queued follow-up was already started. No duplicate task was launched; the saved session has been refreshed.', 'warn');
+        return;
+      }
       setRunStarting(false);
       // Keep the composer ready for same-task steering while the model reasons.
       promptRef.current?.focus();

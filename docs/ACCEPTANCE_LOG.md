@@ -1332,3 +1332,8 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 - The approval modal identifies the previous uncertain MCP operation and warns that retrying may duplicate its effect. The activity row retains the explicit-review marker, and the terminal blocked message directs the user to inspect before retrying. A final response cannot label the task completed while the original effect remains uncertain.
 - Engine, worker, prompt-measurement, checkpoint, and renderer regressions are authored. No tests, typecheck, package build, MCP runtime, or visual acceptance were run for this source pair; they remain queued for the grouped verification pass.
 
+## 2026-11-04 queued follow-up duplicate-start recovery
+
+- Queued follow-ups now store their queue ID on the durable turn record. If a repeated/stale Start-next request arrives after that queue item was already consumed, the sidecar returns a structured already-started result instead of throwing `That queued prompt no longer exists` or creating a second task. The renderer refreshes the saved session and queue from the authoritative session state.
+- A worker regression covers an already-recorded queue ID, no second active run, queue refresh, and run-lock release. It is authored and queued; no tests, typecheck, package, or visible multi-window acceptance were run for this change.
+

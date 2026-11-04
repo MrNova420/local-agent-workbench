@@ -169,6 +169,31 @@ def test_consume_queued_prompt_requires_exact_id_and_text_and_removes_once():
         worker.consume_queued_prompt(state, "queue-1", item["prompt"])
 
 
+def test_run_start_recognizes_a_queued_prompt_already_recorded_as_a_turn(service, tmp_path, monkeypatch):
+    project = tmp_path / "already-started-queue"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    state["queued_prompts"] = []
+    state["turns"] = [{"turn_id": "turn-already-started", "queued_prompt_id": "queue-1",
+                       "prompt": "Run the saved follow-up", "status": "completed"}]
+    service.sessions.save(state)
+    events = []
+    monkeypatch.setattr(service, "emit", events.append)
+
+    result = service.handle("run_start", {"options": {
+        "workspace": str(project), "sessionId": state["session_id"],
+        "queuedPromptId": "queue-1", "prompt": "Run the saved follow-up",
+        "model": "model-a:latest", "context": 4096, "maxTokens": 128,
+        "temperature": 0.2, "access": "ask", "approvalMode": "per-action",
+    }})
+
+    assert result == {"started": False, "queuedPromptAlreadyStarted": True,
+                      "turnId": "turn-already-started", "queuedPrompts": []}
+    assert service.active is None
+    assert not service.run_lock.locked()
+    assert any(event.get("type") == "session_queue_update" for event in events)
+
+
 def test_followup_prompt_queue_updates_only_its_active_session(service, tmp_path, monkeypatch):
     project = tmp_path / "active-queue-project"
     project.mkdir()
