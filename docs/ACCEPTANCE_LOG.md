@@ -1510,6 +1510,11 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 - Checked the public `main` and workbench branches and beta.2/beta.3 tags. Across 97 reachable revisions containing the old Home location element, each version contains only the redaction placeholder; no unredacted element was found. The historical screenshot path is referenced by an older README revision but the screenshot object is not present in the repository history. The public history currently has no identified location payload to purge, so no force-push or tag rewrite was performed.
 - This check covers Git-tracked content reachable from the currently published branch/tag refs. It does not inspect GitHub release attachments, external caches, forks, or local files outside the repository.
 
+## 2026-11-04 large-file write acceptance
+
+- Paired engine `c110ce253344904026a6684a224e5379fba3b7a5` adds a regression that writes 100,001 UTF-8 lines, verifies the saved file, appends two lines, and verifies 100,003 lines. Focused engine check: `python -m pytest tests/test_tools.py::ToolTests::test_write_and_append_files_over_100k_lines -q` — **1 passed**.
+- The app pin now targets that engine commit. This proves the host write/append path, not model generation of a 100k-line file in a single response. Large model output remains incremental; no context or output setting was changed. App typecheck/package/visible acceptance for the new pin remain open.
+
 ## 2026-11-04 paged Hugging Face repository trees
 
 - Repository file browsing now follows Hub next links for the selected repository and pinned revision, exposes additional file pages, and keeps already selected files selected while pages load. Continuation links must remain on the configured origin and exact tree path. This addresses Hub tree pagination, documented by the Hugging Face client: https://huggingface.co/docs/huggingface_hub/v1.27.0/en/package_reference/hf_api . Catalog and sidecar regression cases are authored and queued. App `642ae81` pins engine `18986f38ab3e680ae3c686e14f9a70e1e25fdbb4`. No test, typecheck, package, Hub download, or live model run was performed.
