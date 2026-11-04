@@ -1,3 +1,8 @@
+## 2026-11-04 adaptive continuation source pairing (verification queued)
+
+- App source `516f701` now pins engine `1688f463d6bf973b44e385d9c5d7fe8db5e99f53`. Engine continuation fingerprints combine durable host/project state with complete assistant content and emitted reasoning: distinct responses can proceed toward implementation, while an exact repeated response under unchanged state is reported incomplete. There is no fixed retry count or runtime deadline; the separate plan-only loop guard remains unchanged.
+- Engine regression cases and app exact-pin/build integration checks are queued for the final grouped verification batch. No tests, typecheck, package, visible workflow, or model request has been run against this paired revision. This is not release-readiness evidence.
+
 ## 2026-11-04 search pagination source audit (superseded by the cursor entry below)
 
 - Read-only source inspection confirmed that each `search_files` offset request currently walks the project from the beginning and reopens/rechecks prior files. This creates repeated I/O for later pages but does not impose a global result cap.
