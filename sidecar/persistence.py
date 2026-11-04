@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -71,6 +72,45 @@ def _append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def _normalize_path(value: str | Path) -> str:
     return os.path.normcase(str(Path(value).resolve()))
+
+
+def _replay_context_checkpoint(task: dict[str, Any], manifest: dict[str, Any]) -> None:
+    """Restore the host's pre-write checkpoint latch from durable prompt evidence."""
+    due = manifest.get("context_checkpoint_due")
+    if not isinstance(due, bool):
+        return
+    state = task.setdefault("context_checkpoint", {})
+    if not isinstance(state, dict):
+        state = task["context_checkpoint"] = {}
+    raw_ratio = manifest.get("context_checkpoint_ratio")
+    ratio = (float(raw_ratio) if isinstance(raw_ratio, (int, float))
+             and not isinstance(raw_ratio, bool) and math.isfinite(raw_ratio) else None)
+    if ratio is not None:
+        state["last_ratio"] = ratio
+    estimated = manifest.get("estimated_request_input_tokens")
+    if isinstance(estimated, int) and not isinstance(estimated, bool) and estimated >= 0:
+        state["last_estimated_tokens"] = estimated
+    budget = manifest.get("input_budget")
+    if isinstance(budget, int) and not isinstance(budget, bool) and budget > 0:
+        state["input_budget"] = budget
+    for source, target in (("context_checkpoint_threshold_ratio", "threshold_ratio"),
+                           ("context_checkpoint_reset_ratio", "reset_ratio")):
+        value = manifest.get(source)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+            state[target] = float(value)
+    acknowledged = manifest.get("context_checkpoint_acknowledged")
+    if isinstance(acknowledged, bool):
+        state["acknowledged"] = acknowledged
+    if due:
+        state.update(armed=True, due=True)
+        state.setdefault("requested_at", manifest.get("timestamp", time.time()))
+    elif ratio is not None and isinstance(state.get("reset_ratio"), (int, float)) and ratio < state["reset_ratio"]:
+        state.update(armed=False, due=False, acknowledged=False)
+    else:
+        state["due"] = False
+        state["armed"] = bool(state.get("armed", False) or acknowledged)
+    state["updated_at"] = manifest.get("timestamp", time.time())
+    task["updated_at"] = state["updated_at"]
 
 
 def _replay_run_event(state: dict[str, Any], event: dict[str, Any], *,
@@ -332,6 +372,27 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any], *,
                     task["acceptance_criteria_source"] = "agent" if event.get("source") != "workbench" else "awaiting_agent_refinement"
                 record_plan(checkpoint, event.get("items", []), None, event.get("decisions"), event.get("taskMode"),
                             plan_source="agent" if event.get("source") != "workbench" else "workbench")
+                progress = event.get("progressCheckpoint")
+                if isinstance(progress, dict):
+                    context_state = task.setdefault("context_checkpoint", {})
+                    if not isinstance(context_state, dict):
+                        context_state = task["context_checkpoint"] = {}
+                    verified = progress.get("verifiedFindings", progress.get("verified_findings"))
+                    completed = progress.get("completedWork", progress.get("completed_work"))
+                    pending = progress.get("pendingWork", progress.get("pending_work"))
+                    next_action = progress.get("nextAction", progress.get("next_action"))
+                    if (isinstance(verified, list) and all(isinstance(item, str) for item in verified)
+                            and isinstance(completed, list) and all(isinstance(item, str) for item in completed)
+                            and isinstance(pending, list) and all(isinstance(item, str) for item in pending)
+                            and isinstance(next_action, str) and next_action.strip()):
+                        context_state.update(due=False, acknowledged=True,
+                                             summary={"verified_findings": copy.deepcopy(verified),
+                                                      "completed_work": copy.deepcopy(completed),
+                                                      "pending_work": copy.deepcopy(pending),
+                                                      "next_action": next_action.strip()},
+                                             acknowledged_at=event.get("timestamp", time.time()),
+                                             updated_at=event.get("timestamp", time.time()))
+                        task["updated_at"] = context_state["updated_at"]
         plan_activity = {
             "id": event.get("actionId") or uuid.uuid4().hex, "turnId": event.get("turnId", run.get("turn_id")),
             "sessionId": state["session_id"], "workspace": event.get("workspace", state.get("workspace")),
@@ -371,6 +432,13 @@ def _replay_run_event(state: dict[str, Any], event: dict[str, Any], *,
             "name": f"Model request {int(event.get('request_index', 0))}", "status": "prepared",
             "promptManifest": manifest, "timestamp": event.get("timestamp", time.time()),
         })
+        checkpoint = state.get("task_checkpoint")
+        if isinstance(checkpoint, dict):
+            task = checkpoint.get("current", checkpoint)
+            if isinstance(task, dict):
+                _replay_context_checkpoint(task, {
+                    **manifest, "timestamp": event.get("timestamp", event.get("at", time.time()))
+                })
     elif kind == "generation_usage":
         request_index = event.get("request_index")
         prompt = next((item for item in reversed(state.setdefault("activity_events", []))

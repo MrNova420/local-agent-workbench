@@ -720,6 +720,39 @@ def test_agent_plan_decisions_are_saved_to_checkpoint_and_activity(service, tmp_
     assert plan_activities[1]["taskMode"] == "plan_only"
 
 
+def test_due_context_checkpoint_prompt_forces_immediate_session_snapshot(service, tmp_path, monkeypatch):
+    project = tmp_path / "context-checkpoint-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 8192)
+    state["task_checkpoint"] = {"current": {"task_id": "task-pressure", "context_checkpoint": {
+        "armed": True, "due": True, "acknowledged": False,
+    }}}
+    snapshots = []
+    def save_snapshot(controller):
+        snapshots.append(copy.deepcopy(controller["session"]))
+        return {"app_saved": True, "project_saved": True, "error": None}
+
+    monkeypatch.setattr(service, "_save_active_session", save_snapshot)
+    monkeypatch.setattr(service.sessions, "append_events", lambda *_args: {
+        "app_saved": True, "project_saved": True, "error": None,
+    })
+    monkeypatch.setattr(service, "emit", lambda _event: None)
+    controller = {"session": state, "turn_id": "turn-pressure", "checkpoint_lock": threading.RLock(),
+                  "last_checkpoint": time.monotonic(), "last_journal_flush": time.monotonic(),
+                  "journal_pending": []}
+
+    service._publish_run_event(controller, SimpleNamespace(workspace=project), {
+        "type": "prompt_manifest", "activityId": "turn-pressure-request-1", "request_index": 1,
+        "estimated_request_input_tokens": 7000, "input_budget": 10000,
+        "context_checkpoint_due": True, "context_checkpoint_threshold_ratio": 0.70,
+        "context_checkpoint_reset_ratio": 0.60, "context_checkpoint_ratio": 0.70,
+        "context_checkpoint_acknowledged": False,
+    })
+
+    assert len(snapshots) == 1
+    assert snapshots[0]["task_checkpoint"]["current"]["context_checkpoint"]["due"] is True
+
+
 def test_session_run_settings_cannot_change_during_active_run(service, tmp_path):
     workspace = tmp_path / "busy-project"
     workspace.mkdir()

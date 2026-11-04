@@ -300,6 +300,55 @@ class MirroredSessionStoreTests(unittest.TestCase):
         self.assertEqual(prompt["providerRequest"]["header_wait_seconds"], 1.25)
         self.assertEqual(prompt["providerRequest"]["provider_done_reason"], "length")
 
+    def test_checkpoint_pressure_and_acknowledgement_survive_journal_recovery(self):
+        state = {
+            "session_id": "s-pressure", "workspace": "C:/project",
+            "run_state": {"turn_id": "turn-pressure"}, "activity_events": [],
+            "task_checkpoint": {"current": {"task_id": "task-pressure", "context_checkpoint": {
+                "armed": False, "due": False, "acknowledged": False,
+            }}},
+        }
+        _replay_run_event(state, {"type": "prompt_manifest", "activityId": "turn-pressure-request-1",
+                                  "turnId": "turn-pressure", "timestamp": 10,
+                                  "request_index": 1, "estimated_request_input_tokens": 7000,
+                                  "input_budget": 10000, "context_checkpoint_due": True,
+                                  "context_checkpoint_threshold_ratio": 0.70,
+                                  "context_checkpoint_reset_ratio": 0.60,
+                                  "context_checkpoint_ratio": 0.70,
+                                  "context_checkpoint_acknowledged": False})
+
+        latch = state["task_checkpoint"]["current"]["context_checkpoint"]
+        self.assertTrue(latch["armed"])
+        self.assertTrue(latch["due"])
+        self.assertFalse(latch["acknowledged"])
+        self.assertEqual(latch["last_estimated_tokens"], 7000)
+
+        _replay_run_event(state, {"type": "plan", "turnId": "turn-pressure", "source": "agent",
+                                  "items": [{"title": "Implement", "status": "in_progress"}],
+                                  "progressCheckpoint": {
+                                      "verifiedFindings": ["The route table was inspected."],
+                                      "completedWork": ["Recorded the current route."],
+                                      "pendingWork": ["Add the page."],
+                                      "nextAction": "Add the page.",
+                                  }})
+        latch = state["task_checkpoint"]["current"]["context_checkpoint"]
+        self.assertFalse(latch["due"])
+        self.assertTrue(latch["acknowledged"])
+        self.assertEqual(latch["summary"]["next_action"], "Add the page.")
+
+        _replay_run_event(state, {"type": "prompt_manifest", "activityId": "turn-pressure-request-2",
+                                  "turnId": "turn-pressure", "timestamp": 12,
+                                  "request_index": 2, "estimated_request_input_tokens": 5500,
+                                  "input_budget": 10000, "context_checkpoint_due": False,
+                                  "context_checkpoint_threshold_ratio": 0.70,
+                                  "context_checkpoint_reset_ratio": 0.60,
+                                  "context_checkpoint_ratio": 0.55,
+                                  "context_checkpoint_acknowledged": False})
+        latch = state["task_checkpoint"]["current"]["context_checkpoint"]
+        self.assertFalse(latch["armed"])
+        self.assertFalse(latch["due"])
+        self.assertFalse(latch["acknowledged"])
+
     def test_journal_recovery_keeps_same_task_redirect_distinct_from_user_cancel(self):
         state = {
             "session_id": "s-steering", "workspace": "C:/project",

@@ -223,7 +223,8 @@ class AgentService:
                     "workspace": str(turn.workspace), "timestamp": event.get("at", time.time())}
         event_kind = event.get("type")
         force_journal = event_kind in {"tool_start", "tool_done", "tool_batch", "plan", "context_compacted", "prompt_manifest", "inference_settings", "request_dispatched", "request_headers", "request_complete", "request_error", "steering_interrupted", "approval_request", "question_request", "question_answered", "generation_usage", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
-        force_snapshot = event_kind in {"context_compacted", "request_error", "steering_interrupted", "approval_request", "question_request", "question_answered", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
+        force_snapshot = (event_kind in {"context_compacted", "request_error", "steering_interrupted", "approval_request", "question_request", "question_answered", "error", "cancelled", "stopped_after_operation", "generation_complete", "complete"}
+                          or (event_kind == "prompt_manifest" and event.get("context_checkpoint_due") is True))
         checkpoint_lock = controller["checkpoint_lock"]
         with checkpoint_lock:
             steering_interrupt = controller.get("steering_interrupt")

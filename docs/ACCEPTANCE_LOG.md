@@ -1,3 +1,8 @@
+## 2026-11-04 context-checkpoint recovery hardening (verification queued)
+
+- Prompt-manifest journal replay now restores `context_checkpoint` due/armed/acknowledged state, thresholds, measured request ratio, estimated tokens, and budget. A structured plan event restores the acknowledged verified findings, completed/pending work, and next action. When a request crosses the threshold, the sidecar forces an immediate mirrored snapshot as well as its durable event record.
+- Added mocked replay and worker snapshot regressions for threshold crossing, checkpoint acknowledgement, reset below the reset band, and immediate snapshot behavior. These are authored and queued; no test, typecheck, package, visible workflow, or model run has been performed for this change.
+
 ## 2026-11-04 adaptive continuation source pairing (verification queued)
 
 - App source `516f701` now pins engine `1688f463d6bf973b44e385d9c5d7fe8db5e99f53`. Engine continuation fingerprints combine durable host/project state with complete assistant content and emitted reasoning: distinct responses can proceed toward implementation, while an exact repeated response under unchanged state is reported incomplete. There is no fixed retry count or runtime deadline; the separate plan-only loop guard remains unchanged.
