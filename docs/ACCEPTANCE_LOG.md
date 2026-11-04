@@ -19,6 +19,11 @@
 - A provider retry transition now forces both the session event journal and mirrored snapshot to persist the structured retry attempt and active phase before entering its cancelable wait. This keeps a restart from showing the earlier request failure phase while the worker had already moved into retrying.
 - Added a worker regression for immediate journal/snapshot persistence. It remains queued with the grouped verification pass.
 
+## 2026-11-04 Follow-up queue request idempotency (verification queued)
+
+- Renderer queue submissions now carry a stable client request ID across retries of the same draft. The sidecar persists that ID with the queue item and transfers it to the turn record when consumed. Replayed IPC returns the existing queued item or started turn; reusing the same ID with different prompt text is rejected. No duplicate queue item or task is created.
+- Added regressions for replay, conflicting text reuse, and replay after consumption. Typecheck and sidecar tests remain queued; no app or model run occurred.
+
 ## 2026-11-04 stale queued-follow-up recovery source fix (verification queued)
 
 - App source `b6cfeda` pins engine `0da5a89b8c2f8f477928deada9e3e4f280a663d4`. If a previously displayed queue row disappears between run-start preflight and consumption, the sidecar now returns a structured unavailable result and refreshed queue snapshot; the renderer puts the unsent prompt back in the composer. This avoids turning stale queue identity into an IPC failure and keeps the user's text recoverable.
