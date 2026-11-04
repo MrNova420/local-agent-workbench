@@ -15,8 +15,8 @@
 
 ## 2026-11-04 exact tool-result budget source pairing (verification queued)
 
-- App `6811745` pins engine `e44552d6fffc774137c1cffd1bc7f37783c6a569`. The fallback read/tool-result byte allowance now follows the computed remaining budget directly rather than forcing at least 512 bytes, avoiding an excerpt that can exceed a small remaining request allowance.
-- Added a queued one-token budget regression. No tests or model requests were run; the source change does not alter configured context or output tokens.
+- App `6811745` pins engine `efcb5fad5c94f8044d028ac03771460978f1f1ab`. The fallback read allowance follows the computed budget, and the final excerpt reserves its actual recovery-pointer size; neither stage forces a minimum excerpt byte count.
+- Added queued regressions for a one-token fallback and 0–192 byte excerpts. No tests or model requests were run; the source change does not alter configured context or output tokens.
 
 ## 2026-11-04 context-checkpoint recovery hardening (verification queued)
 
