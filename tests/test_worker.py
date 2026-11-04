@@ -294,6 +294,28 @@ def test_run_start_returns_queue_reconciliation_if_item_disappears_after_preflig
     assert any(event.get("type") == "session_queue_update" for event in events)
 
 
+def test_run_start_fails_closed_when_neither_session_mirror_can_save(service, tmp_path, monkeypatch):
+    project = tmp_path / "unsaved-run-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    events = []
+    monkeypatch.setattr(service, "emit", events.append)
+    monkeypatch.setattr(service.sessions, "save", lambda _state: {
+        "app_saved": False, "project_saved": False, "error": "simulated UnicodeEncodeError",
+    })
+
+    with pytest.raises(RuntimeError, match="session checkpoint could not be saved.*UnicodeEncodeError"):
+        service.handle("run_start", {"options": {
+            "workspace": str(project), "sessionId": state["session_id"], "prompt": "Keep this prompt",
+            "model": "model-a:latest", "context": 4096, "maxTokens": 128,
+            "temperature": 0.2, "access": "ask", "approvalMode": "per-action",
+        }})
+
+    assert service.active is None
+    assert not service.run_lock.locked()
+    assert not any(event.get("type") == "run_started" for event in events)
+
+
 def test_followup_prompt_queue_updates_only_its_active_session(service, tmp_path, monkeypatch):
     project = tmp_path / "active-queue-project"
     project.mkdir()

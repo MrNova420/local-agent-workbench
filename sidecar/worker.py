@@ -1923,10 +1923,13 @@ class AgentService:
                      "steering_persist_lock": threading.Lock(),
                      "steering_condition": threading.Condition(checkpoint_lock),
                      "inference_active": False, "approval_mode": approval_mode}
+        saved = self.sessions.save(controller["session"])
+        if not saved.get("app_saved") and not saved.get("project_saved"):
+            detail = saved.get("error") or "both session mirrors rejected the checkpoint"
+            raise RuntimeError(f"Run was not started because its session checkpoint could not be saved: {detail}")
         with self.active_lock:
             self.active = controller
-        saved = self.sessions.save(controller["session"])
-        if not (saved["app_saved"] and saved["project_saved"]):
+        if not (saved.get("app_saved") and saved.get("project_saved")):
             self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"], "error": saved["error"] or "Session storage is unavailable."})
         self.emit({"type": "run_started", "sessionId": state["session_id"], "turnId": turn_id})
         self.emit({"type": "session_queue_update", "sessionId": state["session_id"], "workspace": str(source),
