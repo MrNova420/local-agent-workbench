@@ -1515,6 +1515,12 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 - Paired engine `c110ce253344904026a6684a224e5379fba3b7a5` adds a regression that writes 100,001 UTF-8 lines, verifies the saved file, appends two lines, and verifies 100,003 lines. Focused engine check: `python -m pytest tests/test_tools.py::ToolTests::test_write_and_append_files_over_100k_lines -q` — **1 passed**.
 - The app pin now targets that engine commit. This proves the host write/append path, not model generation of a 100k-line file in a single response. Large model output remains incremental; no context or output setting was changed. App typecheck/package/visible acceptance for the new pin remain open.
 
+## 2026-11-04 paired Windows candidate (r8; source and worker smoke)
+
+- Built app `ff4368c` pinned to engine `c110ce253344904026a6684a224e5379fba3b7a5` into `out-acceptance-2026-11-04-r8`. The default `out` directory was busy, so the build used the isolated output directory and did not close or replace the open app.
+- Installer: **208,964,096 bytes**, SHA-256 `A15D6A4D26B983001613AC67BBF6BA5B614A754D43D9D45A0F73D88A0F82B4A8`. Portable ZIP: **212,118,027 bytes**, SHA-256 `F078A04EE8FBB1799783F1FA8595F428A5CE961B79008BDFC2C2EFED9C7E09E6`. nupkg: **208,187,435 bytes**, SHA-256 `BDD0E16E806E6E13D970781ACC512121590E7F48503A95B4CB84FFED2D57DBB1`; Squirrel `RELEASES` hash, filename, and size match.
+- ZIP (74 members) and nupkg (87 members) passed integrity checks. Bundled worker: **54,289,238 bytes**, SHA-256 `3652CE4D3D02923CFF11C4A6B7EF99A21846BC4F58B13CDDB9EEFD860E29C97E`; isolated ready/ping/shutdown smoke passed with exit 0 and no model load. The candidate is not installed or opened; visible workflow acceptance remains open.
+
 ## 2026-11-04 paged Hugging Face repository trees
 
 - Repository file browsing now follows Hub next links for the selected repository and pinned revision, exposes additional file pages, and keeps already selected files selected while pages load. Continuation links must remain on the configured origin and exact tree path. This addresses Hub tree pagination, documented by the Hugging Face client: https://huggingface.co/docs/huggingface_hub/v1.27.0/en/package_reference/hf_api . Catalog and sidecar regression cases are authored and queued. App `642ae81` pins engine `18986f38ab3e680ae3c686e14f9a70e1e25fdbb4`. No test, typecheck, package, Hub download, or live model run was performed.
