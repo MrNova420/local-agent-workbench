@@ -6,6 +6,8 @@ The current source pair is app `38cfd59` on `workbench/core-chat-activity`, pinn
 
 Queued-follow-up recovery is also hardened: if a queue item becomes stale between renderer display and run-start validation, the sidecar returns a structured reconciliation result and the renderer restores the prompt text to the composer instead of surfacing a failed chat request. A regression is authored but unrun. The beta.3 installation predates this source change.
 
+Queue add/remove now follows the same durability rule: acknowledgement requires at least one saved mirror, and a failed active queue mutation is rolled back in memory so the composer can retain and retry the prompt. The new regression is queued for grouped verification.
+
 Crash recovery now rebuilds the 70% preemptive progress-checkpoint latch from each durable prompt manifest, and a checkpoint-bearing plan event restores its acknowledged findings/progress/next action. Crossing the checkpoint threshold forces a full session snapshot in addition to the mirrored event journal. Engine/UI limits are unchanged. Regressions are authored but remain queued; fault-injected crash/reopen acceptance is not yet established.
 
 The prior screenshot-backed Home inspection showed **2 available workspaces and 5 saved sessions** in the installed beta.3; matching app-library records and project copies were present then. This is historical Home/data visibility evidence, not current packaged acceptance. The older renderer/recovery changes remain in source; their test counts are recorded in `ACCEPTANCE_LOG.md`. The 2026-11-02 pre-inference journal discrepancy remains historically unreproduced; the copy-mode regression confirms journal agreement for a mocked interrupted request but does not identify the original cause.

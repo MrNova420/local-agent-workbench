@@ -809,6 +809,9 @@ class AgentService:
                     result = self._mutate_queue(prompts, add_prompt=add_prompt, remove_id=remove_id)
                     state["queued_prompts"] = result["queuedPrompts"]
                 saved = self._save_active_session(controller)
+                if not (saved.get("app_saved") or saved.get("project_saved")):
+                    with controller["checkpoint_lock"]:
+                        state["queued_prompts"] = copy.deepcopy(prompts)
         else:
             if not self.run_lock.acquire(blocking=False):
                 raise RuntimeError("A run is starting; retry the follow-up after it is ready.")
@@ -822,6 +825,12 @@ class AgentService:
                 saved = self.sessions.save(state)
             finally:
                 self.run_lock.release()
+        if not (saved.get("app_saved") or saved.get("project_saved")):
+            error = saved.get("error") or "Queued prompt could not be saved to either session store."
+            self.emit({"type": "session_mirror_error", "sessionId": session_id, "workspace": str(selected_workspace),
+                       "appSaved": saved.get("app_saved", False), "projectSaved": saved.get("project_saved", False),
+                       "error": error})
+            raise RuntimeError(f"Queue change was not accepted because neither session mirror saved it: {error}")
         if not (saved.get("app_saved") and saved.get("project_saved")):
             self.emit({"type": "session_mirror_error", "sessionId": session_id, "workspace": str(selected_workspace),
                        "appSaved": saved.get("app_saved", False), "projectSaved": saved.get("project_saved", False),

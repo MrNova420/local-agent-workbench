@@ -340,6 +340,30 @@ def test_followup_prompt_queue_updates_only_its_active_session(service, tmp_path
         })
 
 
+def test_active_followup_queue_is_not_acknowledged_if_both_mirrors_fail(service, tmp_path, monkeypatch):
+    project = tmp_path / "active-queue-save-failure"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    initial = list(state.get("queued_prompts", []))
+    controller = {"session": state, "checkpoint_lock": threading.RLock(), "accepting_queue": True,
+                  "cancel": threading.Event(), "turn_id": "turn-1"}
+    service.active = controller
+    events = []
+    monkeypatch.setattr(service, "emit", events.append)
+    monkeypatch.setattr(service.sessions, "save", lambda _state: {
+        "app_saved": False, "project_saved": False, "error": "simulated lock",
+    })
+
+    with pytest.raises(RuntimeError, match="neither session mirror saved.*simulated lock"):
+        service.handle("session_queue_prompt", {
+            "sessionId": state["session_id"], "workspace": str(project), "prompt": "Do not lose this follow-up",
+        })
+
+    assert controller["session"]["queued_prompts"] == initial
+    assert not any(event.get("type") == "session_queue_update" for event in events)
+    assert events[-1]["type"] == "session_mirror_error"
+
+
 def test_active_task_steering_is_saved_to_the_captured_session_and_waits_for_boundary(service, tmp_path, monkeypatch):
     project = tmp_path / "active-steering-project"
     project.mkdir()

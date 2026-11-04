@@ -9,6 +9,11 @@
 - Engine `535f990` classifies transient provider failures by transport metadata rather than matching provider error wording. Ollama and llama.cpp preserve HTTP status and numeric or HTTP-date `Retry-After` values; recognized transient statuses and connection failures retry with a cancelable exponential wait and visible attempt/phase reporting, without a task deadline or retry-count cap. A partial text, reasoning, or tool-call stream is never automatically replayed. Context/allocation HTTP 500 responses and malformed delay values are not treated as transient instructions.
 - Regressions in `tests/test_provider_retry.py` cover transient retry, retry metadata, and partial-stream preservation. They remain queued; no test, package, app launch, or live model run occurred.
 
+## 2026-11-04 Follow-up queue durability (verification queued)
+
+- Queue add/remove now requires at least one durable session copy before acknowledgement. If both app and project mirrors fail, an active-session mutation rolls back in memory, the IPC request fails, and the composer retains its text; no queue-update event is sent. Partial mirror success is still accepted with an explicit mirror warning.
+- Added a sidecar regression for the active queue-save failure path. It remains queued; no tests or app/model run occurred.
+
 ## 2026-11-04 stale queued-follow-up recovery source fix (verification queued)
 
 - App source `b6cfeda` pins engine `0da5a89b8c2f8f477928deada9e3e4f280a663d4`. If a previously displayed queue row disappears between run-start preflight and consumption, the sidecar now returns a structured unavailable result and refreshed queue snapshot; the renderer puts the unsent prompt back in the composer. This avoids turning stale queue identity into an IPC failure and keeps the user's text recoverable.
