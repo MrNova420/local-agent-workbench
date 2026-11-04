@@ -205,6 +205,55 @@ def test_session_followup_prompt_queue_is_persisted_and_project_bound(service, t
     assert service.sessions.load(state["session_id"])["queued_prompts"] == []
 
 
+def test_followup_queue_request_is_idempotent_for_replayed_ipc(service, tmp_path):
+    project = tmp_path / "idempotent-queue-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    request = {"sessionId": state["session_id"], "workspace": str(project),
+               "prompt": "Implement the saved follow-up", "clientRequestId": "queue-request-1"}
+
+    first = service.handle("session_queue_prompt", request)
+    replay = service.handle("session_queue_prompt", request)
+
+    assert len(first["queuedPrompts"]) == 1
+    assert len(replay["queuedPrompts"]) == 1
+    assert first["queued"]["id"] == replay["queued"]["id"]
+    assert replay["deduplicated"] is True
+    assert service.sessions.load(state["session_id"])["queued_prompts"][0]["request_id"] == "queue-request-1"
+
+
+def test_followup_queue_request_id_cannot_be_reused_for_different_text(service, tmp_path):
+    project = tmp_path / "queue-request-id-conflict"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    base = {"sessionId": state["session_id"], "workspace": str(project), "clientRequestId": "queue-request-2"}
+    service.handle("session_queue_prompt", {**base, "prompt": "First task"})
+
+    with pytest.raises(ValueError, match="already used for a different prompt"):
+        service.handle("session_queue_prompt", {**base, "prompt": "Different task"})
+
+
+def test_followup_queue_replay_after_consumption_reports_the_existing_turn(service, tmp_path):
+    project = tmp_path / "queue-replay-after-consumption"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    state["queued_prompts"] = []
+    state["turns"] = [{"turn_id": "turn-started", "queue_request_id": "queue-request-3",
+                       "prompt": "Run this once", "status": "running"}]
+    service.sessions.save(state)
+
+    replay = service.handle("session_queue_prompt", {
+        "sessionId": state["session_id"], "workspace": str(project),
+        "prompt": "Run this once", "clientRequestId": "queue-request-3",
+    })
+
+    assert replay["deduplicated"] is True
+    assert replay["alreadyStarted"] is True
+    assert replay["turnId"] == "turn-started"
+    assert replay["queuedPrompts"] == []
+    assert service.sessions.load(state["session_id"])["turns"] == state["turns"]
+
+
 def test_consume_queued_prompt_requires_exact_id_and_text_and_removes_once():
     item = {"id": "queue-1", "prompt": "Run the saved follow-up", "queued_at": 1.0}
     state = {"queued_prompts": [item]}

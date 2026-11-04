@@ -795,9 +795,35 @@ class AgentService:
         session_id = str(message.get("sessionId", ""))
         if not session_id:
             raise ValueError("Choose the saved session for this follow-up prompt.")
+        client_request_id = message.get("clientRequestId")
+        if client_request_id is not None and (not isinstance(client_request_id, str) or not client_request_id.strip() or len(client_request_id) > 256):
+            raise ValueError("Follow-up request identity must be a non-empty string of at most 256 characters.")
+        if isinstance(client_request_id, str):
+            client_request_id = client_request_id.strip()
+        if add_prompt is None:
+            client_request_id = None
         selected_workspace = validate_selected_workspace(True, str(message.get("workspace", "")))
         with self.active_lock:
             controller = self.active
+
+        def replayed_request(state: dict[str, Any], prompts: list[dict[str, Any]]) -> dict[str, Any] | None:
+            if not client_request_id:
+                return None
+            clean = str(add_prompt or "").strip()
+            queued = next((row for row in prompts if row.get("request_id") == client_request_id), None)
+            turns = state.get("turns", [])
+            prior_turn = next((row for row in reversed(turns if isinstance(turns, list) else [])
+                               if isinstance(row, dict) and row.get("queue_request_id") == client_request_id), None)
+            previous_prompt = queued.get("prompt") if queued else prior_turn.get("prompt") if prior_turn else None
+            if previous_prompt is None:
+                return None
+            if previous_prompt != clean:
+                raise ValueError("This follow-up request identity was already used for a different prompt.")
+            return {"queued": copy.deepcopy(queued), "removed": False,
+                    "queuedPrompts": copy.deepcopy(prompts), "deduplicated": True,
+                    "alreadyStarted": prior_turn is not None,
+                    "turnId": prior_turn.get("turn_id") if prior_turn else None}
+
         if controller is not None:
             state = controller["session"]
             if state.get("session_id") != session_id:
@@ -809,8 +835,12 @@ class AgentService:
                     if not controller.get("accepting_queue", True):
                         raise RuntimeError("This run is finishing; try queuing the prompt again after it saves.")
                     prompts = _validated_queued_prompts(state)
+                    replay = replayed_request(state, prompts)
+                    if replay is not None:
+                        return replay
                     state["queued_prompts"] = prompts
-                    result = self._mutate_queue(prompts, add_prompt=add_prompt, remove_id=remove_id)
+                    result = self._mutate_queue(prompts, add_prompt=add_prompt, remove_id=remove_id,
+                                                request_id=client_request_id)
                     state["queued_prompts"] = result["queuedPrompts"]
                 saved = self._save_active_session(controller)
                 if not (saved.get("app_saved") or saved.get("project_saved")):
@@ -824,7 +854,11 @@ class AgentService:
                 if Path(state["workspace"]).resolve(strict=True) != selected_workspace:
                     raise ValueError("The selected session belongs to a different project.")
                 prompts = _validated_queued_prompts(state)
-                result = self._mutate_queue(prompts, add_prompt=add_prompt, remove_id=remove_id)
+                replay = replayed_request(state, prompts)
+                if replay is not None:
+                    return replay
+                result = self._mutate_queue(prompts, add_prompt=add_prompt, remove_id=remove_id,
+                                            request_id=client_request_id)
                 state["queued_prompts"] = result["queuedPrompts"]
                 saved = self.sessions.save(state)
             finally:
@@ -919,13 +953,15 @@ class AgentService:
 
     @staticmethod
     def _mutate_queue(prompts: list[dict[str, Any]], *, add_prompt: str | None,
-                      remove_id: str | None) -> dict[str, Any]:
+                      remove_id: str | None, request_id: str | None = None) -> dict[str, Any]:
         updated = copy.deepcopy(prompts)
         if add_prompt is not None:
             clean = add_prompt.strip()
             if not clean:
                 raise ValueError("Enter a follow-up prompt before queuing it.")
             item = {"id": uuid.uuid4().hex, "prompt": clean, "queued_at": time.time()}
+            if request_id:
+                item["request_id"] = request_id
             updated.append(item)
             return {"queued": item, "removed": False, "queuedPrompts": updated}
         removed = next((item for item in updated if item.get("id") == remove_id), None)
@@ -1794,6 +1830,7 @@ class AgentService:
         if Path(state["workspace"]).resolve(strict=True) != source:
             raise ValueError("Selected session belongs to a different project. Open that project's workspace explicitly first.")
         queued_prompt_id = options.get("queuedPromptId")
+        queued_request_id = None
         if queued_prompt_id is not None:
             if not isinstance(queued_prompt_id, str) or not queued_prompt_id:
                 raise ValueError("Queued prompt identity is invalid.")
@@ -1808,7 +1845,8 @@ class AgentService:
                             "turnId": prior_turn.get("turn_id"), "queuedPrompts": queued_rows}
                 return {"started": False, "queuedPromptUnavailable": True, "queuedPrompts": queued_rows}
             try:
-                consume_queued_prompt(state, queued_prompt_id, prompt)
+                consumed_prompt = consume_queued_prompt(state, queued_prompt_id, prompt)
+                queued_request_id = consumed_prompt.get("request_id") if isinstance(consumed_prompt, dict) else None
             except QueuedPromptUnavailable as exc:
                 # Queue state can be reconciled while a renderer is starting a
                 # previously displayed item. Treat a stale item as a normal
@@ -1904,6 +1942,8 @@ class AgentService:
                              "transcript_saved": False, "prior_user_messages": prior_user_messages}
         if isinstance(queued_prompt_id, str):
             turn_record["queued_prompt_id"] = queued_prompt_id
+        if isinstance(queued_request_id, str) and queued_request_id:
+            turn_record["queue_request_id"] = queued_request_id
         turn_records.append(turn_record)
         state["run_state"] = {
             "status": "running", "turn_id": turn_id, "prompt": prompt, "started_at": turn_started_at,

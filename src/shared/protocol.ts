@@ -31,7 +31,7 @@ export type RunOptions = {
   queuedPromptId?: string;
 };
 
-export type QueuedPrompt = { id: string; prompt: string; queued_at: number };
+export type QueuedPrompt = { id: string; prompt: string; queued_at: number; request_id?: string };
 
 export type SessionLiveSnapshot = {
   active: boolean;
@@ -89,7 +89,7 @@ export type WorkerCommand =
   | { command: 'session_new'; workspace: string; model: string; context: number; activityMode?: ActivityMode }
   | { command: 'session_activity_mode'; sessionId: string; activityMode: ActivityMode }
   | { command: 'session_run_settings'; sessionId: string; settings: { model: string; context: number; maxTokens: number; temperature: number; access: AccessMode; approvalMode: ApprovalMode; keepAlive: string; reasoning: ReasoningChoice; reasoningBudgetTokens: number | null; harnessProfile: HarnessProfile; taskIntent: TaskIntent; skillsEnabled: boolean; skillSources: SkillSource[] } }
-  | { command: 'session_queue_prompt'; sessionId: string; workspace: string; prompt: string }
+  | { command: 'session_queue_prompt'; sessionId: string; workspace: string; prompt: string; clientRequestId?: string }
   | { command: 'session_steer'; sessionId: string; workspace: string; prompt: string }
   | { command: 'session_queue_remove'; sessionId: string; workspace: string; queuedPromptId: string }
   | { command: 'session_harness_profile'; sessionId: string; harnessProfile: HarnessProfile }

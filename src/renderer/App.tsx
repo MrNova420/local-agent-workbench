@@ -263,6 +263,7 @@ export default function App() {
   const [projectTab, setProjectTab] = useState<'overview' | 'files' | 'sessions'>('overview');
   const endRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  const queueRequestRef = useRef<{ sessionId: string; draft: string; requestId: string } | null>(null);
   const assistantSegmentBreakRef = useRef(false);
   const runStartPendingRef = useRef(false);
   const activeTurnIdRef = useRef('');
@@ -1212,15 +1213,25 @@ export default function App() {
   async function queueFollowupPrompt() {
     if (!canSubmitActiveRunUpdate(running, runStarting) || queueSubmitting || !session || !workspace || !prompt.trim()) return;
     const submittedDraft = prompt;
+    const previousQueueRequest = queueRequestRef.current;
+    const requestId = previousQueueRequest?.sessionId === session.session_id && previousQueueRequest.draft === submittedDraft
+      ? previousQueueRequest.requestId : window.crypto.randomUUID();
+    queueRequestRef.current = { sessionId: session.session_id, draft: submittedDraft, requestId };
     setQueueSubmitting(true);
     try {
-      const result = await request<{ queuedPrompts: QueuedPrompt[] }>({
+      const result = await request<{ queuedPrompts: QueuedPrompt[]; deduplicated?: boolean; alreadyStarted?: boolean }>({
         command: 'session_queue_prompt', sessionId: session.session_id, workspace, prompt: submittedDraft.trim(),
+        clientRequestId: requestId,
       });
       setSession((current) => current?.session_id === session.session_id ? { ...current, queued_prompts: result.queuedPrompts } : current);
       setPrompt((current) => clearSubmittedPrompt(current, submittedDraft));
       promptRef.current?.focus();
-      notify('Follow-up saved for this session. It will not interrupt the active run.');
+      if (queueRequestRef.current?.requestId === requestId) queueRequestRef.current = null;
+      notify(result.alreadyStarted
+        ? 'This follow-up was already saved and started; no duplicate queue item was added.'
+        : result.deduplicated
+          ? 'This follow-up was already saved; no duplicate queue item was added.'
+          : 'Follow-up saved for this session. It will not interrupt the active run.');
     } catch (error) { notify(`Could not save follow-up: ${(error as Error).message}`, 'bad'); }
     finally { setQueueSubmitting(false); }
   }
