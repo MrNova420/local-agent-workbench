@@ -60,7 +60,7 @@ type Session = {
   task_checkpoint?: { current?: { goal?: string; user_updates?: Array<{ id?: string; turn_id?: string; instruction?: string; status?: string }> }; task_history?: Array<{ goal?: string }> };
 };
 type TraceRow = { id: string; title: string; description?: string; kind: 'tool' | 'status' | 'plan' | 'error'; time: number };
-type Approval = { actionId: string; name: string; arguments: unknown; workspace: string; mode: ApprovalMode; reason?: string; uncertainOperationId?: string; uncertainOperationName?: string };
+type Approval = { actionId: string; sessionId: string; turnId: string; name: string; arguments: unknown; workspace: string; mode: ApprovalMode; reason?: string; uncertainOperationId?: string; uncertainOperationName?: string };
 type AgentQuestion = { questionId: string; title: string; question: string; options: Array<{ label: string; description?: string }> };
 type Notice = { tone: 'good' | 'warn' | 'bad'; text: string };
 type TelemetryView = {
@@ -806,7 +806,7 @@ export default function App() {
         if (Array.isArray(event.acceptanceCriteria)) setAcceptanceCriteria(event.acceptanceCriteria.filter((item): item is string => typeof item === 'string'));
       }
       if (event.type === 'approval_request') {
-        setApproval({ actionId: String(event.actionId), name: String(event.name), arguments: event.arguments, workspace: String(event.workspace), mode: event.mode === 'per-session' ? 'per-session' : event.mode === 'per-task' ? 'per-task' : 'per-action', reason: typeof event.reason === 'string' ? event.reason : undefined, uncertainOperationId: typeof event.uncertainOperationId === 'string' ? event.uncertainOperationId : undefined, uncertainOperationName: typeof event.uncertainOperationName === 'string' ? event.uncertainOperationName : undefined });
+        setApproval({ actionId: String(event.actionId), sessionId: String(event.sessionId), turnId: String(event.turnId), name: String(event.name), arguments: event.arguments, workspace: String(event.workspace), mode: event.mode === 'per-session' ? 'per-session' : event.mode === 'per-task' ? 'per-task' : 'per-action', reason: typeof event.reason === 'string' ? event.reason : undefined, uncertainOperationId: typeof event.uncertainOperationId === 'string' ? event.uncertainOperationId : undefined, uncertainOperationName: typeof event.uncertainOperationName === 'string' ? event.uncertainOperationName : undefined });
       }
       if (['cancelled', 'error', 'stopped_after_operation', 'generation_complete'].includes(String(event.type))) {
         setAgentQuestion(null);
@@ -1288,7 +1288,7 @@ export default function App() {
     const action = approval;
     setApproval(null);
     try {
-      const accepted = await request<boolean>({ command: 'approval_reply', actionId: action.actionId, approved });
+      const accepted = await request<boolean>({ command: 'approval_reply', actionId: action.actionId, sessionId: action.sessionId, turnId: action.turnId, workspace: action.workspace, approved });
       if (!accepted) {
         setApproval(action);
         notify('The approval request is no longer active or could not be saved; no action was approved.', 'warn');

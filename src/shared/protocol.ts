@@ -100,7 +100,7 @@ export type WorkerCommand =
   | { command: 'run_start'; options: RunOptions }
   | { command: 'run_cancel' }
   | { command: 'run_stop_after_operation' }
-  | { command: 'approval_reply'; actionId: string; approved: boolean }
+  | { command: 'approval_reply'; actionId: string; sessionId: string; turnId: string; workspace: string; approved: boolean }
   | { command: 'question_reply'; questionId: string; answer: string }
   | { command: 'copy_review'; sessionId: string }
   | { command: 'copy_apply'; sessionId: string; paths: string[] }

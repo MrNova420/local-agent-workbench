@@ -2385,9 +2385,15 @@ def test_protocol_escapes_unicode_for_legacy_windows_stdout(service, monkeypatch
 def test_approval_reply_signals_only_matching_pending_action(service):
     condition = threading.Condition()
     result = {"done": False, "approved": False}
-    service.active = {"pending": {"action-1": (condition, result)}}
-    assert service.approval_reply("missing", True) is False
-    assert service.approval_reply("action-1", True) is True
+    identity = {"session_id": "session-1", "turn_id": "turn-1", "workspace": "C:/project"}
+    service.active = {"pending": {"action-1": (condition, result)}, "pending_approval_identity": {"action-1": identity}}
+    assert service.approval_reply("missing", True, "session-1", "turn-1", "C:/project") is False
+    assert service.approval_reply("action-1", True, "wrong-session", "turn-1", "C:/project") is False
+    assert service.approval_reply("action-1", True, "session-1", "wrong-turn", "C:/project") is False
+    assert service.approval_reply("action-1", True, "session-1", "turn-1", "C:/other") is False
+    assert result == {"done": False, "approved": False}
+    assert service.approval_reply("action-1", True, "session-1", "turn-1", "C:/project") is True
+    assert service.approval_reply("action-1", False, "session-1", "turn-1", "C:/project") is False
     assert result == {"done": True, "approved": True}
 
 
@@ -2398,12 +2404,13 @@ def test_per_session_approval_is_mirrored_before_approval_is_accepted(service, t
     condition = threading.Condition()
     result = {"done": False, "approved": False}
     controller = {"session": state, "approval_mode": "per-session", "checkpoint_lock": threading.RLock(),
-                  "pending": {"action-1": (condition, result)}}
+                  "pending": {"action-1": (condition, result)},
+                  "pending_approval_identity": {"action-1": {"session_id": state["session_id"], "turn_id": "turn-1", "workspace": str(project)}}}
     service.active = controller
     events = []
     monkeypatch.setattr(service, "emit", events.append)
 
-    assert service.approval_reply("action-1", True) is True
+    assert service.approval_reply("action-1", True, state["session_id"], "turn-1", str(project)) is True
     stored = service.sessions.load(state["session_id"], str(project))["state"]
     assert stored["session_approval_granted"] is True
     assert result == {"done": True, "approved": True}
@@ -2417,7 +2424,8 @@ def test_per_session_approval_save_does_not_hold_checkpoint_lock(service, tmp_pa
     condition = threading.Condition()
     result = {"done": False, "approved": False}
     controller = {"session": state, "approval_mode": "per-session", "checkpoint_lock": checkpoint_lock,
-                  "pending": {"action-1": (condition, result)}}
+                  "pending": {"action-1": (condition, result)},
+                  "pending_approval_identity": {"action-1": {"session_id": state["session_id"], "turn_id": "turn-1", "workspace": str(project)}}}
     service.active = controller
     save_started = threading.Event()
     release_save = threading.Event()
@@ -2426,7 +2434,7 @@ def test_per_session_approval_save_does_not_hold_checkpoint_lock(service, tmp_pa
         save_started.set(), release_save.wait(2), {"app_saved": True, "project_saved": True, "error": None}
     )[-1])
     approved = []
-    approval_thread = threading.Thread(target=lambda: approved.append(service.approval_reply("action-1", True)))
+    approval_thread = threading.Thread(target=lambda: approved.append(service.approval_reply("action-1", True, state["session_id"], "turn-1", str(project))))
     approval_thread.start()
     assert save_started.wait(2)
 
@@ -2452,13 +2460,14 @@ def test_per_session_approval_fails_closed_when_mirror_save_fails(service, tmp_p
     condition = threading.Condition()
     result = {"done": False, "approved": False}
     controller = {"session": state, "approval_mode": "per-session", "checkpoint_lock": threading.RLock(),
-                  "pending": {"action-1": (condition, result)}}
+                  "pending": {"action-1": (condition, result)},
+                  "pending_approval_identity": {"action-1": {"session_id": state["session_id"], "turn_id": "turn-1", "workspace": str(project)}}}
     service.active = controller
     monkeypatch.setattr(service.sessions, "save", lambda _state: {"app_saved": True, "project_saved": False, "error": "fixture lock"})
     events = []
     monkeypatch.setattr(service, "emit", events.append)
 
-    assert service.approval_reply("action-1", True) is False
+    assert service.approval_reply("action-1", True, state["session_id"], "turn-1", str(project)) is False
     assert state["session_approval_granted"] is False
     assert result == {"done": False, "approved": False}
     assert events[-1]["type"] == "session_mirror_error"
@@ -2537,7 +2546,7 @@ def test_approval_state_is_recorded_on_the_operation_without_a_duplicate_trace_r
             break
         time.sleep(0.01)
     assert request is not None
-    assert service.approval_reply(request["actionId"], True) is True
+    assert service.approval_reply(request["actionId"], True, request["sessionId"], request["turnId"], request["workspace"]) is True
     controller["thread"].join(3)
 
     saved = service.sessions.load(controller["session"]["session_id"])
@@ -2600,7 +2609,7 @@ def test_uncertain_mcp_retry_requires_one_action_review_even_with_session_approv
     assert request["mode"] == "per-action"
     assert request["reason"] == "uncertain_mcp_retry"
     assert request["uncertainOperationId"] == "uncertain-1"
-    assert service.approval_reply(request["actionId"], True) is True
+    assert service.approval_reply(request["actionId"], True, request["sessionId"], request["turnId"], request["workspace"]) is True
     controller["thread"].join(3)
 
     saved = service.sessions.load(controller["session"]["session_id"])

@@ -1506,7 +1506,10 @@ class AgentService:
                         engine.finish_after_operation()
             return {"requested": controller is not None}
         if command == "approval_reply":
-            return self.approval_reply(str(message["actionId"]), bool(message.get("approved")))
+            approved = message.get("approved")
+            if not isinstance(approved, bool):
+                raise ValueError("Approval decision must be a boolean.")
+            return self.approval_reply(str(message["actionId"]), approved, str(message.get("sessionId", "")), str(message.get("turnId", "")), str(message.get("workspace", "")))
         if command == "question_reply":
             answer = message.get("answer")
             if not isinstance(answer, str) or not answer.strip():
@@ -2014,6 +2017,10 @@ class AgentService:
                 result = {"done": False, "approved": False}
                 with self.active_lock:
                     controller["pending"][action_id] = (condition, result)
+                    controller.setdefault("pending_approval_identity", {})[action_id] = {
+                        "session_id": state["session_id"], "turn_id": controller["turn_id"],
+                        "workspace": str(turn.workspace),
+                    }
                 operation_id = controller.get("current_operation_id")
                 with controller["checkpoint_lock"]:
                     rows = state.setdefault("activity_events", [])
@@ -2045,6 +2052,7 @@ class AgentService:
                         condition.wait(0.25)
                 with self.active_lock:
                     controller["pending"].pop(action_id, None)
+                    controller.get("pending_approval_identity", {}).pop(action_id, None)
                 approval_status = "cancelled" if controller["cancel"].is_set() else "approved" if result["approved"] else "denied"
                 with controller["checkpoint_lock"]:
                     activity["approvalStatus"] = approval_status
@@ -2283,11 +2291,12 @@ class AgentService:
     def mcp_tools(self, value: list[dict[str, Any]]) -> None:
         self._mcp_tools = value
 
-    def approval_reply(self, action_id: str, approved: bool) -> bool:
+    def approval_reply(self, action_id: str, approved: bool, session_id: str, turn_id: str, workspace: str) -> bool:
         with self.active_lock:
             controller = self.active
             pending = controller.get("pending", {}).get(action_id) if controller else None
-        if not pending:
+            identity = controller.get("pending_approval_identity", {}).get(action_id) if controller else None
+        if not pending or identity != {"session_id": session_id, "turn_id": turn_id, "workspace": workspace}:
             return False
         if approved and controller and controller.get("approval_mode") == "per-session":
             state = controller["session"]
@@ -2310,6 +2319,8 @@ class AgentService:
                 self.emit({"type": "session_approval_state", "sessionId": state["session_id"], "approved": True})
         condition, result = pending
         with condition:
+            if result.get("done"):
+                return False
             result.update(done=True, approved=approved)
             condition.notify_all()
         return True
