@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyToolCallProgress, canSubmitActiveRunUpdate, isGlobalRunLifecycleEvent, latestActiveActivityForTurn, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter } from '../src/shared/run-state';
+import { applyToolCallProgress, canSubmitActiveRunUpdate, clearSubmittedPrompt, isGlobalRunLifecycleEvent, latestActiveActivityForTurn, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter } from '../src/shared/run-state';
 import type { ActivityRecord } from '../src/shared/protocol';
 
 describe('session event isolation', () => {
@@ -22,6 +22,11 @@ describe('active-run composer actions', () => {
     expect(canSubmitActiveRunUpdate(false, false)).toBe(false);
     expect(canSubmitActiveRunUpdate(true, true)).toBe(false);
     expect(canSubmitActiveRunUpdate(true, false)).toBe(true);
+  });
+
+  it('clears only the draft that was submitted, preserving newer text typed while the request was pending', () => {
+    expect(clearSubmittedPrompt('the submitted update', 'the submitted update')).toBe('');
+    expect(clearSubmittedPrompt('a newer follow-up', 'the submitted update')).toBe('a newer follow-up');
   });
 });
 

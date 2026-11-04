@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
 import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, ProjectFilePage, QueuedPrompt, RunOptions, SessionLiveSnapshot, SessionSummary, SkillSource, TaskIntent, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
-import { applyToolCallProgress, canSubmitActiveRunUpdate, isGlobalRunLifecycleEvent, latestActiveActivityForTurn, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter, type ToolCallProgress } from '../shared/run-state';
+import { applyToolCallProgress, canSubmitActiveRunUpdate, clearSubmittedPrompt, isGlobalRunLifecycleEvent, latestActiveActivityForTurn, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter, type ToolCallProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordInputEstimate, recordStreamedText, restoreRunMetrics, type RunMetrics } from '../shared/run-metrics';
 import { requestContextStats } from '../shared/request-context';
 import { approvalModeDescription } from '../shared/approval-mode-copy';
@@ -1167,13 +1167,14 @@ export default function App() {
 
   async function queueFollowupPrompt() {
     if (!canSubmitActiveRunUpdate(running, runStarting) || queueSubmitting || !session || !workspace || !prompt.trim()) return;
+    const submittedDraft = prompt;
     setQueueSubmitting(true);
     try {
       const result = await request<{ queuedPrompts: QueuedPrompt[] }>({
-        command: 'session_queue_prompt', sessionId: session.session_id, workspace, prompt: prompt.trim(),
+        command: 'session_queue_prompt', sessionId: session.session_id, workspace, prompt: submittedDraft.trim(),
       });
       setSession((current) => current?.session_id === session.session_id ? { ...current, queued_prompts: result.queuedPrompts } : current);
-      setPrompt('');
+      setPrompt((current) => clearSubmittedPrompt(current, submittedDraft));
       promptRef.current?.focus();
       notify('Follow-up saved for this session. It will not interrupt the active run.');
     } catch (error) { notify(`Could not save follow-up: ${(error as Error).message}`, 'bad'); }
@@ -1182,10 +1183,11 @@ export default function App() {
 
   async function steerActiveTask() {
     if (!canSubmitActiveRunUpdate(running, runStarting) || steeringSubmitting || !session || !workspace || !prompt.trim()) return;
+    const submittedDraft = prompt;
     setSteeringSubmitting(true);
     try {
-      const result = await request<{ status?: string }>({ command: 'session_steer', sessionId: session.session_id, workspace, prompt: prompt.trim() });
-      setPrompt('');
+      const result = await request<{ status?: string }>({ command: 'session_steer', sessionId: session.session_id, workspace, prompt: submittedDraft.trim() });
+      setPrompt((current) => clearSubmittedPrompt(current, submittedDraft));
       promptRef.current?.focus();
       notify(result.status === 'interrupting'
         ? 'Update saved. The active model response is being redirected; its partial output will be kept and this same task will continue.'

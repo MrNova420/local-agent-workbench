@@ -27,6 +27,10 @@ export function canSubmitActiveRunUpdate(running: boolean, starting: boolean): b
   return running && !starting;
 }
 
+export function clearSubmittedPrompt(currentDraft: string, submittedDraft: string): string {
+  return currentDraft === submittedDraft ? '' : currentDraft;
+}
+
 export function shouldApplySessionEvent(eventSessionId: unknown, activeSessionId: string): boolean {
   return typeof eventSessionId !== 'string' || eventSessionId.length === 0 || eventSessionId === activeSessionId;
 }
