@@ -1394,3 +1394,5 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 ## 2026-11-04 cursor-based Hugging Face search
 
 - Hub search now returns a page plus the server-provided opaque next link; the renderer offers Load more until the Hub has no next page. Continuation links are checked against the configured origin and model endpoint before a token-bearing request. The page size is a fetch batch, not a total search cap. The Hub API and official search guide describe model-list iteration; source: https://huggingface.co/docs/hub/api and https://huggingface.co/docs/huggingface_hub/main/guides/search . App `07f965d` pins engine `e282fddcdf078be03f09b62d11e4c260b5a68738`. Catalog and sidecar regression cases are authored but queued; no test, typecheck, package, or live Hub request was run.
+
+- App `31abc4f` keeps pagination bound to the query that produced the Hub cursor. If the user edits the query before requesting another page, the next action starts a fresh search instead of mixing results from two queries. This is source-only and queued for renderer verification.
