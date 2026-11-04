@@ -1,7 +1,7 @@
 +# Full Product Parity Audit
 
 **Reviewed:** 2026-11-04  
-**Repositories:** Electron Workbench `43b8e29` (`workbench/core-chat-activity`); paired engine `0da5a89b8c2f8f477928deada9e3e4f280a663d4` (`workbench/approval-tool-continuation`)  
+**Repositories:** Electron Workbench (`workbench/core-chat-activity`); paired engine `ed39ccdc11d71dfb566038174546552c0232b69c` (`workbench/approval-tool-continuation`)
 **Purpose:** compare the whole user-facing product and agent workflow with OpenCode and Codex, then keep implementation priorities tied to observable source behavior.
 
 This is a product capability comparison, not source-level equivalence. OpenCode's public documentation is the reference for shipped V1 behavior. OpenCode V2 documentation is development reference and is not treated as shipped V1. Codex CLI is open source; Codex desktop behavior is documented selectively, so this audit does not infer private implementation details from the public Agents API.
@@ -60,6 +60,16 @@ Highest-impact gaps:
 6. **P2 extensibility/product polish:** reusable commands, agent profiles, plugin hooks, keyboard/accessibility and remaining Home/work-sheet/orbit work.
 
 These do not justify lowering context/output settings or changing reasoning defaults. Keep the Python engine for V1. Do not treat V2 documentation or API contracts as shipped desktop behavior.
+
+## Agent loop mechanics: OpenCode compared with Workbench
+
+OpenCode V1 separates the session prompt loop from a stream processor. The processor receives provider stream events, persists text/reasoning/tool-call state, applies permission checks, tracks snapshots, and returns a control result (`continue`, `stop`, or `compact`) to the outer loop. It captures a filesystem snapshot before starting the provider stream because tool execution may happen before the stream emits its step-start event. The prompt loop owns session execution and compaction/retry transitions. Its processor includes a `DOOM_LOOP_THRESHOLD` for repeated identical tool/input calls and requests a separate `doom_loop` permission decision. See the [V1 prompt loop](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/session/prompt.ts) and [V1 stream processor](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/session/processor.ts).
+
+Workbench's Python `AgentEngine.run` is currently a single explicit request/tool-result loop. It composes the model request and prompt manifest, streams provider output, validates structured tool calls, runs safe independent read batches while keeping mutations/commands/MCP ordered, records results and task checkpoints, then decides whether to continue, compact, finish, or expose a blocker. The sidecar owns captured session/workspace identity, event mirroring, queued prompts, steering, approval and recovery. This separation has a practical strength for local runtimes: tool batches and host effects remain visible and are validated outside the provider adapter. Its difference was that repeated no-progress prose was recognized but identical structured tool calls were not.
+
+**Implemented from this comparison:** engine `ed39ccd` detects three consecutive completed calls with the same tool, exact arguments, and identical result. Before a fourth identical execution, it requests a fresh one-action review even under Auto mode. Duplicate calls in the same model batch are serialized so prior results are observable. Declining blocks that exact fingerprint until a newer user steer; a different tool/argument remains available. This does not impose a total iteration/runtime cap. The renderer explains the repeat and offers “Allow this attempt” or “Decline this repeat.” The app now marks the approval as unavailable and prevents the action if neither session mirror can save the pending decision. Regressions exist in `tests/test_engine_tool_batch.py`; they remain unrun for the grouped verification pass, and the paired packaged interaction is unverified.
+
+**Remaining loop parity work:** the current Workbench checkpoint and event journal are not a single session inbox/runner coordinator. Review safe-boundary admission and idempotency for user prompt, steering, queue, cancel, approval and recovery; keep model activity and durable state coherent when the UI reattaches. Then compare context assembly and compaction boundaries, tool-call error transitions, response finish reasons, retryable provider errors, permission-denied recovery, and terminal-result delivery with the OpenCode processor. Adopt the state-machine semantics where they improve reliability; do not copy assumptions that add arbitrary task/runtime limits or rely on cloud-only services.
 
 ## Sources and evidence limits
 

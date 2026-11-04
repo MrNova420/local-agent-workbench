@@ -85,6 +85,7 @@ function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expande
       <span className="activity-status">{row.status.replaceAll('_', ' ')}</span>
       {row.status === 'uncertain' && <span className="activity-review-warning">inspect before retry</span>}
       {row.approvalReason === 'uncertain_mcp_retry' && <span className="activity-review-warning">explicit review · possible duplicate</span>}
+      {row.approvalReason === 'repeated_identical_action' && <span className="activity-review-warning">repeat review · same action and result</span>}
       {row.approvalStatus && <span className={`activity-approval activity-approval-${row.approvalStatus}`}>approval {row.approvalStatus.replaceAll('_', ' ')}</span>}
       {row.progress?.message && <span className="activity-operation-progress" title={row.progress.message}>{row.progress.message}</span>}
       {surface === 'sidebar' && row.affectedFiles?.length ? <span className="activity-file-count">{row.affectedFiles.length} file{row.affectedFiles.length === 1 ? '' : 's'}</span> : null}

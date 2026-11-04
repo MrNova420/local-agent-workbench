@@ -2009,12 +2009,14 @@ class AgentService:
 
             knowledge = ProjectKnowledge(turn.workspace)
 
-            def approve(name: str, args: Any) -> bool:
+            def approve(name: str, args: Any, reason: str | None = None) -> bool:
                 checkpoint = state.get("task_checkpoint", {})
                 current_checkpoint = checkpoint.get("current", {}) if isinstance(checkpoint, dict) else {}
                 prior_uncertain = current_checkpoint.get("uncertain_operation") if isinstance(current_checkpoint, dict) else None
                 uncertain_retry = (name.startswith("mcp__") and isinstance(prior_uncertain, dict)
                                    and prior_uncertain.get("status") == "uncertain")
+                approval_reason = "uncertain_mcp_retry" if uncertain_retry else reason
+                forced_one_action = approval_reason in {"uncertain_mcp_retry", "repeated_identical_action"}
                 action_id = uuid.uuid4().hex
                 condition = threading.Condition()
                 result = {"done": False, "approved": False}
@@ -2034,10 +2036,24 @@ class AgentService:
                                     "name": name, "arguments": copy.deepcopy(args), "status": "running", "timestamp": time.time(), "output": {}, "result": "", "affectedFiles": []}
                         rows.append(activity)
                     activity.update(approvalStatus="waiting",
-                                    approvalMode="per-action" if uncertain_retry else turn.approval_mode)
-                    if uncertain_retry:
-                        activity["approvalReason"] = "uncertain_mcp_retry"
+                                    approvalMode="per-action" if forced_one_action else turn.approval_mode)
+                    if approval_reason:
+                        activity["approvalReason"] = approval_reason
                 saved = self._save_active_session(controller)
+                if not (saved.get("app_saved") or saved.get("project_saved")):
+                    # Never ask the user to authorize a host operation when the
+                    # pending decision itself cannot be recovered after a crash.
+                    with self.active_lock:
+                        controller["pending"].pop(action_id, None)
+                        controller.get("pending_approval_identity", {}).pop(action_id, None)
+                    with controller["checkpoint_lock"]:
+                        activity.update(approvalStatus="unavailable", completedAt=time.time())
+                    self.emit({"type": "session_mirror_error", "sessionId": state["session_id"],
+                               "appSaved": False, "projectSaved": False,
+                               "error": saved.get("error") or "Approval was not shown because neither session mirror saved the pending decision."})
+                    self.emit({"type": "activity_event", "activity": copy.deepcopy(activity),
+                               "sessionId": state["session_id"], "turnId": controller["turn_id"]})
+                    raise RuntimeError(saved.get("error") or "Approval was not shown because neither session mirror saved the pending decision.")
                 if not (saved["app_saved"] and saved["project_saved"]):
                     self.emit({"type": "session_mirror_error", "sessionId": state["session_id"],
                                "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"],
@@ -2045,8 +2061,8 @@ class AgentService:
                 self.emit({"type": "activity_event", "activity": copy.deepcopy(activity), "activityPhase": "start", "sessionId": state["session_id"], "turnId": controller["turn_id"]})
                 self.emit({"type": "approval_request", "actionId": action_id, "operationId": operation_id, "turnId": controller["turn_id"], "name": name,
                            "arguments": args, "workspace": str(turn.workspace),
-                           "mode": "per-action" if uncertain_retry else turn.approval_mode,
-                           "reason": "uncertain_mcp_retry" if uncertain_retry else None,
+                           "mode": "per-action" if forced_one_action else turn.approval_mode,
+                           "reason": approval_reason,
                            "uncertainOperationId": prior_uncertain.get("operationId") if uncertain_retry else None,
                            "uncertainOperationName": prior_uncertain.get("name") if uncertain_retry else None,
                            "sessionId": state["session_id"]})
@@ -2141,6 +2157,7 @@ class AgentService:
                 permission_workspace_root=controller["source"],
                 ask_user=lambda args: self._ask_user(controller, turn, args),
                 session_approval_granted=bool(state.get("session_approval_granted", False)),
+                approve_repeated_action=lambda name, args: approve(name, args, "repeated_identical_action"),
                 steering_handler=apply_steering,
                 steering_interrupt_event=controller["steering_interrupt"],
             )

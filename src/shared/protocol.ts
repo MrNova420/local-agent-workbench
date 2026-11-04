@@ -131,9 +131,9 @@ export type ActivityRecord = {
   /** Latest resumable progress from a long-running structured operation. */
   progress?: { message: string; filesScanned?: number; bytesRead?: number; bytesWritten?: number; matches?: number; phase?: string; timestamp?: number };
   source?: 'workbench' | 'agent';
-  approvalStatus?: 'waiting' | 'approved' | 'denied' | 'cancelled';
+  approvalStatus?: 'waiting' | 'approved' | 'denied' | 'cancelled' | 'unavailable';
   approvalMode?: 'per-action' | 'per-task' | 'per-session';
-  approvalReason?: 'uncertain_mcp_retry';
+  approvalReason?: 'uncertain_mcp_retry' | 'repeated_identical_action';
   timestamp?: number;
   startedAt?: number;
   completedAt?: number;

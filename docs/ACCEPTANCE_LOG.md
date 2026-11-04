@@ -1,3 +1,9 @@
+## 2026-11-04 OpenCode loop parity and repeated action review (verification queued)
+
+- The full product comparison was extended to the OpenCode V1 prompt/processor loop and the Workbench engine/sidecar lifecycle. OpenCode's processor uses snapshots before provider streaming, typed tool state transitions and a repeated-action permission guard; Workbench already has request-boundary steering, same-task checkpointing, durable tool results and prose no-progress detection, but lacked repeated structured-action detection. Review also found that an approval could still be shown after both session mirrors failed; the sidecar now prevents that action and marks its activity unavailable.
+- Engine `ed39ccd` now asks for a fresh one-action decision before the fourth identical tool call when the prior three completed with the same result. Auto approval does not bypass this review. Declining blocks only that exact action until newer same-task user guidance; other tools can proceed. Identical calls in one batch are serialized. This adds no total retry, task, context, output, or runtime cap.
+- Engine regressions are authored but unrun. The renderer/sidecar review reason and no-mirror fail-closed path are wired in source but not packaged or regression-tested. No model was started and no inference setting changed.
+
 ## 2026-11-04 stale queued-follow-up recovery source fix (verification queued)
 
 - App source `b6cfeda` pins engine `0da5a89b8c2f8f477928deada9e3e4f280a663d4`. If a previously displayed queue row disappears between run-start preflight and consumption, the sidecar now returns a structured unavailable result and refreshed queue snapshot; the renderer puts the unsent prompt back in the composer. This avoids turning stale queue identity into an IPC failure and keeps the user's text recoverable.
