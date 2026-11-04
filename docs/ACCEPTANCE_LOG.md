@@ -1,3 +1,8 @@
+## 2026-11-03 active-run startup composer race
+
+- The composer remains editable while a run is starting, but redirect, queue, and cancel actions stay disabled until the sidecar confirms the active run. Recovery resumes use the same gate. A `run_started` or `run_idle` lifecycle event clears the startup state; failed startup leaves any newly drafted text intact.
+- Focused run-state suite: **27 passed**; typecheck passed. Full renderer/sidecar/engine suites and visible packaged chat acceptance remain deferred.
+
 ## 2026-11-03 project session recovery visibility
 
 - Home and project session lists now use one recovery-status mapper. Project overview and saved-session rows surface mirror conflicts, uncertain operations, recovery issues, unavailable workspaces, and failed/interrupted outcomes before a session is reopened.

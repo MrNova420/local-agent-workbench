@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from './Markdown';
 import type { AccessMode, ActivityEventEnvelope, ActivityMode, ActivityRecord, AppUpdateState, ApprovalMode, HarnessProfile, ModelCatalog, ModelInfo, ProjectFile, ProjectFilePage, QueuedPrompt, RunOptions, SessionLiveSnapshot, SessionSummary, SkillSource, TaskIntent, ToolCatalog, WorkerCommand, WorkerEvent, WorkspaceHistoryEntry } from '../shared/protocol';
-import { applyToolCallProgress, isGlobalRunLifecycleEvent, latestActiveActivityForTurn, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter, type ToolCallProgress } from '../shared/run-state';
+import { applyToolCallProgress, canSubmitActiveRunUpdate, isGlobalRunLifecycleEvent, latestActiveActivityForTurn, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter, type ToolCallProgress } from '../shared/run-state';
 import { addGenerationUsage, beginGeneration, emptyRunMetrics, endGeneration, estimateOutputTokens, liveOutputTokensPerSecond, outputTokensAreEstimated, recordFirstToken, recordInputEstimate, recordStreamedText, restoreRunMetrics, type RunMetrics } from '../shared/run-metrics';
 import { requestContextStats } from '../shared/request-context';
 import { approvalModeDescription } from '../shared/approval-mode-copy';
@@ -226,6 +226,7 @@ export default function App() {
   const [modelPreloading, setModelPreloading] = useState(false);
   const [connected, setConnected] = useState<'checking' | 'yes' | 'no'>('checking');
   const [running, setRunning] = useState(false);
+  const [runStarting, setRunStarting] = useState(false);
   const [toolCallProgress, setToolCallProgress] = useState<ToolCallProgress[]>([]);
   const [phase, setPhase] = useState('Ready');
   const [workflowOutcome, setWorkflowOutcome] = useState<string | null>(null);
@@ -567,9 +568,9 @@ export default function App() {
       skillsEnabled: typeof settings.skills_enabled === 'boolean' ? settings.skills_enabled : (recovered.state.skills_enabled ?? initialOptions.skillsEnabled),
       skillSources: Array.isArray(settings.skill_sources) && settings.skill_sources.every((source) => source === 'project' || source === 'user') ? settings.skill_sources as SkillSource[] : (recovered.state.skill_sources || initialOptions.skillSources),
     };
-    setPrompt(''); setRunning(true); setPhase('Recovering interrupted task'); setStartedAt(Date.now()); setElapsed(0);
-    try { await request({ command: 'run_start', options: run }); }
-    catch (error) { setRunning(false); setPhase('Recovery failed'); setWorkflowOutcome('failed'); notify(`Could not continue the interrupted task: ${(error as Error).message}`, 'bad'); }
+    setPrompt(''); setRunning(true); setRunStarting(true); setPhase('Recovering interrupted task'); setStartedAt(Date.now()); setElapsed(0);
+    try { await request({ command: 'run_start', options: run }); setRunStarting(false); }
+    catch (error) { setRunning(false); setRunStarting(false); setPhase('Recovery failed'); setWorkflowOutcome('failed'); notify(`Could not continue the interrupted task: ${(error as Error).message}`, 'bad'); }
   }
 
   useEffect(() => {
@@ -581,6 +582,7 @@ export default function App() {
     const unsubscribe = window.agent.onEvent((event) => {
       if (isGlobalRunLifecycleEvent(event)) {
         setRunning(event.type === 'run_started');
+        setRunStarting(false);
         if (event.type === 'run_idle') {
           setOptions((current) => current.approvalMode === 'auto' ? { ...current, approvalMode: 'per-action' } : current);
         }
@@ -1145,15 +1147,16 @@ export default function App() {
     // Keep the current checklist and criteria visible until the sidecar publishes
     // the captured task's authoritative plan. Same-task continuations do not emit
     // a new seed plan.
-    setTrace([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setRunning(true); setPhase('Connecting to Ollama');
+    setTrace([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setRunning(true); setRunStarting(true); setPhase('Connecting to local runtime');
     setStartedAt(Date.now()); setElapsed(0); setRunMetrics(emptyRunMetrics()); setFirstOperationSeconds(null); setFirstFileWriteSeconds(null);
     try {
       await request({ command: 'run_start', options: run });
+      setRunStarting(false);
       // Keep the composer ready for same-task steering while the model reasons.
       promptRef.current?.focus();
     }
     catch (error) {
-      setRunning(false); setPhase('Run failed'); setWorkflowOutcome('failed');
+      setRunning(false); setRunStarting(false); setPhase('Run failed'); setWorkflowOutcome('failed');
       setPrompt((draft) => draft.trim() ? draft : task);
       promptRef.current?.focus();
       setMessages((current) => current.at(-1)?.role === 'user' && current.at(-1)?.content === task && !current.at(-1)?.turnId
@@ -1163,7 +1166,7 @@ export default function App() {
   }
 
   async function queueFollowupPrompt() {
-    if (!running || queueSubmitting || !session || !workspace || !prompt.trim()) return;
+    if (!canSubmitActiveRunUpdate(running, runStarting) || queueSubmitting || !session || !workspace || !prompt.trim()) return;
     setQueueSubmitting(true);
     try {
       const result = await request<{ queuedPrompts: QueuedPrompt[] }>({
@@ -1178,7 +1181,7 @@ export default function App() {
   }
 
   async function steerActiveTask() {
-    if (!running || steeringSubmitting || !session || !workspace || !prompt.trim()) return;
+    if (!canSubmitActiveRunUpdate(running, runStarting) || steeringSubmitting || !session || !workspace || !prompt.trim()) return;
     setSteeringSubmitting(true);
     try {
       const result = await request<{ status?: string }>({ command: 'session_steer', sessionId: session.session_id, workspace, prompt: prompt.trim() });
@@ -1463,7 +1466,7 @@ export default function App() {
       />}
       {view === 'session' && <SessionRoom
         root={workspace} session={session} messages={messages} activities={activities} activityMode={activityMode} plan={plan} acceptanceCriteria={acceptanceCriteria} phase={phase} workflowOutcome={workflowOutcome} verificationEvidence={verificationEvidence} toolCallProgress={toolCallProgress}
-        elapsed={elapsed} running={running} prompt={prompt} setPrompt={setPrompt} promptRef={promptRef}
+        elapsed={elapsed} running={running} runStarting={runStarting} prompt={prompt} setPrompt={setPrompt} promptRef={promptRef}
         queuedPrompts={session?.queued_prompts || []} onQueue={queueFollowupPrompt} onSteer={steerActiveTask} onRemoveQueued={removeQueuedPrompt} queueSubmitting={queueSubmitting} steeringSubmitting={steeringSubmitting}
         options={options} setOptions={setOptions} files={availableFiles} telemetry={telemetry}
         runMetrics={runMetrics} firstOperationSeconds={firstOperationSeconds} firstFileWriteSeconds={firstFileWriteSeconds} onRun={() => void startRun()} onRunQueued={(item) => void startRun(item)} onCancel={cancelRun} onSettings={() => setSettingsOpen(true)} onBack={() => { if (!running) setView('project'); }}
@@ -1659,9 +1662,9 @@ function ProjectHome({ root, tab, setTab, files, filePage, filePageSize, filePag
   </section>;
 }
 
-function SessionRoom({ root, session, messages, activities, activityMode, plan, acceptanceCriteria, phase, workflowOutcome, verificationEvidence, toolCallProgress, elapsed, running, prompt, setPrompt, promptRef, queuedPrompts, onQueue, onSteer, onRemoveQueued, queueSubmitting, steeringSubmitting, options, setOptions, files, telemetry, runMetrics, firstOperationSeconds, firstFileWriteSeconds, appliedSettings, onRun, onRunQueued, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
+function SessionRoom({ root, session, messages, activities, activityMode, plan, acceptanceCriteria, phase, workflowOutcome, verificationEvidence, toolCallProgress, elapsed, running, runStarting, prompt, setPrompt, promptRef, queuedPrompts, onQueue, onSteer, onRemoveQueued, queueSubmitting, steeringSubmitting, options, setOptions, files, telemetry, runMetrics, firstOperationSeconds, firstFileWriteSeconds, appliedSettings, onRun, onRunQueued, onCancel, onSettings, onBack, onDiff, onMcp, onTools, onEnter, endRef, model, modelInfo, onToggleHarnessProfile }: {
   root: string; session: Session | null; messages: ChatMessage[]; activities: ActivityRecord[]; activityMode: ActivityMode; plan: PlanItem[]; acceptanceCriteria: string[];
-  phase: string; elapsed: number; running: boolean; prompt: string; setPrompt: (value: string) => void;
+  phase: string; elapsed: number; running: boolean; runStarting: boolean; prompt: string; setPrompt: (value: string) => void;
   queuedPrompts: QueuedPrompt[]; onQueue: () => void; onSteer: () => void; onRemoveQueued: (id: string) => void; queueSubmitting: boolean; steeringSubmitting: boolean;
   toolCallProgress: ToolCallProgress[];
   workflowOutcome: string | null; verificationEvidence: VerificationEvidence | null; promptRef: React.RefObject<HTMLTextAreaElement | null>; options: typeof initialOptions;
@@ -1736,7 +1739,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
   return <section className="session-view">
     <div className="session-commandline"><button className="crumb-back" onClick={onBack}>PROJECT / {shortPath(root).toUpperCase()}</button><span className="crumb-slash">/</span><span className="session-crumb">SESSION {session?.session_id.slice(-8).toUpperCase()}</span><span className="commandline-spacer"/><button className="inline-command" onClick={onTools}>TOOLS</button><button className="inline-command" onClick={onMcp}>MCP</button><button className="inline-command" onClick={onDiff}>CHANGES</button><span className={`phase-chip ${running ? 'is-running' : ''}`}><i/>{running ? phase.toUpperCase() : phase.toUpperCase()}</span><span className="run-elapsed"><Icon name="clock"/> {running ? secs(elapsed) : '—'}</span></div>
     <div className="task-route" aria-label="Task execution phases">{steps.map((step, index) => <div className={`route-step ${index < currentStep ? 'done' : ''} ${index === currentStep ? 'current' : ''}`} key={step}><span className="route-node">{index < currentStep ? <Icon name="check"/> : `0${index + 1}`}</span><span>{step === 'Waiting for first token' ? 'Prefill / waiting' : step}</span></div>)}</div>
-    {running && <div className="active-run-status" role="status" aria-live="polite"><span className="stream-pulse"/><strong>{phase}</strong><span>{latestActiveActivity ? `${latestActiveActivity.name?.replaceAll('_', ' ') || latestActiveActivity.kind} · ${latestActiveActivity.status.replaceAll('_', ' ')}` : toolCallProgress.length ? 'Structured tool request is being prepared; it has not been dispatched yet.' : phase === 'Reasoning' ? 'The model is still reasoning. No file or command operation is dispatched until a complete structured tool call arrives.' : 'The request is active; live file, command, and plan events will appear here and in the worksheet.'}</span><small>{secs(elapsed)} elapsed{runMetrics.estimatedInputTokens !== null ? ` · ~${fmt(runMetrics.estimatedInputTokens)} estimated input tokens` : ''}</small></div>}
+    {running && <div className="active-run-status" role="status" aria-live="polite"><span className="stream-pulse"/><strong>{phase}</strong><span>{runStarting ? 'The sidecar is accepting the task. You can draft an update here and send it when startup completes.' : latestActiveActivity ? `${latestActiveActivity.name?.replaceAll('_', ' ') || latestActiveActivity.kind} · ${latestActiveActivity.status.replaceAll('_', ' ')}` : toolCallProgress.length ? 'Structured tool request is being prepared; it has not been dispatched yet.' : phase === 'Reasoning' ? 'The model is still reasoning. No file or command operation is dispatched until a complete structured tool call arrives.' : 'The request is active; live file, command, and plan events will appear here and in the worksheet.'}</span><small>{secs(elapsed)} elapsed{runMetrics.estimatedInputTokens !== null ? ` · ~${fmt(runMetrics.estimatedInputTokens)} estimated input tokens` : ''}</small></div>}
     {workflowOutcome && <div className={`workflow-outcome outcome-${workflowOutcome}`} role="status"><span>OBSERVED OUTCOME</span><strong>{workflowOutcomeLabel(workflowOutcome)}</strong><small>{workflowOutcome === 'no_action' ? 'No structured plan or project operation was recorded. Continue the same request as an explicit implementation turn; existing access and approval rules still apply.' : workflowOutcome === 'command_completed' ? 'Command exit was successful; this does not alone prove tests passed.' : workflowOutcome === 'changed' ? 'Project changes exist without a recorded post-change inspection.' : workflowOutcome === 'inspected' ? 'A post-change inspection completed; semantic correctness is not implied.' : workflowOutcome === 'implementation_incomplete' ? 'The same response repeated without new observable project progress. Review the saved plan, checkpoint, and workspace before resuming.' : workflowOutcome === 'response_missing' ? 'The model returned no user-visible completion after a follow-up. Saved tool effects are preserved; review them before resuming.' : workflowOutcome === 'response_truncated' ? 'The selected output-token setting was preserved. Review the partial answer; continue from the saved checkpoint if you need the remainder.' : workflowOutcome === 'implementation_unverified' ? 'A command may have changed files, but the host did not observe a structured project change. Review the inspection evidence.' : 'Based on the host-observed tools and terminal status.'}</small>{workflowOutcome === 'no_action' && !running && <button className="workflow-outcome-continue" type="button" onClick={continueNoActionAsImplementation}>Continue this request as Implement <Icon name="arrow"/></button>}{verificationEvidenceLabel(verificationEvidence) && <small className="verification-evidence">{verificationEvidenceLabel(verificationEvidence)}</small>}</div>}
     <div className="session-main-grid">
       <section className="transcript-plane" aria-label="Conversation transcript">
@@ -1747,8 +1750,8 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
         </article>{message.role === 'user' && message.turnId && messages.findIndex((row) => row.role === 'user' && row.turnId === message.turnId) === index && <ActivityFeed entries={activitiesByTurn.get(message.turnId) || []} mode={activityMode} surface="chat"/>}</Fragment>)}{terminalSummary && <article className="message-card message-status" role="status"><div className="message-meta"><span className="speaker-mark status">WB</span><strong>Workbench status</strong><span>RUN ENDED</span></div><div className="message-content"><p>{terminalSummary}</p></div>{canContinueFromOutcome(workflowOutcome) && !running && <button className="workflow-outcome-continue" type="button" onClick={continueFromSavedCheckpoint}>Continue from saved checkpoint <Icon name="arrow"/></button>}</article>}<div ref={endRef}/>{!followTranscript && <button className="jump-latest" onClick={() => { followTranscriptRef.current = true; setFollowTranscript(true); if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight; }} aria-label="Jump to latest message">↓ Latest</button>}</div>}
         <div className="composer-shell">
           <div className="composer-profile"><span className={`profile-chip access-${options.access}`}>{options.access.toUpperCase()}</span><span className="profile-chip approval-chip">{options.approvalMode === 'auto' ? 'AUTO APPROVE · THIS RUN' : options.approvalMode === 'per-session' ? session?.session_approval_granted ? 'SESSION APPROVED' : 'APPROVAL · THIS CHAT' : options.approvalMode === 'per-task' ? 'PER TASK' : 'PER ACTION'}</span><span className="profile-chip capability-chip" title="Capability reported by the selected local runtime; support metadata may be unknown">TOOLS {modelInfo?.tool_support === 'supported' ? 'SUPPORTED' : modelInfo?.tool_support === 'unsupported' ? 'UNSUPPORTED' : 'UNKNOWN'}</span><label className="profile-chip intent-chip" title="Task intent guides the agent; file access and approval remain separate">INTENT <select aria-label="Task intent" value={options.taskIntent} disabled={running} onChange={(event) => { const taskIntent = event.target.value as TaskIntent; setOptions((current) => ({ ...current, taskIntent })); localStorage.setItem('agent-task-intent', taskIntent); }}><option value="auto">AUTO</option><option value="discuss">DISCUSS</option><option value="plan">PLAN</option><option value="implement">IMPLEMENT</option></select></label><button className={`profile-toggle ${options.harnessProfile === 'small-model' ? 'is-active' : ''}`} type="button" aria-pressed={options.harnessProfile === 'small-model'} title="Changes agent workflow guidance only; model settings and token limits stay unchanged" onClick={onToggleHarnessProfile} disabled={running}>Small-model {options.harnessProfile === 'small-model' ? 'on' : 'off'}</button><span className="profile-hint">{fmt(options.context)} context · {fmt(options.maxTokens)} output</span><button onClick={onSettings}>Adjust run</button></div>
-          <textarea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={running ? (event) => { if (shouldQueuePromptOnEnter(event.key, event.shiftKey, event.nativeEvent.isComposing)) { event.preventDefault(); onSteer(); } } : onEnter} placeholder={running ? 'Send an update now; active model reasoning will be preserved and redirected…' : 'Describe the work. Use Shift + Enter to add detail…'} rows={3} aria-label={running ? 'Redirect the active task now; partial response is saved and the same task continues' : 'Task prompt'} aria-describedby={running ? 'follow-up-help' : undefined}/>
-          <div className="composer-bottom"><span id={running ? 'follow-up-help' : undefined}>{running ? <><kbd>ENTER</kbd> to redirect the same task now <b>·</b> its partial response is saved <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> queue next is separate</> : <><kbd>ENTER</kbd> to run <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> reasoning {options.reasoning == null ? 'model default' : String(options.reasoning)}</>}</span>{running ? <><Button kind="bright" onClick={onSteer} disabled={!prompt.trim() || steeringSubmitting}><Icon name={steeringSubmitting ? 'clock' : 'arrow'}/>{steeringSubmitting ? 'Sending' : 'Redirect now'}</Button><Button kind="outline" onClick={onQueue} disabled={!prompt.trim() || queueSubmitting}><Icon name={queueSubmitting ? 'clock' : 'plus'}/>{queueSubmitting ? 'Saving…' : 'Queue next'}</Button><Button kind="danger" onClick={onCancel}><Icon name="stop"/> Cancel request</Button></> : <Button kind="bright" onClick={onRun} disabled={!prompt.trim()}><Icon name="play"/> Run task</Button>}</div>
+          <textarea ref={promptRef} value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={running ? (event) => { if (shouldQueuePromptOnEnter(event.key, event.shiftKey, event.nativeEvent.isComposing)) { event.preventDefault(); if (!runStarting) onSteer(); } } : onEnter} placeholder={runStarting ? 'Task is starting. Draft an update; send it when startup completes…' : running ? 'Send an update now; active model reasoning will be preserved and redirected…' : 'Describe the work. Use Shift + Enter to add detail…'} rows={3} aria-label={running ? runStarting ? 'Draft an update while the task starts' : 'Redirect the active task now; partial response is saved and the same task continues' : 'Task prompt'} aria-describedby={running ? 'follow-up-help' : undefined}/>
+          <div className="composer-bottom"><span id={running ? 'follow-up-help' : undefined}>{running ? runStarting ? <>TASK STARTING · DRAFT HERE, THEN SEND AFTER STARTUP <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line</> : <><kbd>ENTER</kbd> to redirect the same task now <b>·</b> its partial response is saved <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> queue next is separate</> : <><kbd>ENTER</kbd> to run <b>·</b> <kbd>SHIFT ENTER</kbd> for a new line <b>·</b> reasoning {options.reasoning == null ? 'model default' : String(options.reasoning)}</>}</span>{running ? <><Button kind="bright" onClick={onSteer} disabled={runStarting || !prompt.trim() || steeringSubmitting}><Icon name={steeringSubmitting ? 'clock' : 'arrow'}/>{steeringSubmitting ? 'Sending' : runStarting ? 'Starting…' : 'Redirect now'}</Button><Button kind="outline" onClick={onQueue} disabled={runStarting || !prompt.trim() || queueSubmitting}><Icon name={queueSubmitting ? 'clock' : 'plus'}/>{queueSubmitting ? 'Saving…' : runStarting ? 'Starting…' : 'Queue next'}</Button><Button kind="danger" onClick={onCancel} disabled={runStarting}><Icon name="stop"/> {runStarting ? 'Starting…' : 'Cancel request'}</Button></> : <Button kind="bright" onClick={onRun} disabled={!prompt.trim()}><Icon name="play"/> Run task</Button>}</div>
           {queuedPrompts.length > 0 && <section className="queued-prompt-list" aria-label="Saved follow-up prompts"><div className="queued-prompt-heading"><b>FOLLOW-UPS</b><span>{queuedPrompts.length} saved · starts only when selected</span></div>{queuedPrompts.map((item, index) => <article className="queued-prompt-row" key={item.id}><div><small>#{index + 1} · {new Date(item.queued_at * 1000).toLocaleString()}</small><p>{item.prompt}</p></div><div className="queued-prompt-actions"><Button kind="bright" disabled={running} onClick={() => onRunQueued(item)}><Icon name="play"/> Start next</Button><Button kind="quiet" onClick={() => onRemoveQueued(item.id)}>Remove</Button></div></article>)}</section>}
         </div>
       </section>

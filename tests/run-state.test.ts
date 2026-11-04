@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyToolCallProgress, isGlobalRunLifecycleEvent, latestActiveActivityForTurn, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter } from '../src/shared/run-state';
+import { applyToolCallProgress, canSubmitActiveRunUpdate, isGlobalRunLifecycleEvent, latestActiveActivityForTurn, nextRunPhase, restoredRunPhase, runStepProgress, shouldApplySessionEvent, shouldQueuePromptOnEnter } from '../src/shared/run-state';
 import type { ActivityRecord } from '../src/shared/protocol';
 
 describe('session event isolation', () => {
@@ -14,6 +14,14 @@ describe('session event isolation', () => {
     expect(isGlobalRunLifecycleEvent({ type: 'run_started', sessionId: 'session-a' })).toBe(true);
     expect(isGlobalRunLifecycleEvent({ type: 'run_idle', sessionId: 'session-a' })).toBe(true);
     expect(isGlobalRunLifecycleEvent({ type: 'activity_event', sessionId: 'session-a' })).toBe(false);
+  });
+});
+
+describe('active-run composer actions', () => {
+  it('accepts steering and queue actions only after the sidecar accepts the run', () => {
+    expect(canSubmitActiveRunUpdate(false, false)).toBe(false);
+    expect(canSubmitActiveRunUpdate(true, true)).toBe(false);
+    expect(canSubmitActiveRunUpdate(true, false)).toBe(true);
   });
 });
 

@@ -23,6 +23,10 @@ export function shouldQueuePromptOnEnter(key: string, shiftKey: boolean, isCompo
   return key === 'Enter' && !shiftKey && !isComposing;
 }
 
+export function canSubmitActiveRunUpdate(running: boolean, starting: boolean): boolean {
+  return running && !starting;
+}
+
 export function shouldApplySessionEvent(eventSessionId: unknown, activeSessionId: string): boolean {
   return typeof eventSessionId !== 'string' || eventSessionId.length === 0 || eventSessionId === activeSessionId;
 }
