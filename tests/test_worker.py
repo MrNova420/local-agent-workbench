@@ -266,6 +266,34 @@ def test_run_start_reconciles_a_queued_prompt_removed_from_another_window(servic
     assert any(event.get("type") == "session_queue_update" for event in events)
 
 
+def test_run_start_returns_queue_reconciliation_if_item_disappears_after_preflight(service, tmp_path, monkeypatch):
+    project = tmp_path / "queue-disappears-during-start"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    state["queued_prompts"] = [{"id": "queue-race", "prompt": "Keep this follow-up", "queued_at": 1.0}]
+    service.sessions.save(state)
+    events = []
+    monkeypatch.setattr(service, "emit", events.append)
+
+    def disappeared(_state, _prompt_id, _prompt):
+        raise worker.QueuedPromptUnavailable("That queued prompt no longer exists.")
+
+    monkeypatch.setattr(worker, "consume_queued_prompt", disappeared)
+    result = service.handle("run_start", {"options": {
+        "workspace": str(project), "sessionId": state["session_id"],
+        "queuedPromptId": "queue-race", "prompt": "Keep this follow-up",
+        "model": "model-a:latest", "context": 4096, "maxTokens": 128,
+        "temperature": 0.2, "access": "ask", "approvalMode": "per-action",
+    }})
+
+    assert result["started"] is False
+    assert result["queuedPromptUnavailable"] is True
+    assert result["queuedPrompts"] == state["queued_prompts"]
+    assert service.active is None
+    assert not service.run_lock.locked()
+    assert any(event.get("type") == "session_queue_update" for event in events)
+
+
 def test_followup_prompt_queue_updates_only_its_active_session(service, tmp_path, monkeypatch):
     project = tmp_path / "active-queue-project"
     project.mkdir()

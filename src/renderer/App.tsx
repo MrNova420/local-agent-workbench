@@ -1160,6 +1160,11 @@ export default function App() {
       runStartPendingRef.current = false;
       if (startResult.queuedPromptAlreadyStarted || startResult.queuedPromptUnavailable) {
         setRunning(false); setRunStarting(false); setPhase('Ready');
+        if (startResult.queuedPromptUnavailable) {
+          // A queue row can disappear between rendering and dispatch. Keep its
+          // text available so reconciliation never turns a click into lost work.
+          setPrompt((draft) => draft.trim() ? draft : task);
+        }
         setMessages((current) => current.at(-1)?.role === 'user' && current.at(-1)?.content === task && !current.at(-1)?.turnId
           ? current.slice(0, -1) : current);
         if (session && startResult.queuedPrompts) {

@@ -90,11 +90,15 @@ def _validated_queued_prompts(state: dict[str, Any]) -> list[dict[str, Any]]:
     return result
 
 
+class QueuedPromptUnavailable(ValueError):
+    """The selected queue row vanished after the run-start preflight check."""
+
+
 def consume_queued_prompt(state: dict[str, Any], queued_prompt_id: str, prompt: str) -> dict[str, Any]:
     rows = _validated_queued_prompts(state)
     index = next((index for index, row in enumerate(rows) if row["id"] == queued_prompt_id), None)
     if index is None:
-        raise ValueError("That queued prompt no longer exists.")
+        raise QueuedPromptUnavailable("That queued prompt no longer exists.")
     item = rows[index]
     if item["prompt"] != prompt:
         raise ValueError("The queued prompt text does not match the selected queue entry.")
@@ -1787,7 +1791,18 @@ class AgentService:
                     return {"started": False, "queuedPromptAlreadyStarted": True,
                             "turnId": prior_turn.get("turn_id"), "queuedPrompts": queued_rows}
                 return {"started": False, "queuedPromptUnavailable": True, "queuedPrompts": queued_rows}
-            consume_queued_prompt(state, queued_prompt_id, prompt)
+            try:
+                consume_queued_prompt(state, queued_prompt_id, prompt)
+            except QueuedPromptUnavailable as exc:
+                # Queue state can be reconciled while a renderer is starting a
+                # previously displayed item. Treat a stale item as a normal
+                # reconciliation result, not a failed chat request. The text
+                # remains in the renderer composer for recovery.
+                queued_rows = _validated_queued_prompts(state)
+                self.emit({"type": "session_queue_update", "sessionId": state["session_id"],
+                           "workspace": str(source), "queuedPrompts": copy.deepcopy(queued_rows)})
+                return {"started": False, "queuedPromptUnavailable": True,
+                        "queuedPrompts": queued_rows, "reason": str(exc)}
         state.update(
             model=model, model_id=model, provider_id=provider.provider_id, provider=provider.provider_id,
             context=context, access=access,
