@@ -1,16 +1,25 @@
 import { useEffect, useState } from 'react';
 import type { ActivityMode, ActivityRecord } from '../shared/protocol';
-import { readActivityDisclosure, writeActivityDisclosure } from '../shared/activity-presentation';
+import { readActivityDisclosure, readActivityOutputVisibleCharacters, writeActivityDisclosure, writeActivityOutputVisibleCharacters } from '../shared/activity-presentation';
 
 const INITIAL_ACTIVITY_WINDOW = 100;
 const ACTIVITY_WINDOW_STEP = 100;
 
-function ProgressiveText({ value }: { value: string }) {
-  const [visible, setVisible] = useState(16_000);
+function ProgressiveText({ value, sessionId, activityId, field }: { value: string; sessionId: string; activityId: string; field: string }) {
+  const initialVisible = readActivityOutputVisibleCharacters(window.localStorage, sessionId, activityId, field, 16_000);
+  const visibleKey = `${sessionId}:${activityId}:${field}`;
+  const [visibleState, setVisibleState] = useState(() => ({ key: visibleKey, visible: initialVisible }));
+  const visible = visibleState.key === visibleKey ? visibleState.visible : initialVisible;
+  useEffect(() => setVisibleState({ key: visibleKey, visible: initialVisible }), [visibleKey, initialVisible]);
   if (!value) return null;
   const shown = value.slice(0, visible);
   const remaining = value.length - shown.length;
-  return <div className="activity-output-block"><pre>{shown}</pre>{remaining > 0 && <button className="activity-show-more" onClick={() => setVisible((count) => count + 16_000)}>Show next {Math.min(16_000, remaining).toLocaleString()} characters · {remaining.toLocaleString()} remaining</button>}</div>;
+  const showNext = () => {
+    const nextVisible = visible + 16_000;
+    writeActivityOutputVisibleCharacters(window.localStorage, sessionId, activityId, field, nextVisible);
+    setVisibleState({ key: visibleKey, visible: nextVisible });
+  };
+  return <div className="activity-output-block"><pre>{shown}</pre>{remaining > 0 && <button className="activity-show-more" onClick={showNext}>Show next {Math.min(16_000, remaining).toLocaleString()} characters · {remaining.toLocaleString()} remaining</button>}</div>;
 }
 
 function promptRequestSummary(row: ActivityRecord): string[] {
@@ -80,10 +89,10 @@ function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expande
     </summary>
     <div className="activity-card-details">
       {row.affectedFiles?.length ? <div className="activity-files">{row.affectedFiles.map((file) => <code key={file}>{file}</code>)}</div> : null}
-      {row.arguments !== undefined && <details className="activity-subdetails"><summary>Arguments</summary><ProgressiveText value={JSON.stringify(row.arguments, null, 2)}/></details>}
+      {row.arguments !== undefined && <details className="activity-subdetails"><summary>Arguments</summary><ProgressiveText value={JSON.stringify(row.arguments, null, 2)} sessionId={sessionId} activityId={row.id} field="arguments"/></details>}
       {progressMetrics.length > 0 && <div className="activity-plan-item"><b>Latest operation progress</b><span>{progressMetrics.join(' · ')}</span></div>}
-      {Object.entries(output).map(([stream, value]) => value ? <details className="activity-subdetails" key={stream}><summary>{stream} · {value.length.toLocaleString()} characters</summary><ProgressiveText value={value}/></details> : null)}
-      {row.result ? <details className="activity-subdetails"><summary>Result · {row.result.length.toLocaleString()} characters</summary><ProgressiveText value={row.result}/></details> : null}
+      {Object.entries(output).map(([stream, value]) => value ? <details className="activity-subdetails" key={stream}><summary>{stream} · {value.length.toLocaleString()} characters</summary><ProgressiveText value={value} sessionId={sessionId} activityId={row.id} field={`output:${stream}`}/></details> : null)}
+      {row.result ? <details className="activity-subdetails"><summary>Result · {row.result.length.toLocaleString()} characters</summary><ProgressiveText value={row.result} sessionId={sessionId} activityId={row.id} field="result"/></details> : null}
       {row.kind === 'question' && <div className="activity-question"><b>{row.question}</b>{row.options?.map((option, index) => <span key={`${row.id}-option-${index}`}>{option.label}{option.description ? ` · ${option.description}` : ''}</span>)}{row.answer && <p><strong>Answer:</strong> {row.answer}</p>}</div>}
       {row.kind === 'plan' && row.taskMode && <div className="activity-plan-item"><b>Task mode selected</b><span>{row.taskMode === 'plan_only' ? 'Plan only' : row.taskMode}</span></div>}
       {row.progressCheckpoint && <details className="activity-subdetails activity-progress-checkpoint"><summary>Saved progress checkpoint</summary><div className="activity-plan-item"><b>Next action</b><span>{row.progressCheckpoint.nextAction}</span></div>{([

@@ -1349,6 +1349,6 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 
 ## 2026-11-04 persisted activity disclosure presentation
 
-- Activity cards now restore a user's expanded/collapsed choice by session and operation ID across chat/sidebar rendering and app reopen. Inline mode remains expanded by default only when no user choice exists. Activity payloads and complete results remain in the session; only presentation preference is stored in renderer-local settings.
-- Added regressions for session/operation isolation and unavailable/corrupt UI preference storage. They are authored and queued; no renderer test, typecheck, package, or visible reopen check was run.
+- Activity cards now restore a user's expanded/collapsed choice by session and operation ID across chat/sidebar rendering and app reopen. Inline mode remains expanded by default only when no user choice exists. Large arguments, stdout/stderr, and results also restore the user's progressive visible-character position per operation/output stream. Activity payloads and complete results remain in the session; only presentation preferences are stored in renderer-local settings.
+- Added regressions for session/operation/stream isolation, progressive output positions, and unavailable/corrupt UI preference storage. They are authored and queued; no renderer test, typecheck, package, or visible reopen check was run.
 
