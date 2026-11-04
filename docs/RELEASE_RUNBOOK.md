@@ -49,7 +49,7 @@ Never force-move a published tag to repair an artifact. If an artifact is wrong,
 
 ## Current release evidence
 
-Public app release `v0.1.0-beta.3` is now the latest version. Its local source/package checks passed; visible app acceptance and the installed beta.2-to-beta.3 update/recovery canary remain open, as recorded in `ACCEPTANCE_LOG.md`. Documentation and planning work alone do not advance the app version. User-reported end-to-end website development is also recorded there; current-build screenshots and cross-platform packages remain separate acceptance items.
+As checked against the public [GitHub releases page](https://github.com/MrNova420/local-agent-workbench/releases) on 2026-11-03, `v0.1.0-beta.2` is still Latest. `v0.1.0-beta.3` remains draft-only, so it is not discoverable by the public updater. A fresh local beta.3 package from app implementation `b65f3ee` / engine `b7fb772e9e9b5a6f4819a3871286bc21639fc105` passes source suites, typecheck, package build, and bundled-worker startup/ping/shutdown, but it has not passed visible workflow, live Flint, or installed updater/recovery acceptance and has not been published. The draft beta.3 tag/version must not be reused or force-moved; after all pre-tag gates pass, select a strictly higher version and rebuild that exact commit. Documentation and planning work alone do not advance the app version. User-reported end-to-end website development is also recorded in `ACCEPTANCE_LOG.md`; current-build screenshots and cross-platform packages remain separate acceptance items.
 
 ## Upstream references
 
