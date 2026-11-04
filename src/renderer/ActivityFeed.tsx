@@ -5,8 +5,14 @@ import { readActivityDisclosure, readActivityOutputVisibleCharacters, writeActiv
 const INITIAL_ACTIVITY_WINDOW = 100;
 const ACTIVITY_WINDOW_STEP = 100;
 
+function presentationStorage(): Storage | undefined {
+  try { return typeof window === 'undefined' ? undefined : window.localStorage; }
+  catch { return undefined; }
+}
+
 function ProgressiveText({ value, sessionId, activityId, field }: { value: string; sessionId: string; activityId: string; field: string }) {
-  const initialVisible = readActivityOutputVisibleCharacters(window.localStorage, sessionId, activityId, field, 16_000);
+  const storage = presentationStorage();
+  const initialVisible = readActivityOutputVisibleCharacters(storage, sessionId, activityId, field, 16_000);
   const visibleKey = `${sessionId}:${activityId}:${field}`;
   const [visibleState, setVisibleState] = useState(() => ({ key: visibleKey, visible: initialVisible }));
   const visible = visibleState.key === visibleKey ? visibleState.visible : initialVisible;
@@ -16,7 +22,7 @@ function ProgressiveText({ value, sessionId, activityId, field }: { value: strin
   const remaining = value.length - shown.length;
   const showNext = () => {
     const nextVisible = visible + 16_000;
-    writeActivityOutputVisibleCharacters(window.localStorage, sessionId, activityId, field, nextVisible);
+    writeActivityOutputVisibleCharacters(storage, sessionId, activityId, field, nextVisible);
     setVisibleState({ key: visibleKey, visible: nextVisible });
   };
   return <div className="activity-output-block"><pre>{shown}</pre>{remaining > 0 && <button className="activity-show-more" onClick={showNext}>Show next {Math.min(16_000, remaining).toLocaleString()} characters · {remaining.toLocaleString()} remaining</button>}</div>;
@@ -43,7 +49,8 @@ function promptRequestSummary(row: ActivityRecord): string[] {
 function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expanded: boolean; surface: 'chat' | 'sidebar' }) {
   const sessionId = row.sessionId || '';
   const defaultOpen = surface === 'chat' && expanded;
-  const savedOpen = readActivityDisclosure(window.localStorage, sessionId, row.id);
+  const storage = presentationStorage();
+  const savedOpen = readActivityDisclosure(storage, sessionId, row.id);
   const disclosureKey = `${sessionId}:${row.id}`;
   const [disclosureState, setDisclosureState] = useState(() => ({
     key: disclosureKey,
@@ -54,7 +61,7 @@ function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expande
     setDisclosureState({ key: disclosureKey, open: savedOpen ?? defaultOpen });
   }, [disclosureKey, savedOpen, defaultOpen]);
   const updateDisclosure = (open: boolean) => {
-    writeActivityDisclosure(window.localStorage, sessionId, row.id, open);
+    writeActivityDisclosure(storage, sessionId, row.id, open);
     setDisclosureState({ key: disclosureKey, open });
   };
   const promptSummary = row.kind === 'prompt' ? promptRequestSummary(row) : [];

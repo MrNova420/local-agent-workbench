@@ -1762,7 +1762,8 @@ def test_activity_events_checkpoint_complete_results_and_unstarted_calls(service
     assert checkpoint_tools[1]["content"] == "second result"
     assert sum(message.get("role") == "assistant" and bool(message.get("tool_calls")) for message in saved["run_state"]["safe_messages"]) == 1
     assert any(event["type"] == "activity_event" for event in emitted)
-    assert any(event["type"] == "activity_event" and event.get("activity", {}).get("progress", {}).get("bytesWritten") == 4194304 for event in emitted)
+    assert any(event["type"] == "activity_event" and isinstance(event.get("activity"), dict)
+               and event["activity"].get("progress", {}).get("bytesWritten") == 4194304 for event in emitted)
 
 
 def test_parallel_active_reads_are_tracked_and_recovered_individually(service, tmp_path, monkeypatch):
@@ -1928,6 +1929,12 @@ def test_tool_call_progress_is_live_safe_and_durable(service, tmp_path, monkeypa
                   "journal_pending": []}
     emitted = []
     monkeypatch.setattr(service, "emit", emitted.append)
+    journal_rows = []
+    append_events = service.sessions.append_events
+    def capture_events(session_id, workspace, events):
+        journal_rows.extend(dict(row) for row in events)
+        return append_events(session_id, workspace, events)
+    monkeypatch.setattr(service.sessions, "append_events", capture_events)
 
     service._publish_run_event(controller, SimpleNamespace(workspace=project), {
         "type": "tool_call_progress", "provider": "ollama", "request_index": 0,
@@ -2453,6 +2460,9 @@ def test_engine_return_without_completion_event_fails_closed(service, tmp_path, 
 
 
 def test_engine_failure_is_saved_with_the_session(service, tmp_path, monkeypatch):
+    events = []
+    service.emit = events.append
+
     class FailingEngine:
         def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
             self.state = {}
@@ -2492,9 +2502,14 @@ def test_engine_failure_is_saved_with_the_session(service, tmp_path, monkeypatch
 
 
 def test_engine_failure_does_not_claim_session_saved_when_both_mirrors_fail(service, tmp_path, monkeypatch):
+    events = []
+    service.emit = events.append
+
     class FailingSaveEngine:
         def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
             self.event = event
+            self.runtime = object()
+            self.state = {}
 
         def run(self, prompt, messages):
             service.sessions.save = lambda _state: {

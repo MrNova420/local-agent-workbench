@@ -49,7 +49,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from desktop_engine import AgentEngine, OllamaRuntime, RequestCancelled, ToolRegistry, Workspace  # noqa: E402
 from permission_policy import permission_rules_for_workspace, validate_permission_rules  # noqa: E402
-from task_checkpoint import begin_task, finish_task, initial_task_plan, record_plan, record_user_update  # noqa: E402
+from task_checkpoint import begin_task, current_task, finish_task, initial_task_plan, record_plan, record_user_update  # noqa: E402
 from disposable_workspace import (  # noqa: E402
     apply_reviewed_changes,
     capture_manifest,
@@ -613,6 +613,12 @@ class AgentService:
                 self.emit(enriched)
                 self.emit({"type": "activity_event", "activity": copy.deepcopy(activity),
                            "sessionId": state["session_id"], "turnId": controller["turn_id"]})
+            elif activity and kind == "error":
+                # A failure is both a durable activity row and a chat-visible
+                # terminal event. Do not replace the terminal error with the
+                # activity envelope or the renderer will never finish the turn.
+                self.emit(enriched)
+                self.emit({**enriched, "type": "activity_event", "activity": copy.deepcopy(activity)})
             elif activity:
                 if kind in {"inference_settings", "generation_usage", "request_dispatched", "request_headers", "request_complete", "request_error"}:
                     # Keep live settings/metrics/phase events and publish the same
@@ -936,9 +942,11 @@ class AgentService:
                     if prior_update.get("instruction") != clean:
                         raise ValueError("This steering request identity was already used for different steering text.")
                     return {"accepted": True, "updateId": prior_update.get("id"),
-                            "status": "pending", "deduplicated": True}
+                            "status": str(prior_update.get("status", "pending")), "deduplicated": True}
+                steering_interrupt = controller.get("steering_interrupt")
+                interrupting = bool(controller.get("inference_active", False) and steering_interrupt is not None)
                 update = {"id": uuid.uuid4().hex, "turn_id": controller["turn_id"], "instruction": clean,
-                          "status": "pending", "created_at": time.time()}
+                          "status": "interrupting" if interrupting else "pending", "created_at": time.time()}
                 if client_request_id:
                     update["client_request_id"] = client_request_id
                 record_user_update(checkpoint, update)
@@ -970,8 +978,6 @@ class AgentService:
                     if isinstance(run_state, dict):
                         run_state["pending_steers"] = copy.deepcopy(controller["pending_steers"])
                     raise RuntimeError(saved.get("error") or "Steering input could not be saved to either session mirror.")
-                steering_interrupt = controller.get("steering_interrupt")
-                interrupting = bool(controller.get("inference_active", False) and steering_interrupt is not None)
                 if interrupting:
                     steering_interrupt.set()
                 self.emit({"type": "steering_update", "status": "interrupting" if interrupting else "accepted", "updateId": update["id"],
@@ -2137,7 +2143,8 @@ class AgentService:
                 saved = self._save_active_session(controller)
                 if not (saved["app_saved"] and saved["project_saved"]):
                     self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"], "error": saved["error"] or "Session storage is unavailable."})
-                self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
+                if saved.get("app_saved") or saved.get("project_saved"):
+                    self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
                 self.emit({"type": "cancelled", "elapsed": 0, "sessionId": state["session_id"]})
                 return
             read_only_access = turn.access == "plan"
@@ -2362,7 +2369,10 @@ class AgentService:
                 run_state["partial_thinking"] = ""
                 update_turn_record(str(run_state["status"]))
             if terminal and terminal.get("type") == "error":
-                state["last_error"] = {"message": str(terminal.get("error", "Run failed.")), "occurred_at": time.time()}
+                message = str(terminal.get("error", "Run failed."))
+                state["last_error"] = {"message": message,
+                                        "diagnostic": str(terminal.get("diagnostic") or message),
+                                        "occurred_at": time.time()}
             elif not terminal and not completion_event:
                 state["last_error"] = {"message": "The engine returned without a terminal completion event.", "occurred_at": time.time()}
                 finish_task(state.get("task_checkpoint", {}), "failed",
@@ -2375,7 +2385,8 @@ class AgentService:
             saved = self._save_active_session(controller)
             if not (saved["app_saved"] and saved["project_saved"]):
                 self.emit({"type": "session_mirror_error", "sessionId": state["session_id"], "appSaved": saved["app_saved"], "projectSaved": saved["project_saved"], "error": saved["error"] or "Session storage is unavailable."})
-            self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
+            if saved.get("app_saved") or saved.get("project_saved"):
+                self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
             if terminal:
                 relay.emit_terminal_after_persist()
             elif completion_event:

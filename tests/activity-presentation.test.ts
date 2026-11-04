@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readActivityDisclosure, readActivityOutputVisibleCharacters, writeActivityDisclosure, writeActivityOutputVisibleCharacters } from '../src/shared/activity-presentation';
 
 describe('saved activity disclosure presentation', () => {
-  it('persists a user's open state by session and operation identity', () => {
+  it("persists a user's open state by session and operation identity", () => {
     const values = new Map<string, string>();
     const storage = {
       getItem: (key: string) => values.get(key) ?? null,
@@ -21,6 +21,8 @@ describe('saved activity disclosure presentation', () => {
   it('treats invalid or unavailable UI preference storage as unset', () => {
     expect(readActivityDisclosure({ getItem: () => 'broken', setItem: () => undefined }, 'session', 'operation')).toBeNull();
     expect(readActivityDisclosure({ getItem: () => { throw new Error('disabled'); }, setItem: () => undefined }, 'session', 'operation')).toBeNull();
+    expect(readActivityDisclosure(undefined, 'session', 'operation')).toBeNull();
+    expect(readActivityOutputVisibleCharacters(undefined, 'session', 'operation', 'result', 16_000)).toBe(16_000);
   });
 
   it('restores the progressive output position independently for each result stream', () => {

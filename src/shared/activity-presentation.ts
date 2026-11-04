@@ -1,6 +1,6 @@
 const ACTIVITY_OPEN_KEY = 'agent-workbench:expanded-activity:';
 const ACTIVITY_OUTPUT_KEY = 'agent-workbench:visible-activity-output:';
-type ActivityPresentationStorage = Pick<Storage, 'getItem' | 'setItem'>;
+type ActivityPresentationStorage = Pick<Storage, 'getItem' | 'setItem'> | null | undefined;
 
 function activityKey(sessionId: string, activityId: string): string {
   return `${ACTIVITY_OPEN_KEY}${sessionId}:${activityId}`;
@@ -8,7 +8,7 @@ function activityKey(sessionId: string, activityId: string): string {
 
 /** Return null when the user has not chosen a disclosure state for this activity. */
 export function readActivityDisclosure(storage: ActivityPresentationStorage, sessionId: string, activityId: string): boolean | null {
-  if (!sessionId || !activityId) return null;
+  if (!storage || !sessionId || !activityId) return null;
   try {
     const value = storage.getItem(activityKey(sessionId, activityId));
     return value === 'open' ? true : value === 'closed' ? false : null;
@@ -18,7 +18,7 @@ export function readActivityDisclosure(storage: ActivityPresentationStorage, ses
 }
 
 export function writeActivityDisclosure(storage: ActivityPresentationStorage, sessionId: string, activityId: string, open: boolean): void {
-  if (!sessionId || !activityId) return;
+  if (!storage || !sessionId || !activityId) return;
   try {
     storage.setItem(activityKey(sessionId, activityId), open ? 'open' : 'closed');
   } catch {
@@ -33,7 +33,7 @@ function activityOutputKey(sessionId: string, activityId: string, field: string)
 export function readActivityOutputVisibleCharacters(
   storage: ActivityPresentationStorage, sessionId: string, activityId: string, field: string, fallback: number,
 ): number {
-  if (!sessionId || !activityId || !field) return fallback;
+  if (!storage || !sessionId || !activityId || !field) return fallback;
   try {
     const value = Number(storage.getItem(activityOutputKey(sessionId, activityId, field)));
     return Number.isSafeInteger(value) && value > 0 ? value : fallback;
@@ -45,7 +45,7 @@ export function readActivityOutputVisibleCharacters(
 export function writeActivityOutputVisibleCharacters(
   storage: ActivityPresentationStorage, sessionId: string, activityId: string, field: string, visibleCharacters: number,
 ): void {
-  if (!sessionId || !activityId || !field || !Number.isSafeInteger(visibleCharacters) || visibleCharacters < 1) return;
+  if (!storage || !sessionId || !activityId || !field || !Number.isSafeInteger(visibleCharacters) || visibleCharacters < 1) return;
   try {
     storage.setItem(activityOutputKey(sessionId, activityId, field), String(visibleCharacters));
   } catch {

@@ -8,6 +8,7 @@ import { approvalModeDescription } from '../shared/approval-mode-copy';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, isReasoningBudgetValid, MAX_REASONING_BUDGET_TOKENS, normalizeReasoningChoice, readReasoningBudgetPreference, readRunTokenPreferences } from '../shared/model-controls';
 import { featuredInstalledModels } from '../shared/model-recommendations';
 import { normalizeGpuStats } from '../shared/resource-metrics';
+import { runtimeWorkerCpuCoreEquivalents } from '../shared/resource-format';
 import { appendTranscriptSegment, finalizeStreamingAssistantMessage, readExpandedReasoning, reconcileLiveAssistantMessage, restoreTranscriptMessages, writeExpandedReasoning } from '../shared/transcript';
 import { LocalModelOrbit } from './ModelOrbit';
 import { ActivityFeed } from './ActivityFeed';
@@ -1930,7 +1931,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
             <div className="resource-tile"><small>GPU LOAD</small><strong>{telemetry.gpuUtil == null ? '—' : `${telemetry.gpuUtil}%`}</strong><div className="meter"><i style={{ width: `${Math.min(100, telemetry.gpuUtil ?? 0)}%` }}/></div></div>
             <div className="resource-tile"><small>VRAM · {telemetry.gpu}</small><strong>{telemetry.vramUsed == null ? '—' : fmt(telemetry.vramUsed)} / {telemetry.vramTotal == null ? '—' : fmt(telemetry.vramTotal)} MiB</strong><div className="meter"><i style={{ width: `${telemetry.vramPercent ?? 0}%` }}/></div></div>
             <div className="resource-tile"><small>GPU POWER</small><strong>{telemetry.gpuPower == null ? '—' : `${telemetry.gpuPower.toFixed(2)} W`}</strong><span>BOARD DRAW</span></div>
-            <div className="resource-tile"><small>OLLAMA / LLAMA WORKERS</small><strong>{telemetry.runtimeWorkerCount ? `${telemetry.runtimeWorkerCpu == null ? '—' : `${telemetry.runtimeWorkerCpu}% CPU`} · ${telemetry.runtimeWorkerRss} RAM` : 'Not detected'}</strong><span>SHARED RUNTIME PROCESSES</span></div>
+            <div className="resource-tile"><small>INFERENCE WORKER CPU</small><strong>{telemetry.runtimeWorkerCount ? `${runtimeWorkerCpuCoreEquivalents(telemetry.runtimeWorkerCpu)?.toLocaleString() ?? '—'} core equivalents` : 'Not detected'}</strong><span>{telemetry.runtimeWorkerCount} shared process{telemetry.runtimeWorkerCount === 1 ? '' : 'es'} · {telemetry.runtimeWorkerRss} RAM</span></div>
             <div className="resource-tile"><small>RUNTIME GPU MEMORY</small><strong>{telemetry.runtimeGpuMemory == null ? 'Unavailable' : `${fmt(telemetry.runtimeGpuMemory)} MiB`}</strong><span>PROCESS VRAM · NOT MODEL-SPECIFIC</span></div>
             <div className="resource-tile"><small>AGENT SERVICE</small><strong>{telemetry.serviceCpu == null ? '—' : `${telemetry.serviceCpu}% CPU`}</strong><span>{telemetry.serviceRss} RAM</span></div>
           </div>
