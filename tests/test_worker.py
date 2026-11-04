@@ -2017,6 +2017,38 @@ def test_run_errors_are_persisted_as_rehydratable_activity(service, tmp_path, mo
     assert envelope["activity"] == error
 
 
+def test_provider_retry_phase_is_journaled_and_snapshotted_immediately(service, tmp_path, monkeypatch):
+    project = tmp_path / "provider-retry-checkpoint"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 8192)
+    state["run_state"] = {"status": "running", "phase": "failed"}
+    controller = {"session": state, "turn_id": "turn-retry", "checkpoint_lock": threading.RLock(),
+                  "last_checkpoint": time.monotonic(), "last_journal_flush": time.monotonic(),
+                  "journal_pending": []}
+    snapshots = []
+    journal_batches = []
+    monkeypatch.setattr(service, "_save_active_session", lambda active: (
+        snapshots.append(copy.deepcopy(active["session"])),
+        {"app_saved": True, "project_saved": True, "error": None},
+    )[-1])
+    monkeypatch.setattr(service.sessions, "append_events", lambda _session, _workspace, rows: (
+        journal_batches.append(copy.deepcopy(rows)),
+        {"app_saved": True, "project_saved": True, "error": None},
+    )[-1])
+    monkeypatch.setattr(service, "emit", lambda _event: None)
+
+    service._publish_run_event(controller, SimpleNamespace(workspace=project), {
+        "type": "phase", "phase": "retrying provider · attempt 2 · next retry in 1s",
+        "retryAttempt": 2, "retryDelaySeconds": 1, "httpStatus": 503,
+        "failurePhase": "provider_http_error", "reason": "Service unavailable",
+    })
+
+    assert len(snapshots) == 1
+    assert snapshots[0]["run_state"]["phase"].startswith("retrying provider")
+    assert len(journal_batches) == 1
+    assert journal_batches[0][0]["retryAttempt"] == 2
+
+
 def test_crash_recovery_marks_inflight_write_uncertain_and_never_replays_it(service, tmp_path):
     project = tmp_path / "interrupted-project"
     project.mkdir()

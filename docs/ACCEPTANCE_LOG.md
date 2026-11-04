@@ -14,6 +14,11 @@
 - Queue add/remove now requires at least one durable session copy before acknowledgement. If both app and project mirrors fail, an active-session mutation rolls back in memory, the IPC request fails, and the composer retains its text; no queue-update event is sent. Partial mirror success is still accepted with an explicit mirror warning.
 - Added a sidecar regression for the active queue-save failure path. It remains queued; no tests or app/model run occurred.
 
+## 2026-11-04 Retry-state crash checkpoint (verification queued)
+
+- A provider retry transition now forces both the session event journal and mirrored snapshot to persist the structured retry attempt and active phase before entering its cancelable wait. This keeps a restart from showing the earlier request failure phase while the worker had already moved into retrying.
+- Added a worker regression for immediate journal/snapshot persistence. It remains queued with the grouped verification pass.
+
 ## 2026-11-04 stale queued-follow-up recovery source fix (verification queued)
 
 - App source `b6cfeda` pins engine `0da5a89b8c2f8f477928deada9e3e4f280a663d4`. If a previously displayed queue row disappears between run-start preflight and consumption, the sidecar now returns a structured unavailable result and refreshed queue snapshot; the renderer puts the unsent prompt back in the composer. This avoids turning stale queue identity into an IPC failure and keeps the user's text recoverable.
