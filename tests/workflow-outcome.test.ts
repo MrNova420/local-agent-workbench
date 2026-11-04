@@ -21,8 +21,9 @@ describe('terminal workflow summaries', () => {
 
   it('explains blocked runs and preserves the access or denial boundary', () => {
     expect(terminalWorkflowSummary('blocked')).toContain('denied');
-    expect(terminalWorkflowSummary('blocked')).toContain('read-only');
-    expect(terminalWorkflowSummary('blocked')).toContain('did not bypass');
+    expect(terminalWorkflowSummary('blocked')).toContain('uncertain result');
+    expect(terminalWorkflowSummary('blocked')).toContain('before retrying');
+    expect(terminalWorkflowSummary('blocked')).toContain('did not replay it automatically');
   });
 
   it('offers checkpoint continuation for blocked runs without replaying them', () => {

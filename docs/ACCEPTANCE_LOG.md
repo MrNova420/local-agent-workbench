@@ -1324,4 +1324,5 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 - Engine `7af239c` continues the same task after an uncertain MCP result without replaying the remote call: remaining calls from that batch are recorded as blocked, MCP schemas stay disabled for the task, safe local work can continue, and a final response records a blocked outcome while preserving the exact uncertain operation in the compactable checkpoint.
 - The engine also applies surrogate-safe UTF-8 byte accounting to prompt provenance and large tool-result excerpts, closing another request-preparation path where malformed imported session text could interrupt a run.
 - Source regressions were added for the uncertain-call continuation and lone-surrogate measurements. No tests, package build, or runtime checks have been run for this revision; they remain in the final verification batch.
+- The app's terminal blocked-status copy now covers uncertain external effects and directs the user to inspect before retrying, alongside the engine's saved uncertain operation card.
 

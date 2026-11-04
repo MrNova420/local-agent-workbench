@@ -7,7 +7,7 @@ export function terminalWorkflowSummary(outcome: unknown): string | null {
     case 'implementation_incomplete':
       return 'The run ended after the same response repeated without new observable project progress. Its plan and checkpoint are saved so you can review them and continue safely.';
     case 'blocked':
-      return 'The run stopped because a project action was denied or the selected access policy is read-only. The Workbench preserved that boundary and did not bypass it; review the saved plan and choose an allowed next step.';
+      return 'The run stopped with a blocker. A project action may have been denied, access may be read-only, or an external operation may have an uncertain result. Review the saved activity and inspect any uncertain effect before retrying; the Workbench did not replay it automatically.';
     case 'interrupted':
       return 'The run was interrupted. Its checkpoint and recorded operation results are saved; review any operation that may have been in flight before continuing.';
     case 'cancelled':
