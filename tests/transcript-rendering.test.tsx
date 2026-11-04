@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { Markdown } from '../src/renderer/Markdown';
-import { appendTranscriptSegment, finalizeStreamingAssistantMessage, reconcileLiveAssistantMessage, restoreTranscriptMessages } from '../src/shared/transcript';
+import { appendTranscriptSegment, finalizeStreamingAssistantMessage, readExpandedReasoning, reconcileLiveAssistantMessage, restoreTranscriptMessages, writeExpandedReasoning } from '../src/shared/transcript';
 
 describe('resumed transcript rendering', () => {
   it('retains the complete long reasoning buffer when revisiting a saved turn', () => {
@@ -16,6 +16,19 @@ describe('resumed transcript rendering', () => {
     expect(restored[0].thinking).toHaveLength(reasoning.length);
     expect(restored[0].thinking).toMatch(/^begin:/);
     expect(restored[0].thinking).toMatch(/:end$/);
+  });
+
+  it('restores reasoning disclosure choices per session without losing full transcript text', () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+    };
+    writeExpandedReasoning(storage, 'session-a', [2, 0, 2, -1]);
+
+    expect([...readExpandedReasoning(storage, 'session-a')]).toEqual([0, 2]);
+    expect([...readExpandedReasoning(storage, 'session-b')]).toEqual([]);
+    expect([...readExpandedReasoning({ ...storage, getItem: () => '{broken' }, 'session-a')]).toEqual([]);
   });
 
   it('reconciles the active turn from a full snapshot without duplicating streamed text', () => {

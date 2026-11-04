@@ -8,7 +8,7 @@ import { approvalModeDescription } from '../shared/approval-mode-copy';
 import { buildModelLabels, buildTokenPresets, chooseDefaultModel, isReasoningBudgetValid, MAX_REASONING_BUDGET_TOKENS, normalizeReasoningChoice, readReasoningBudgetPreference, readRunTokenPreferences } from '../shared/model-controls';
 import { featuredInstalledModels } from '../shared/model-recommendations';
 import { normalizeGpuStats } from '../shared/resource-metrics';
-import { appendTranscriptSegment, finalizeStreamingAssistantMessage, reconcileLiveAssistantMessage, restoreTranscriptMessages } from '../shared/transcript';
+import { appendTranscriptSegment, finalizeStreamingAssistantMessage, readExpandedReasoning, reconcileLiveAssistantMessage, restoreTranscriptMessages, writeExpandedReasoning } from '../shared/transcript';
 import { LocalModelOrbit } from './ModelOrbit';
 import { ActivityFeed } from './ActivityFeed';
 import { applyActivityEvent, mergeActivitySnapshot, shouldRefreshWorkspaceForActivity } from '../shared/activity';
@@ -1718,6 +1718,24 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
   const transcriptRef = useRef<HTMLDivElement>(null);
   const [followTranscript, setFollowTranscript] = useState(true);
   const followTranscriptRef = useRef(true);
+  const activeSessionId = session?.session_id || '';
+  const [reasoningDisclosureState, setReasoningDisclosureState] = useState(() => ({
+    sessionId: activeSessionId,
+    indexes: readExpandedReasoning(window.localStorage, activeSessionId),
+  }));
+  const expandedReasoning = reasoningDisclosureState.sessionId === activeSessionId
+    ? reasoningDisclosureState.indexes : readExpandedReasoning(window.localStorage, activeSessionId);
+  useEffect(() => {
+    setReasoningDisclosureState({ sessionId: activeSessionId, indexes: readExpandedReasoning(window.localStorage, activeSessionId) });
+  }, [activeSessionId]);
+  const setReasoningDisclosure = (index: number, open: boolean) => {
+    if (!activeSessionId) return;
+    const indexes = new Set(expandedReasoning);
+    if (open) indexes.add(index);
+    else indexes.delete(index);
+    writeExpandedReasoning(window.localStorage, activeSessionId, indexes);
+    setReasoningDisclosureState({ sessionId: activeSessionId, indexes });
+  };
   const continueNoActionAsImplementation = () => {
     const priorRequest = [...messages].reverse().find((message) => message.role === 'user' && !message.steeringId);
     if (!priorRequest) return;
@@ -1787,7 +1805,7 @@ function SessionRoom({ root, session, messages, activities, activityMode, plan, 
         {!messages.length ? <div className="transcript-empty"><div className="empty-symbol"><Icon name="spark"/></div><span className="eyebrow-line">NEW WORK UNIT / {shortPath(root).toUpperCase()}</span><h2>What should we<br/>work through?</h2><p>The model sees selected, relevant project files as needed. You control any action that can change the workspace.</p><div className="starter-prompts"><button onClick={() => setPrompt('Inspect this project and explain its architecture and how to run it.')}>Map the project <Icon name="arrow"/></button><button onClick={() => setPrompt('Review this project for the highest-priority bug and propose a fix.')}>Find a bug <Icon name="arrow"/></button><button onClick={() => setPrompt('Add a focused feature to this project and verify it with the existing tests.')}>Build a feature <Icon name="arrow"/></button></div></div> : <div className="message-list" ref={transcriptRef} onScroll={updateTranscriptFollow}>{messages.map((message, index) => <Fragment key={`${message.turnId || 'legacy'}-${message.steeringId || index}-${message.role}`}><article className={`message-card message-${message.role}`}>
           <div className="message-meta"><span className={`speaker-mark ${message.role}`}>{message.role === 'user' ? 'YOU' : <Icon name="spark"/>}</span><strong>{message.role === 'user' ? message.steeringId ? 'Task update' : 'Task brief' : 'Local agent'}</strong><span>{message.steeringInterrupted ? 'PARTIAL · REDIRECTED' : message.recoveredPartial ? 'PARTIAL · INTERRUPTED' : message.steeringStatus === 'interrupting' ? 'INTERRUPTING ACTIVE RESPONSE' : message.steeringStatus === 'pending' ? running ? 'WAITING FOR SAFE BOUNDARY' : 'NOT DELIVERED' : message.steeringStatus === 'delivered' ? 'DELIVERED TO ACTIVE TASK' : message.steeringStatus === 'undelivered' ? 'NOT APPLIED' : message.role === 'user' ? 'INPUT' : message.streaming ? 'LIVE OUTPUT' : 'RESPONSE'}</span>{message.streaming && <i className="stream-pulse"/>}</div>
           <div className="message-content"><Markdown content={message.content}/></div>{(message.steeringStatus === 'pending' || message.steeringStatus === 'undelivered') && !running && <button className="activity-show-more" type="button" onClick={() => setPrompt(message.content)}>Use this update as a follow-up</button>}
-          {message.thinking && <details className="reasoning-trace"><summary>Model reasoning · {message.thinking.length.toLocaleString()} characters</summary><div>{message.thinking}</div></details>}
+          {message.thinking && <details className="reasoning-trace" open={expandedReasoning.has(index)} onToggle={(event) => setReasoningDisclosure(index, event.currentTarget.open)}><summary>Model reasoning · {message.thinking.length.toLocaleString()} characters</summary><div>{message.thinking}</div></details>}
         </article>{message.role === 'user' && message.turnId && messages.findIndex((row) => row.role === 'user' && row.turnId === message.turnId) === index && <ActivityFeed entries={activitiesByTurn.get(message.turnId) || []} mode={activityMode} surface="chat"/>}</Fragment>)}{terminalSummary && <article className="message-card message-status" role="status"><div className="message-meta"><span className="speaker-mark status">WB</span><strong>Workbench status</strong><span>RUN ENDED</span></div><div className="message-content"><p>{terminalSummary}</p></div>{canContinueFromOutcome(workflowOutcome) && !running && <button className="workflow-outcome-continue" type="button" onClick={continueFromSavedCheckpoint}>Continue from saved checkpoint <Icon name="arrow"/></button>}</article>}<div ref={endRef}/>{!followTranscript && <button className="jump-latest" onClick={() => { followTranscriptRef.current = true; setFollowTranscript(true); if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight; }} aria-label="Jump to latest message">↓ Latest</button>}</div>}
         <div className="composer-shell">
           <div className="composer-profile"><span className={`profile-chip access-${options.access}`}>{options.access.toUpperCase()}</span><span className="profile-chip approval-chip">{options.approvalMode === 'auto' ? 'AUTO APPROVE · THIS RUN' : options.approvalMode === 'per-session' ? session?.session_approval_granted ? 'SESSION APPROVED' : 'APPROVAL · THIS CHAT' : options.approvalMode === 'per-task' ? 'PER TASK' : 'PER ACTION'}</span><span className="profile-chip capability-chip" title="Capability reported by the selected local runtime; support metadata may be unknown">TOOLS {modelInfo?.tool_support === 'supported' ? 'SUPPORTED' : modelInfo?.tool_support === 'unsupported' ? 'UNSUPPORTED' : 'UNKNOWN'}</span><label className="profile-chip intent-chip" title="Task intent guides the agent; file access and approval remain separate">INTENT <select aria-label="Task intent" value={options.taskIntent} disabled={running} onChange={(event) => { const taskIntent = event.target.value as TaskIntent; setOptions((current) => ({ ...current, taskIntent })); localStorage.setItem('agent-task-intent', taskIntent); }}><option value="auto">AUTO</option><option value="discuss">DISCUSS</option><option value="plan">PLAN</option><option value="implement">IMPLEMENT</option></select></label><button className={`profile-toggle ${options.harnessProfile === 'small-model' ? 'is-active' : ''}`} type="button" aria-pressed={options.harnessProfile === 'small-model'} title="Changes agent workflow guidance only; model settings and token limits stay unchanged" onClick={onToggleHarnessProfile} disabled={running}>Small-model {options.harnessProfile === 'small-model' ? 'on' : 'off'}</button><span className="profile-hint">{fmt(options.context)} context · {fmt(options.maxTokens)} output</span><button onClick={onSettings}>Adjust run</button></div>

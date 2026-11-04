@@ -65,6 +65,31 @@ export function restoreTranscriptMessages(rows: PersistedTranscriptRow[], turns:
 
 export type LiveTranscriptMessage = TranscriptMessage & { streaming?: boolean; recoveredPartial?: boolean };
 
+const REASONING_EXPANSION_KEY = 'agent-workbench:expanded-reasoning:';
+type ReasoningExpansionStorage = Pick<Storage, 'getItem' | 'setItem'>;
+
+/** Preserve which emitted-reasoning disclosures a user opened for each saved session. */
+export function readExpandedReasoning(storage: ReasoningExpansionStorage, sessionId: string): Set<number> {
+  if (!sessionId) return new Set();
+  try {
+    const parsed: unknown = JSON.parse(storage.getItem(`${REASONING_EXPANSION_KEY}${sessionId}`) || '[]');
+    return new Set(Array.isArray(parsed) ? parsed.filter((value): value is number =>
+      typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function writeExpandedReasoning(storage: ReasoningExpansionStorage, sessionId: string, indexes: Iterable<number>): void {
+  if (!sessionId) return;
+  try {
+    const normalized = [...new Set(indexes)].filter((value) => Number.isSafeInteger(value) && value >= 0).sort((a, b) => a - b);
+    storage.setItem(`${REASONING_EXPANSION_KEY}${sessionId}`, JSON.stringify(normalized));
+  } catch {
+    // Storage may be disabled or full; chat content remains available in the transcript.
+  }
+}
+
 /** Replace the active turn's partial assistant row with the sidecar's authoritative full buffer. */
 export function reconcileLiveAssistantMessage(
   messages: LiveTranscriptMessage[], turnId: string, live: { content: string; thinking: string },
