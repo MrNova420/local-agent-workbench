@@ -5,6 +5,19 @@ import { Markdown } from '../src/renderer/Markdown';
 import { appendTranscriptSegment, reconcileLiveAssistantMessage, restoreTranscriptMessages } from '../src/shared/transcript';
 
 describe('resumed transcript rendering', () => {
+  it('retains the complete long reasoning buffer when revisiting a saved turn', () => {
+    const reasoning = `begin:${'analysis-step '.repeat(2_500)}:end`;
+    const restored = restoreTranscriptMessages([
+      { role: 'assistant', content: 'Answer', thinking: reasoning },
+      { role: 'assistant', content: 'A newer answer', thinking: 'newer reasoning' },
+    ]);
+
+    expect(restored[0].thinking).toBe(reasoning);
+    expect(restored[0].thinking).toHaveLength(reasoning.length);
+    expect(restored[0].thinking).toMatch(/^begin:/);
+    expect(restored[0].thinking).toMatch(/:end$/);
+  });
+
   it('reconciles the active turn from a full snapshot without duplicating streamed text', () => {
     const rows = [
       { role: 'user' as const, content: 'Build the page', turnId: 'turn-1' },

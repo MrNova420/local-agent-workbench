@@ -264,6 +264,7 @@ export default function App() {
   const endRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const assistantSegmentBreakRef = useRef(false);
+  const runStartPendingRef = useRef(false);
   const activeTurnIdRef = useRef('');
   const liveSnapshotCursorRef = useRef({ sessionId: '', activityRevision: 0, textRevision: 0, busy: false });
   const workspaceHistoryRequestId = useRef(0);
@@ -1119,16 +1120,20 @@ export default function App() {
   async function startRun(queuedPrompt?: QueuedPrompt) {
     if (modelPreloading) { notify('Wait for the selected model to finish preloading before starting this task.', 'warn'); return; }
     const task = queuedPrompt?.prompt.trim() || prompt.trim();
-    if (running || !session || !workspace || !model || !task) return;
+    if (running || runStarting || runStartPendingRef.current || !session || !workspace || !model || !task) return;
+    // React state updates are asynchronous. Claim this synchronously so a
+    // double-click cannot submit the same queued prompt twice before rerender.
+    runStartPendingRef.current = true;
     if (model.startsWith('gguf::')) {
       try {
         const status = await request<Record<string, unknown>>({ command: 'llama_status' });
         if (status.running !== true || status.model !== model.slice('gguf::'.length) || status.context !== options.context || status.reasoning !== options.reasoning) {
+          runStartPendingRef.current = false;
           setModelLibraryOpen(true);
           notify('Load the selected GGUF with these context and reasoning settings before starting the task.', 'warn');
           return;
         }
-      } catch (error) { notify(`Could not verify llama.cpp runtime: ${(error as Error).message}`, 'bad'); return; }
+      } catch (error) { runStartPendingRef.current = false; notify(`Could not verify llama.cpp runtime: ${(error as Error).message}`, 'bad'); return; }
     }
     assistantSegmentBreakRef.current = false;
     const run: RunOptions = {
@@ -1151,11 +1156,13 @@ export default function App() {
     setStartedAt(Date.now()); setElapsed(0); setRunMetrics(emptyRunMetrics()); setFirstOperationSeconds(null); setFirstFileWriteSeconds(null);
     try {
       await request({ command: 'run_start', options: run });
+      runStartPendingRef.current = false;
       setRunStarting(false);
       // Keep the composer ready for same-task steering while the model reasons.
       promptRef.current?.focus();
     }
     catch (error) {
+      runStartPendingRef.current = false;
       setRunning(false); setRunStarting(false); setPhase('Run failed'); setWorkflowOutcome('failed');
       setPrompt((draft) => draft.trim() ? draft : task);
       promptRef.current?.focus();

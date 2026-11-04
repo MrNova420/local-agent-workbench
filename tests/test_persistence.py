@@ -8,6 +8,18 @@ from sidecar.persistence import MirroredSessionStore, WorkspaceHistory, _append_
 
 
 class MirroredSessionStoreTests(unittest.TestCase):
+    def test_json_snapshot_and_journal_round_trip_unpaired_surrogates(self):
+        with tempfile.TemporaryDirectory() as root:
+            snapshot = Path(root, "session.json")
+            journal = Path(root, "session.events.jsonl")
+            value = {"message": "before\udc9dafter"}
+            _atomic_json(snapshot, value)
+            _append_jsonl(journal, [{"event": value}])
+
+            self.assertEqual(json.loads(snapshot.read_text(encoding="utf-8")), value)
+            self.assertEqual(json.loads(journal.read_text(encoding="utf-8"))["event"], value)
+            self.assertEqual(len(MirroredSessionStore._fingerprint(value)), 64)
+
     def test_journal_append_retries_a_windows_sharing_lock_longer_than_old_burst(self):
         from unittest.mock import patch
 

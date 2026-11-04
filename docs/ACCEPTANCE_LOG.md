@@ -1281,3 +1281,9 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 - Follow-up engine commit `ec64f1d343d65611235a41acb4dc2142f5f7282c` adds a regression for Finish after an operation during a parallel write batch: both submitted results are preserved and the runtime makes no second model request. Rerun focused result: **113 passed**; exact app pin verification and build-config tests: **8 passed**. The paired source remains un-packaged; full suites and release acceptance remain open.
 
 \n
+## 2026-11-03 surrogate-safe persistence and long-run recovery reports
+
+- App JSON snapshots, event journals, fingerprints, and worker JSON snapshots now escape lone UTF-16 surrogates, preserving the stored code unit in valid UTF-8 JSON. Regression `tests/test_persistence.py -k unpaired_surrogates`: **1 passed**. Paired engine `tests/test_sessions.py -k unpaired_surrogate`: **1 passed**.
+- The composer now claims run start synchronously so a rapid double click cannot submit the same saved follow-up twice before React rerenders. `tests/run-state.test.ts` and `tests/transcript-rendering.test.tsx`: **36 passed**; `npm run typecheck` passed. Existing sidecar queued-prompt test: **1 passed**.
+- Added a renderer regression that restores a 35K-character reasoning disclosure alongside a newer turn without truncation. This proves the transcript restore helper preserves the full supplied value; a live user-reported shortening/missing-history case still needs a captured session/journal comparison and packaged reopen acceptance.
+- Engine pin updated to `b7fb772e9e9b5a6f4819a3871286bc21639fc105`. Full suites, installer rebuild, visible queued-follow-up/reasoning review, updater recovery, and Flint acceptance remain pending. No model was started and no inference setting changed.

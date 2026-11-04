@@ -231,6 +231,15 @@ The app and shared engine have independent public MIT-licensed Git repositories 
 - Keep app-wide session history separate from the active project's session tab.
 - Make conflicts, interrupted runs, partial operations, recovery issues, and unavailable workspaces visible before resume.
 - Resolve moved workspaces through workspace identity where possible; never discard app-side history when the project directory is unavailable.
+
+### B-021: Reproduce and close long-run composer and transcript recovery defects
+
+**Priority:** Critical for stable beta; reproduction and regression coverage required.
+
+- Reproduce the user-reported `That queued prompt no longer exists` error while an active run is receiving queued follow-ups. Trace renderer queue identity, run-start consumption, session snapshot/journal ordering, and active-run restoration. Ensure one queued item is delivered at most once, its state stays visible, stale submissions receive a recoverable UI state, and concurrent queue/run persistence cannot erase newer entries.
+- Reproduce the report that a long reasoning disclosure (observed around 34K characters) looked shortened or missing when revisited after newer output. Compare the full stream buffer, journal deltas, canonical session transcript, live snapshot revisions, restored transcript, and renderer disclosure. Do not use display truncation as a persistence fix; keep full history available and progressively render large content if needed.
+- The reported lone surrogate `U+DC9D` save failure has a source fix: JSON snapshots, journal records, and fingerprints use ASCII escapes so the original code unit round-trips through valid UTF-8. Confirm through the paired-session fault/reopen matrix before calling it fully verified.
+- Acceptance requires exact persisted text/queue IDs across both session copies and app relaunch, and visible confirmation that queued prompts are neither lost nor duplicated and the older reasoning disclosure retains all characters.
 ### B-011: Provider-accurate live KV-cache telemetry
 
 **Priority:** High; telemetry is implemented in source in both runtime adapters, with end-to-end packaged evidence pending.

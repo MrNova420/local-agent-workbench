@@ -1574,7 +1574,7 @@ class AgentService:
     def _save_json(path: Path, value: Any) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(path.suffix + ".tmp")
-        temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary.write_text(json.dumps(value, ensure_ascii=True, indent=2), encoding="utf-8")
         temporary.replace(path)
 
     def _gguf_record(self, model_id: str) -> dict[str, Any]:

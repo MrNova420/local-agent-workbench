@@ -28,7 +28,9 @@ def _atomic_json(path: Path, value: Any) -> None:
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, dir=path.parent,
                                          prefix=path.stem + "-", suffix=".tmp") as handle:
             temporary = Path(handle.name)
-            json.dump(value, handle, indent=2, ensure_ascii=False)
+            # ASCII escaping preserves lone UTF-16 surrogate code units from
+            # Windows/UI input without making UTF-8 persistence fail.
+            json.dump(value, handle, indent=2, ensure_ascii=True)
             handle.flush()
             os.fsync(handle.fileno())
         delay = 0.05
@@ -53,7 +55,7 @@ def _append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     if not rows:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = "".join(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n" for row in rows)
+    payload = "".join(json.dumps(row, ensure_ascii=True, separators=(",", ":")) + "\n" for row in rows)
     delay = 0.05
     while True:
         try:
@@ -694,7 +696,7 @@ class MirroredSessionStore:
     def _fingerprint(state: dict[str, Any]) -> str:
         value = copy.deepcopy(state)
         value.pop("updated_at", None)
-        return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+        return hashlib.sha256(json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
     def _versions(self, session_id: str, workspace: str | None = None) -> list[dict[str, Any]]:
         versions = []

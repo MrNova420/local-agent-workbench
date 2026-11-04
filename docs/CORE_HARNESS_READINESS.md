@@ -2,7 +2,7 @@
 
 ## Current status (2026-11-03)
 
-The active source pair is app `18a409b3631f06072cf5fd29e62a6870d659c6dc` / engine `ec64f1d343d65611235a41acb4dc2142f5f7282c`; `core-revision.txt` pins the exact engine commit and the source checkout verifier plus build-config tests pass (**8**). The newest core implementation batches independent, non-overlapping file writes only through a pre-approved non-interactive path, preserves operation results across cancel/finish choices, and allows independent appends to proceed concurrently. Focused engine tool/operation tests pass (**113**). This source pair has not completed full suites, packaging, visible app workflow, or Flint acceptance.
+The active source pair is app `b7ee765cd1ce2f1b214b6c6d18ade0fc205707e0` / engine `b7fb772e9e9b5a6f4819a3871286bc21639fc105`; `core-revision.txt` pins the exact engine commit. The engine now covers independent-write batching, operation retention across cancel/finish, state-based Auto classification, and surrogate-safe session snapshots. Focused operation/workflow tests pass (**84**) and the new engine snapshot regression passes (**1**); app mirror/journal surrogate regression passes (**1**). Paired app verification and full suites are pending.
 
 The prior screenshot-backed Home inspection showed **2 available workspaces and 5 saved sessions** in the installed beta.3; matching app-library records and project copies were present then. This is historical Home/data visibility evidence, not current packaged acceptance. The older renderer/recovery changes remain in source; their test counts are recorded in `ACCEPTANCE_LOG.md`. The 2026-11-02 pre-inference journal discrepancy remains historically unreproduced; the copy-mode regression confirms journal agreement for a mocked interrupted request but does not identify the original cause.
 
@@ -11,6 +11,8 @@ The installed beta.3 predates the current source pair and has not been rebuilt/i
 Project session lists now expose the same conflict/uncertain-operation/recovery-issue/unavailable/failed-state labels as Home, using one shared status mapper. The focused UI helper tests and typecheck pass; the packaged visual/reopen check remains open.
 
 The active-run composer now permits drafting during sidecar startup but prevents redirect/queue/cancel actions until the run is accepted; recovery follows the same rule. Focused run-state checks and typecheck pass. Packaged interaction/visible acceptance remains open.
+
+User-reported live-session defects tracked for reproduction: the composer returned `That queued prompt no longer exists` during a run, and revisiting an older long reasoning disclosure appeared to show shortened or missing content. The surrogate persistence cause is fixed in source; queue identity/state reconciliation and exact reasoning transcript recovery remain unverified. Planning stays expandable; unchanged plan-only state must hand off to the next useful action rather than repeatedly redesigning the same plan.
 
 ## Historical status snapshot (2026-11-02)
 
