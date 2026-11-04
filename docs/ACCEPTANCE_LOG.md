@@ -1,3 +1,14 @@
+## 2026-11-04 keep dynamic task state out of the reusable prompt prefix
+
+- Engine `94debb1d53a107f7ad9b8561a2363ee11bd54d5f` now keeps the configured system prompt stable across model/tool turns. Per-request continuation guidance and the current task checkpoint are sent as user-context suffixes, leaving the canonical chat transcript unchanged and preserving one leading system message for Ollama templates. The budgeted checkpoint remains identifiable in prompt provenance and fits its requested budget.
+- Engine full suite: **419 passed, 12 subtests passed** (one upstream Starlette `python_multipart` deprecation warning); affected workflow/context/prompt suites: **150 passed, 12 subtests passed**. This is source-suite evidence, not live cache evidence. No model, reasoning default, context/output value, keep-alive, KV precision, or runtime placement changed. The earlier Flint requests still reported zero cached prompt tokens; a new live same-task run is required to establish whether this change produces reuse.
+
+## 2026-11-04 paired app verification and r7 package
+
+- App `8176d05` pinned engine `94debb1d53a107f7ad9b8561a2363ee11bd54d5f`. With `LOCAL_AGENT_CORE_PATH` set to the paired engine worktree, all app checks passed: Vitest **22 files / 136 tests**, sidecar **166 tests**, and TypeScript typecheck. Python reported only the upstream Starlette `python_multipart` pending-deprecation warning.
+- `npm run make` succeeded for Windows x64 under isolated output folder `out-acceptance-2026-11-04-r7`. Installer **208,963,072 bytes**, SHA-256 `95230B8BAC6B5FF960C04C63556D27EDDD76E923B982089AF9D7BC98B6C76BDA`; portable ZIP **212,117,358 bytes**, SHA-256 `F2B279ED28FF928E97BA6E1FA7940718E4EDF618568E219029FC6739205693F1`; full nupkg **208,186,325 bytes**, SHA-256 `4040838FFA1DF91917C4485077EE3BBB5336EC042C245FF6D69CE89E1265E372`; packaged worker **54,289,037 bytes**, SHA-256 `7855179249C5CA161AB40CBA22DFB2C64AA26B4D3AF7F52B71F0370AF9E706CE`. ZIP (74 members) and nupkg (87 members) passed CRC/integrity checks; `RELEASES` SHA-1/size matches.
+- Packaged worker passed isolated `ready` → `ping` → `shutdown`, exit 0. No model was loaded and no inference was sent. The package was not installed or opened because an older Workbench window is already in use. This establishes source and package evidence only; it does not establish visual workflow, live prompt-cache reuse, updater recovery, or beta release readiness.
+
 ## 2026-11-04 background Flint live check and metric correction
 
 - Visible packaged-app check used one already-open Workbench window and disposable project `Local Agent Workbench Acceptance 2026-11-04`. The selected Flint Ollama tag was `hf.co/unsloth/flint-GGUF:UD-IQ2_XXS`; saved request settings remained 65,536 context, 8,192 output, and model-default reasoning (`reasoning_override: null`). The greeting correctly identified the active project.
