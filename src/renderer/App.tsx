@@ -265,6 +265,7 @@ export default function App() {
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const queueRequestRef = useRef<{ sessionId: string; draft: string; requestId: string } | null>(null);
   const steerRequestRef = useRef<{ sessionId: string; draft: string; requestId: string } | null>(null);
+  const runRequestRef = useRef<{ sessionId: string; draft: string; signature: string; requestId: string } | null>(null);
   const assistantSegmentBreakRef = useRef(false);
   const runStartPendingRef = useRef(false);
   const activeTurnIdRef = useRef('');
@@ -1150,6 +1151,15 @@ export default function App() {
       skillsEnabled: options.skillsEnabled, skillSources: options.skillSources,
       ...(queuedPrompt ? { queuedPromptId: queuedPrompt.id } : {}),
     };
+    const runSignature = JSON.stringify(run);
+    const previousRequest = runRequestRef.current;
+    const runRequestId = queuedPrompt ? undefined
+      : previousRequest?.sessionId === session.session_id && previousRequest.draft === task && previousRequest.signature === runSignature
+        ? previousRequest.requestId : window.crypto.randomUUID();
+    if (runRequestId) {
+      run.clientRequestId = runRequestId;
+      runRequestRef.current = { sessionId: session.session_id, draft: task, signature: runSignature, requestId: runRequestId };
+    }
     if (options.approvalMode === 'auto') setOptions((current) => ({ ...current, approvalMode: 'per-action' }));
     setMessages((current) => [...current, { role: 'user', content: task }]);
     // Keep the current checklist and criteria visible until the sidecar publishes
@@ -1158,8 +1168,22 @@ export default function App() {
     setTrace([]); setWorkflowOutcome(null); setVerificationEvidence(null); setPrompt(''); setRunning(true); setRunStarting(true); setPhase('Connecting to local runtime');
     setStartedAt(Date.now()); setElapsed(0); setRunMetrics(emptyRunMetrics()); setFirstOperationSeconds(null); setFirstFileWriteSeconds(null);
     try {
-      const startResult = await request<{ started: boolean; queuedPromptAlreadyStarted?: boolean; queuedPromptUnavailable?: boolean; queuedPrompts?: QueuedPrompt[] }>({ command: 'run_start', options: run });
+      const startResult = await request<{ started: boolean; runAlreadyStarted?: boolean; runActive?: boolean; turnId?: string; turnStatus?: string; queuedPromptAlreadyStarted?: boolean; queuedPromptUnavailable?: boolean; queuedPrompts?: QueuedPrompt[] }>({ command: 'run_start', options: run });
       runStartPendingRef.current = false;
+      if (runRequestId && runRequestRef.current?.requestId === runRequestId && !startResult.runAlreadyStarted) runRequestRef.current = null;
+      if (startResult.runAlreadyStarted) {
+        setRunning(startResult.runActive === true);
+        setRunStarting(false);
+        if (startResult.turnId) activeTurnIdRef.current = startResult.turnId;
+        await loadSession(session.session_id, workspace);
+        if (startResult.turnId) setMessages((current) => current.some((row) => row.turnId === startResult.turnId && row.role === 'user')
+          ? current : [...current, { role: 'user', content: task, turnId: startResult.turnId }]);
+        if (runRequestRef.current?.requestId === runRequestId) runRequestRef.current = null;
+        notify(startResult.runActive
+          ? 'This run request was already accepted. Reattached to its existing turn; no duplicate task was started.'
+          : `This run request was already recorded (${startResult.turnStatus || 'finished'}). The saved session was refreshed; no duplicate task was started.`, 'warn');
+        return;
+      }
       if (startResult.queuedPromptAlreadyStarted || startResult.queuedPromptUnavailable) {
         setRunning(false); setRunStarting(false); setPhase('Ready');
         if (startResult.queuedPromptUnavailable) {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import queue
@@ -88,6 +89,21 @@ def _validated_queued_prompts(state: dict[str, Any]) -> list[dict[str, Any]]:
         seen.add(row["id"])
         result.append(copy.deepcopy(row))
     return result
+
+
+def _run_request_identity(options: dict[str, Any], workspace: Path | None = None) -> tuple[str | None, str | None]:
+    request_id = options.get("clientRequestId")
+    if request_id is None:
+        return None, None
+    if not isinstance(request_id, str) or not request_id.strip() or len(request_id) > 256:
+        raise ValueError("Run request identity must be a non-empty string of at most 256 characters.")
+    request_id = request_id.strip()
+    fingerprint_options = {key: value for key, value in options.items()
+                          if key not in {"clientRequestId", "queuedPromptId"}}
+    payload = {"workspace": str(workspace) if workspace is not None else options.get("workspace"),
+               "options": fingerprint_options}
+    encoded = json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"), default=str).encode("ascii")
+    return request_id, hashlib.sha256(encoded).hexdigest()
 
 
 class QueuedPromptUnavailable(ValueError):
@@ -196,6 +212,7 @@ class AgentService:
         self.ollama_import_thread: threading.Thread | None = None
         self.emit_lock = threading.Lock()
         self.run_lock = threading.Lock()
+        self.run_admission_lock = threading.Lock()
         self.ollama_preload_lock = threading.Lock()
         self.ollama_preload_thread: threading.Thread | None = None
         self.active_lock = threading.RLock()
@@ -974,6 +991,38 @@ class AgentService:
             return loaded["state"]
         return loaded
 
+    def _run_start_replay(self, options: dict[str, Any]) -> dict[str, Any] | None:
+        if options.get("queuedPromptId") is not None:
+            return None
+        request_id = options.get("clientRequestId")
+        if request_id is None:
+            return None
+        session_id = options.get("sessionId")
+        if not isinstance(session_id, str) or not session_id:
+            return None
+        source = validate_selected_workspace(True, options.get("workspace", ""))
+        request_id, fingerprint = _run_request_identity(options, source)
+        state = self._load_session_state(session_id)
+        if Path(state["workspace"]).resolve(strict=True) != source:
+            raise ValueError("Selected session belongs to a different project. Open that project's workspace explicitly first.")
+        turns = state.get("turns", [])
+        prior = next((row for row in reversed(turns) if isinstance(row, dict)
+                      and row.get("client_request_id") == request_id), None) if isinstance(turns, list) else None
+        if prior is None:
+            return None
+        saved_fingerprint = prior.get("request_fingerprint")
+        if ((isinstance(saved_fingerprint, str) and saved_fingerprint != fingerprint)
+                or (not isinstance(saved_fingerprint, str) and prior.get("prompt") != str(options.get("prompt", "")).strip())):
+            raise ValueError("This run request ID was already used for different task settings.")
+        turn_id = str(prior.get("turn_id", ""))
+        with self.active_lock:
+            active = self.active
+            active_session = active.get("session") if isinstance(active, dict) else None
+            run_active = bool(isinstance(active_session, dict) and active_session.get("session_id") == session_id
+                              and active.get("turn_id") == turn_id)
+        return {"started": False, "runAlreadyStarted": True, "runActive": run_active,
+                "turnId": turn_id or None, "turnStatus": str(prior.get("status", "unknown"))}
+
     @staticmethod
     def _mutate_queue(prompts: list[dict[str, Any]], *, add_prompt: str | None,
                       remove_id: str | None, request_id: str | None = None) -> dict[str, Any]:
@@ -1551,20 +1600,27 @@ class AgentService:
             options = message.get("options")
             if not isinstance(options, dict):
                 raise ValueError("Run settings are missing.")
-            if not self.ollama_preload_lock.acquire(blocking=False):
-                raise RuntimeError("The selected model is still preloading.")
-            try:
-                if not self.run_lock.acquire(blocking=False):
-                    raise RuntimeError("A task is already running.")
+            with self.run_admission_lock:
+                replay = self._run_start_replay(options)
+                if replay is not None:
+                    return replay
+                if not self.ollama_preload_lock.acquire(blocking=False):
+                    raise RuntimeError("The selected model is still preloading.")
                 try:
-                    start_result = self._start_run(options)
-                    if isinstance(start_result, dict) and start_result.get("started") is False:
+                    if not self.run_lock.acquire(blocking=False):
+                        replay = self._run_start_replay(options)
+                        if replay is not None:
+                            return replay
+                        raise RuntimeError("A task is already running.")
+                    try:
+                        start_result = self._start_run(options)
+                        if isinstance(start_result, dict) and start_result.get("started") is False:
+                            self.run_lock.release()
+                    except Exception:
                         self.run_lock.release()
-                except Exception:
-                    self.run_lock.release()
-                    raise
-            finally:
-                self.ollama_preload_lock.release()
+                        raise
+                finally:
+                    self.ollama_preload_lock.release()
             return start_result if isinstance(start_result, dict) else {"started": True}
         if command == "run_cancel":
             return {"cancelled": self.cancel()}
@@ -1797,6 +1853,9 @@ class AgentService:
         model = str(options.get("model", "")).strip()
         if not prompt or not model:
             raise ValueError("A task and model are required.")
+        run_request_id, run_request_fingerprint = _run_request_identity(options, source)
+        if options.get("queuedPromptId") is not None:
+            run_request_id = run_request_fingerprint = None
         context = options.get("context")
         max_tokens = options.get("maxTokens")
         temperature = options.get("temperature")
@@ -1967,6 +2026,9 @@ class AgentService:
             turn_record["queued_prompt_id"] = queued_prompt_id
         if isinstance(queued_request_id, str) and queued_request_id:
             turn_record["queue_request_id"] = queued_request_id
+        if run_request_id:
+            turn_record["client_request_id"] = run_request_id
+            turn_record["request_fingerprint"] = run_request_fingerprint
         turn_records.append(turn_record)
         state["run_state"] = {
             "status": "running", "turn_id": turn_id, "prompt": prompt, "started_at": turn_started_at,

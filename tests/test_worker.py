@@ -293,6 +293,50 @@ def test_run_start_recognizes_a_queued_prompt_already_recorded_as_a_turn(service
     assert any(event.get("type") == "session_queue_update" for event in events)
 
 
+def test_run_start_request_replay_attaches_to_the_existing_turn_without_restarting(service, tmp_path):
+    project = tmp_path / "run-request-replay"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    options = {"workspace": str(project), "sessionId": state["session_id"],
+               "prompt": "Implement this once", "model": "model-a:latest", "context": 4096,
+               "maxTokens": 512, "temperature": 0.2, "access": "ask", "approvalMode": "per-action",
+               "clientRequestId": "run-request-1"}
+    request_id, fingerprint = worker._run_request_identity(options, project.resolve())
+    turn = {"turn_id": "turn-run-request", "client_request_id": request_id,
+            "request_fingerprint": fingerprint, "prompt": options["prompt"], "status": "running"}
+    state["turns"] = [turn]
+    service.sessions.save(state)
+    service.active = {"session": state, "turn_id": turn["turn_id"]}
+    service.run_lock.acquire()
+    try:
+        replay = service.handle("run_start", {"options": options})
+    finally:
+        service.run_lock.release()
+
+    assert replay == {"started": False, "runAlreadyStarted": True, "runActive": True,
+                     "turnId": "turn-run-request", "turnStatus": "running"}
+
+
+def test_run_start_request_id_rejects_reuse_with_changed_settings(service, tmp_path):
+    project = tmp_path / "run-request-conflict"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 4096)
+    original = {"workspace": str(project), "sessionId": state["session_id"],
+                "prompt": "Implement this once", "model": "model-a:latest", "context": 4096,
+                "maxTokens": 512, "temperature": 0.2, "access": "ask", "approvalMode": "per-action",
+                "clientRequestId": "run-request-2"}
+    request_id, fingerprint = worker._run_request_identity(original, project.resolve())
+    state["turns"] = [{"turn_id": "turn-run-request", "client_request_id": request_id,
+                       "request_fingerprint": fingerprint, "prompt": original["prompt"], "status": "completed"}]
+    service.sessions.save(state)
+    changed = {**original, "maxTokens": 2048}
+
+    with pytest.raises(ValueError, match="already used for different task settings"):
+        service.handle("run_start", {"options": changed})
+    assert service.active is None
+    assert not service.run_lock.locked()
+
+
 def test_run_start_reconciles_a_queued_prompt_removed_from_another_window(service, tmp_path, monkeypatch):
     project = tmp_path / "removed-queue-item"
     project.mkdir()

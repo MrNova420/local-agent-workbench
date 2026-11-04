@@ -29,6 +29,8 @@ export type RunOptions = {
   skillsEnabled: boolean;
   skillSources: SkillSource[];
   queuedPromptId?: string;
+  /** Stable across retries of one exact session/task/settings submission. */
+  clientRequestId?: string;
 };
 
 export type QueuedPrompt = { id: string; prompt: string; queued_at: number; request_id?: string };
