@@ -24,6 +24,11 @@
 - Renderer queue submissions now carry a stable client request ID across retries of the same draft. The sidecar persists that ID with the queue item and transfers it to the turn record when consumed. Replayed IPC returns the existing queued item or started turn; reusing the same ID with different prompt text is rejected. No duplicate queue item or task is created.
 - Added regressions for replay, conflicting text reuse, and replay after consumption. Typecheck and sidecar tests remain queued; no app or model run occurred.
 
+## 2026-11-04 Live steering request idempotency (verification queued)
+
+- Live steering submissions now carry a client request ID. The sidecar persists it with the user update and checks the active and archived task checkpoint before accepting a replay. A duplicate returns the existing update without appending another instruction or interrupting the current provider request again; reusing the key for different text is rejected.
+- Added worker regressions for duplicate and conflicting steering requests. No tests, typecheck, package, app, or model run occurred.
+
 ## 2026-11-04 stale queued-follow-up recovery source fix (verification queued)
 
 - App source `b6cfeda` pins engine `0da5a89b8c2f8f477928deada9e3e4f280a663d4`. If a previously displayed queue row disappears between run-start preflight and consumption, the sidecar now returns a structured unavailable result and refreshed queue snapshot; the renderer puts the unsent prompt back in the composer. This avoids turning stale queue identity into an IPC failure and keeps the user's text recoverable.
