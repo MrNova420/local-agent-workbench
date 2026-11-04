@@ -85,6 +85,22 @@ def test_hugging_face_search_forwards_opaque_page_cursor(service):
     assert result["next_cursor"].endswith("cursor=opaque")
 
 
+def test_hugging_face_repo_file_request_forwards_opaque_page_cursor(service):
+    captured = []
+    service.hf = SimpleNamespace(repo_files_page=lambda repo, revision, cursor=None: captured.append((repo, revision, cursor)) or {
+        "files": [{"path": "shard-2.gguf", "format": "gguf", "size": 1, "is_lfs": True, "revision": revision}],
+        "next_cursor": None,
+    })
+
+    result = service.handle("hf_repo_files", {
+        "repo": "owner/model", "revision": "pinned-revision",
+        "cursor": "https://huggingface.co/api/models/owner/model/tree/pinned-revision?cursor=opaque",
+    })
+
+    assert captured == [("owner/model", "pinned-revision", "https://huggingface.co/api/models/owner/model/tree/pinned-revision?cursor=opaque")]
+    assert result["files"][0]["path"] == "shard-2.gguf"
+
+
 def test_workspace_file_pages_return_every_project_file_without_a_hidden_cap(service, tmp_path):
     project = tmp_path / "large-project"
     project.mkdir()
