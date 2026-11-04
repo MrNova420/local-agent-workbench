@@ -2715,7 +2715,7 @@ def test_ask_user_pauses_for_answer_and_resumes_with_saved_tool_result(service, 
     project = tmp_path / "question-project"
     project.mkdir()
     events = []
-    controller = {"cancel": threading.Event(), "pending_questions": {}}
+    controller = {"cancel": threading.Event(), "pending_questions": {}, "session": {"session_id": "session-question"}, "turn_id": "turn-question"}
     service.active = controller
     monkeypatch.setattr(service, "_publish_run_event", lambda _controller, _turn, event: events.append(event))
     result = []
@@ -2730,7 +2730,12 @@ def test_ask_user_pauses_for_answer_and_resumes_with_saved_tool_result(service, 
         time.sleep(0.01)
     assert events[0]["type"] == "question_request"
     question_id = events[0]["questionId"]
-    assert service.question_reply(question_id, "React") is True
+    assert service.handle("question_reply", {"questionId": question_id, "sessionId": "wrong-session",
+                                               "turnId": "turn-question", "answer": "React"}) == {"answered": False, "stale": True}
+    assert service.handle("question_reply", {"questionId": question_id, "sessionId": "session-question",
+                                               "turnId": "old-turn", "answer": "React"}) == {"answered": False, "stale": True}
+    assert service.handle("question_reply", {"questionId": question_id, "sessionId": "session-question",
+                                               "turnId": "turn-question", "answer": "React"}) == {"answered": True, "stale": False}
     thread.join(2)
 
     assert not thread.is_alive()

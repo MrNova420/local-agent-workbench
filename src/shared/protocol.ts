@@ -103,7 +103,7 @@ export type WorkerCommand =
   | { command: 'run_cancel'; sessionId: string; turnId: string }
   | { command: 'run_stop_after_operation'; sessionId: string; turnId: string }
   | { command: 'approval_reply'; actionId: string; sessionId: string; turnId: string; workspace: string; approved: boolean }
-  | { command: 'question_reply'; questionId: string; answer: string }
+  | { command: 'question_reply'; questionId: string; sessionId: string; turnId: string; answer: string }
   | { command: 'copy_review'; sessionId: string }
   | { command: 'copy_apply'; sessionId: string; paths: string[] }
   | { command: 'shutdown' };

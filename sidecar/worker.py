@@ -1652,7 +1652,11 @@ class AgentService:
             answer = message.get("answer")
             if not isinstance(answer, str) or not answer.strip():
                 raise ValueError("Provide a non-empty answer to the active question.")
-            return {"answered": self.question_reply(str(message["questionId"]), answer.strip())}
+            session_id, turn_id = message.get("sessionId"), message.get("turnId")
+            if not isinstance(session_id, str) or not session_id or not isinstance(turn_id, str) or not turn_id:
+                return {"answered": False, "stale": True}
+            answered = self.question_reply(str(message["questionId"]), session_id, turn_id, answer.strip())
+            return {"answered": answered, "stale": not answered}
         if command == "copy_review":
             session = self._load_session_state(str(message["sessionId"]))
             if session.get("access") != "copy" or not session.get("copy_manifest"):
@@ -2493,9 +2497,14 @@ class AgentService:
             condition.notify_all()
         return True
 
-    def question_reply(self, question_id: str, answer: str) -> bool:
+    def question_reply(self, question_id: str, session_id: str, turn_id: str, answer: str) -> bool:
         with self.active_lock:
-            pending = self.active.get("pending_questions", {}).get(question_id) if self.active else None
+            controller = self.active
+            state = controller.get("session") if isinstance(controller, dict) else None
+            if (not isinstance(state, dict) or state.get("session_id") != session_id
+                    or controller.get("turn_id") != turn_id):
+                return False
+            pending = controller.get("pending_questions", {}).get(question_id)
         if not pending:
             return False
         condition, result = pending

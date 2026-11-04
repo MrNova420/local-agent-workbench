@@ -61,7 +61,7 @@ type Session = {
 };
 type TraceRow = { id: string; title: string; description?: string; kind: 'tool' | 'status' | 'plan' | 'error'; time: number };
 type Approval = { actionId: string; sessionId: string; turnId: string; name: string; arguments: unknown; workspace: string; mode: ApprovalMode; reason?: string; uncertainOperationId?: string; uncertainOperationName?: string };
-type AgentQuestion = { questionId: string; title: string; question: string; options: Array<{ label: string; description?: string }> };
+type AgentQuestion = { questionId: string; sessionId: string; turnId: string; title: string; question: string; options: Array<{ label: string; description?: string }> };
 type Notice = { tone: 'good' | 'warn' | 'bad'; text: string };
 type TelemetryView = {
   cpu: number | null; ram: string; gpu: string; gpuUtil: number | null;
@@ -659,7 +659,8 @@ export default function App() {
           if (activity.status === 'awaiting_user') {
             const options = Array.isArray(activity.options) ? activity.options.filter((option): option is { label: string; description?: string } =>
               typeof option === 'object' && option !== null && typeof option.label === 'string') : [];
-            setAgentQuestion({ questionId, title: String(activity.title || 'The agent needs input'),
+            setAgentQuestion({ questionId, sessionId: String(activity.sessionId || activityEvent.sessionId || ''),
+              turnId: String(activity.turnId || activityEvent.turnId || ''), title: String(activity.title || 'The agent needs input'),
               question: String(activity.question || ''), options });
           } else {
             setAgentQuestion((current) => current?.questionId === questionId ? null : current);
@@ -1358,7 +1359,8 @@ export default function App() {
     if (!agentQuestion || !answer.trim() || questionAnswering) return;
     setQuestionAnswering(true);
     try {
-      const result = await request<{ answered: boolean }>({ command: 'question_reply', questionId: agentQuestion.questionId, answer: answer.trim() });
+      const result = await request<{ answered: boolean }>({ command: 'question_reply', questionId: agentQuestion.questionId,
+        sessionId: agentQuestion.sessionId, turnId: agentQuestion.turnId, answer: answer.trim() });
       if (!result.answered) {
         setQuestionAnswering(false);
         setAgentQuestion((current) => current?.questionId === agentQuestion.questionId ? null : current);
