@@ -1342,3 +1342,8 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 - The recovery prompt serialized uncertain operation details with `ensure_ascii=False`. A lone surrogate in an imported path or streamed tool argument therefore raised `UnicodeEncodeError` during prompt construction, before the resumed task could start. Recovery now JSON-escapes these code units while the canonical session and returned uncertain-operation record retain the original value.
 - Added a regression that stores an unpaired surrogate in an uncertain operation, resumes the session, and checks the escaped prompt plus lossless session reload. It is authored and queued; no test, package, or live recovery run has been performed.
 
+## 2026-11-04 persisted reasoning disclosure presentation
+
+- The restored transcript source preserves full reasoning text and has a long-content regression. The disclosure's open/closed presentation previously reset on component recreation; it now persists per session in local renderer storage and is isolated by session identity. Corrupt/unavailable UI preference storage falls back to collapsed presentation without changing transcript data.
+- Added a helper regression for per-session isolation, invalid preference recovery, and index normalization. It is authored and queued; no renderer test, typecheck, package, or visible reopen check was run.
+
