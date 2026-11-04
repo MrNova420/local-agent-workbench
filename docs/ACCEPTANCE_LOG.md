@@ -1390,3 +1390,7 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 ## 2026-11-04 complete sidecar diagnostics
 
 - Removed the main-process 2,000-character slice from sidecar stderr chunks and stopped trimming each chunk before forwarding, preserving whitespace and full diagnostic text in the event stream. Renderer behavior still sends these service diagnostics to the developer console; this change does not claim a new user-facing log viewer. No test, typecheck, package, or app launch was performed; verification is queued.
+
+## 2026-11-04 cursor-based Hugging Face search
+
+- Hub search now returns a page plus the server-provided opaque next link; the renderer offers Load more until the Hub has no next page. Continuation links are checked against the configured origin and model endpoint before a token-bearing request. The page size is a fetch batch, not a total search cap. The Hub API and official search guide describe model-list iteration; source: https://huggingface.co/docs/hub/api and https://huggingface.co/docs/huggingface_hub/main/guides/search . App `07f965d` pins engine `e282fddcdf078be03f09b62d11e4c260b5a68738`. Catalog and sidecar regression cases are authored but queued; no test, typecheck, package, or live Hub request was run.
