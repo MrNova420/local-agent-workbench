@@ -1326,3 +1326,9 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 - Source regressions were added for the uncertain-call continuation and lone-surrogate measurements. No tests, package build, or runtime checks have been run for this revision; they remain in the final verification batch.
 - The app's terminal blocked-status copy now covers uncertain external effects and directs the user to inspect before retrying, alongside the engine's saved uncertain operation card.
 
+## 2026-11-04 reviewed retry after uncertain MCP effects
+
+- App `299d018` pins engine `d48b1c8e8a4486d9fa1412ec0206f5d16860e79a`. After an uncertain remote result, remaining calls in that batch are blocked and saved. The agent may continue safe work; MCP remains discoverable for user-directed follow-up, but each subsequent MCP action requires a fresh one-action approval regardless of auto, task, or session grants. Persistent deny rules still win.
+- The approval modal identifies the previous uncertain MCP operation and warns that retrying may duplicate its effect. The activity row retains the explicit-review marker, and the terminal blocked message directs the user to inspect before retrying. A final response cannot label the task completed while the original effect remains uncertain.
+- Engine, worker, prompt-measurement, checkpoint, and renderer regressions are authored. No tests, typecheck, package build, MCP runtime, or visual acceptance were run for this source pair; they remain queued for the grouped verification pass.
+
