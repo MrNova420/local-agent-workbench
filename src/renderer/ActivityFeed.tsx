@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ActivityMode, ActivityRecord } from '../shared/protocol';
+import { readActivityDisclosure, writeActivityDisclosure } from '../shared/activity-presentation';
 
 const INITIAL_ACTIVITY_WINDOW = 100;
 const ACTIVITY_WINDOW_STEP = 100;
@@ -31,6 +32,22 @@ function promptRequestSummary(row: ActivityRecord): string[] {
 }
 
 function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expanded: boolean; surface: 'chat' | 'sidebar' }) {
+  const sessionId = row.sessionId || '';
+  const defaultOpen = surface === 'chat' && expanded;
+  const savedOpen = readActivityDisclosure(window.localStorage, sessionId, row.id);
+  const disclosureKey = `${sessionId}:${row.id}`;
+  const [disclosureState, setDisclosureState] = useState(() => ({
+    key: disclosureKey,
+    open: savedOpen ?? defaultOpen,
+  }));
+  const isOpen = disclosureState.key === disclosureKey ? disclosureState.open : savedOpen ?? defaultOpen;
+  useEffect(() => {
+    setDisclosureState({ key: disclosureKey, open: savedOpen ?? defaultOpen });
+  }, [disclosureKey, savedOpen, defaultOpen]);
+  const updateDisclosure = (open: boolean) => {
+    writeActivityDisclosure(window.localStorage, sessionId, row.id, open);
+    setDisclosureState({ key: disclosureKey, open });
+  };
   const promptSummary = row.kind === 'prompt' ? promptRequestSummary(row) : [];
   const title = row.name?.replaceAll('_', ' ') || (row.kind === 'plan' ? 'Plan updated' : row.kind === 'approval' ? 'Action approval' : row.kind === 'question' ? row.title || 'Question for you' : row.kind === 'context' ? 'Request context compacted' : row.kind === 'prompt' ? promptSummary[0] : 'Activity');
   const chatTitle = row.kind === 'operation' ? title.replace(/\bfile\b/gi, '').trim() : title;
@@ -45,7 +62,7 @@ function ActivityCard({ row, expanded, surface }: { row: ActivityRecord; expande
     typeof row.progress.matches === 'number' && Number.isFinite(row.progress.matches)
       ? `${row.progress.matches.toLocaleString()} match${row.progress.matches === 1 ? '' : 'es'}` : null,
   ].filter((value): value is string => value !== null) : [];
-  return <details className={`activity-card activity-${row.kind} activity-${row.status}`} open={expanded}>
+  return <details className={`activity-card activity-${row.kind} activity-${row.status}`} open={isOpen} onToggle={(event) => updateDisclosure(event.currentTarget.open)}>
     <summary className={`activity-summary activity-summary-${surface}`}>
       <span className={`activity-state-dot state-${row.status}`}/>
       {surface === 'chat' ? <>

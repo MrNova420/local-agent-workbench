@@ -1347,3 +1347,8 @@ Engine `26f1b73458bc2d34c4d6c41b0b3ce552e15285d8` also updates universal plannin
 - The restored transcript source preserves full reasoning text and has a long-content regression. The disclosure's open/closed presentation previously reset on component recreation; it now persists per session in local renderer storage and is isolated by session identity. Corrupt/unavailable UI preference storage falls back to collapsed presentation without changing transcript data.
 - Added a helper regression for per-session isolation, invalid preference recovery, and index normalization. It is authored and queued; no renderer test, typecheck, package, or visible reopen check was run.
 
+## 2026-11-04 persisted activity disclosure presentation
+
+- Activity cards now restore a user's expanded/collapsed choice by session and operation ID across chat/sidebar rendering and app reopen. Inline mode remains expanded by default only when no user choice exists. Activity payloads and complete results remain in the session; only presentation preference is stored in renderer-local settings.
+- Added regressions for session/operation isolation and unavailable/corrupt UI preference storage. They are authored and queued; no renderer test, typecheck, package, or visible reopen check was run.
+
