@@ -2204,10 +2204,18 @@ class AgentService:
             state["last_error"] = {"message": f"{type(exc).__name__}: {exc}", "diagnostic": diagnostic,
                                     "occurred_at": time.time()}
             try:
-                self._save_active_session(controller)
-                self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
+                saved = self._save_active_session(controller)
+                if saved.get("app_saved") and saved.get("project_saved"):
+                    self.emit({"type": "session_saved", "sessionId": state["session_id"], "workspace": state["workspace"]})
+                else:
+                    self.emit({"type": "session_mirror_error", "sessionId": state["session_id"],
+                               "workspace": state["workspace"], "appSaved": saved.get("app_saved", False),
+                               "projectSaved": saved.get("project_saved", False),
+                               "error": saved.get("error") or "The failed-run checkpoint was not saved to both session mirrors."})
             except Exception as save_error:
-                self.emit({"type": "error", "error": f"{exc}; session save failed: {save_error}"})
+                self.emit({"type": "session_mirror_error", "sessionId": state["session_id"],
+                           "workspace": state["workspace"], "appSaved": False, "projectSaved": False,
+                           "error": f"Run failed and its checkpoint could not be saved: {save_error}"})
             error_event = {"type": "error", "error": f"{type(exc).__name__}: {exc}",
                            "diagnostic": diagnostic, "sessionId": state["session_id"]}
             published = False

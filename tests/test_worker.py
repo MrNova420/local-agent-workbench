@@ -2227,6 +2227,39 @@ def test_engine_failure_is_saved_with_the_session(service, tmp_path, monkeypatch
                for event in events) == 1
 
 
+def test_engine_failure_does_not_claim_session_saved_when_both_mirrors_fail(service, tmp_path, monkeypatch):
+    class FailingSaveEngine:
+        def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
+            self.event = event
+
+        def run(self, prompt, messages):
+            service.sessions.save = lambda _state: {
+                "app_saved": False, "project_saved": False, "error": "simulated mirror failure",
+            }
+            raise RuntimeError("synthetic run failure")
+
+        def cancel(self):
+            pass
+
+    monkeypatch.setattr(worker, "AgentEngine", FailingSaveEngine)
+    project = tmp_path / "failed-save-project"
+    project.mkdir()
+    service.handle("run_start", {"options": {
+        "workspace": str(project), "prompt": "hello", "model": "model-a:latest",
+        "context": 4096, "maxTokens": 128, "temperature": 0.2,
+        "access": "ask", "approvalMode": "per-action",
+    }})
+    controller = service.active
+    assert controller is not None
+    controller["thread"].join(3)
+
+    assert not any(event.get("type") == "session_saved" for event in events)
+    assert any(event.get("type") == "session_mirror_error" and "simulated mirror failure" in event.get("error", "")
+               for event in events)
+    assert sum(event.get("type") == "error" and event.get("error") == "RuntimeError: synthetic run failure"
+               for event in events) == 1
+
+
 def test_incomplete_provider_stream_preserves_partial_reasoning_and_request_failure(service, tmp_path, monkeypatch):
     class IncompleteStreamEngine:
         def __init__(self, root, model, context, access, approval, event, approve, **kwargs):
