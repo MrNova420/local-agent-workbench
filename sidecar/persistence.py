@@ -22,7 +22,7 @@ from sessions import SessionStore
 from task_checkpoint import record_plan
 
 
-def _atomic_json(path: Path, value: Any) -> None:
+def _atomic_json(path: Path, value: Any, *, permission_retries: int | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary: Path | None = None
     try:
@@ -35,11 +35,15 @@ def _atomic_json(path: Path, value: Any) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         delay = 0.05
+        attempts = 0
         while True:
             try:
                 os.replace(temporary, path)
                 break
             except PermissionError:
+                if permission_retries is not None and attempts >= permission_retries:
+                    raise
+                attempts += 1
                 time.sleep(delay)
                 delay = min(delay * 2, 0.75)
     finally:
@@ -50,6 +54,74 @@ def _atomic_json(path: Path, value: Any) -> None:
                 # Preserve the original replace/write failure. An orphaned
                 # uniquely named temp is safer than masking the save error.
                 pass
+
+
+class ProviderTokenCalibrationStore:
+    """App-wide per-provider/model prompt-count observations for request estimates."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+        self._lock = threading.RLock()
+
+    @staticmethod
+    def _valid_calibration(value: Any) -> dict[str, Any] | None:
+        if not isinstance(value, dict):
+            return None
+        ratio = value.get("max_observed_ratio")
+        count = value.get("observation_count")
+        if (not isinstance(ratio, (int, float)) or isinstance(ratio, bool) or not math.isfinite(ratio) or ratio <= 0
+                or not isinstance(count, int) or isinstance(count, bool) or count < 1):
+            return None
+        normalized = {"max_observed_ratio": float(ratio), "observation_count": count}
+        for key in ("last_estimated_tokens", "last_provider_tokens"):
+            item = value.get(key)
+            if isinstance(item, int) and not isinstance(item, bool) and item > 0:
+                normalized[key] = item
+        updated = value.get("updated_at")
+        if isinstance(updated, (int, float)) and not isinstance(updated, bool) and math.isfinite(updated):
+            normalized["updated_at"] = float(updated)
+        return normalized
+
+    def load(self) -> dict[str, dict[str, Any]]:
+        with self._lock:
+            try:
+                document = json.loads(self.path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError, UnicodeError):
+                return {}
+            rows = document.get("calibrations") if isinstance(document, dict) else None
+            if not isinstance(rows, dict):
+                return {}
+            result: dict[str, dict[str, Any]] = {}
+            for key, value in rows.items():
+                if not isinstance(key, str) or "|" not in key:
+                    continue
+                normalized = self._valid_calibration(value)
+                if normalized is not None:
+                    result[key] = normalized
+            return result
+
+    def observe(self, provider: str, model: str, estimated_tokens: int,
+                provider_tokens: int) -> dict[str, Any] | None:
+        if (not isinstance(provider, str) or not provider.strip()
+                or not isinstance(model, str) or not model.strip()
+                or not isinstance(estimated_tokens, int) or isinstance(estimated_tokens, bool) or estimated_tokens < 1
+                or not isinstance(provider_tokens, int) or isinstance(provider_tokens, bool) or provider_tokens < 1):
+            return None
+        key = f"{provider.strip().casefold()}|{model.strip()}"
+        with self._lock:
+            current = self.load()
+            previous = current.get(key, {})
+            ratio = provider_tokens / estimated_tokens
+            calibration = {
+                "max_observed_ratio": max(float(previous.get("max_observed_ratio", 0)), ratio),
+                "observation_count": int(previous.get("observation_count", 0)) + 1,
+                "last_estimated_tokens": estimated_tokens,
+                "last_provider_tokens": provider_tokens,
+                "updated_at": time.time(),
+            }
+            current[key] = calibration
+            _atomic_json(self.path, {"schema_version": 1, "calibrations": current}, permission_retries=2)
+            return copy.deepcopy(calibration)
 
 
 def _append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from sidecar.persistence import MirroredSessionStore, WorkspaceHistory, _append_jsonl, _atomic_json, _replay_run_event
+from sidecar.persistence import MirroredSessionStore, ProviderTokenCalibrationStore, WorkspaceHistory, _append_jsonl, _atomic_json, _replay_run_event
 
 
 class MirroredSessionStoreTests(unittest.TestCase):
@@ -778,6 +778,47 @@ class WorkspaceHistoryTests(unittest.TestCase):
             self.assertTrue(rows[0]["pinned"])
             history.remove(str(missing))
             self.assertEqual(len(history.list()), 1)
+
+
+class ProviderTokenCalibrationStoreTests(unittest.TestCase):
+    def test_exact_counts_persist_per_provider_and_model_across_store_instances(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "provider-token-calibration.json"
+            store = ProviderTokenCalibrationStore(path)
+
+            first = store.observe("Ollama", "flint:latest", 18_583, 7_385)
+            second = store.observe("ollama", "flint:latest", 22_751, 7_903)
+            other = store.observe("llama.cpp", "flint:latest", 100, 90)
+
+            restored = ProviderTokenCalibrationStore(path).load()
+            self.assertAlmostEqual(first["max_observed_ratio"], 7_385 / 18_583)
+            self.assertEqual(second["observation_count"], 2)
+            self.assertAlmostEqual(second["max_observed_ratio"], max(7_385 / 18_583, 7_903 / 22_751))
+            self.assertEqual(other["observation_count"], 1)
+            self.assertEqual(restored["ollama|flint:latest"]["observation_count"], 2)
+            self.assertEqual(restored["llama.cpp|flint:latest"]["last_provider_tokens"], 90)
+
+    def test_invalid_observations_do_not_replace_valid_calibration(self):
+        with tempfile.TemporaryDirectory() as temp:
+            store = ProviderTokenCalibrationStore(Path(temp) / "provider-token-calibration.json")
+            accepted = store.observe("ollama", "flint", 100, 40)
+            self.assertIsNone(store.observe("ollama", "flint", 0, 50))
+            self.assertIsNone(store.observe("ollama", "flint", 100, 0))
+            self.assertEqual(store.load()["ollama|flint"], accepted)
+
+    def test_locked_optional_calibration_file_fails_after_bounded_retries_without_corrupting_saved_data(self):
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "provider-token-calibration.json"
+            store = ProviderTokenCalibrationStore(path)
+            original = store.observe("ollama", "flint", 100, 40)
+            with patch("sidecar.persistence.os.replace", side_effect=PermissionError("sharing lock")) as replace:
+                with self.assertRaisesRegex(PermissionError, "sharing lock"):
+                    store.observe("ollama", "flint", 100, 55)
+
+            self.assertEqual(replace.call_count, 3)
+            self.assertEqual(ProviderTokenCalibrationStore(path).load()["ollama|flint"], original)
 
 
 if __name__ == "__main__":

@@ -41,6 +41,29 @@ def service(tmp_path, monkeypatch):
     return result
 
 
+def test_provider_prompt_calibration_is_app_wide_and_does_not_overwrite_better_session_observation(service, tmp_path):
+    service.token_calibrations.observe("ollama", "flint:latest", 1000, 400)
+    checkpoint = {"provider_token_calibrations": {
+        "ollama|flint:latest": {"max_observed_ratio": 0.45, "observation_count": 3},
+    }}
+
+    service._seed_provider_token_calibration(checkpoint)
+
+    calibration = checkpoint["provider_token_calibrations"]["ollama|flint:latest"]
+    assert calibration["max_observed_ratio"] == 0.45
+    assert calibration["observation_count"] >= 3
+    engine = worker.AgentEngine(tmp_path, model="flint:latest", context=65_536,
+                                task_checkpoint=checkpoint, provider_id="ollama")
+    assert engine.context.request_estimate_method.startswith("model-calibrated")
+    assert engine.state["context"] == 65_536
+    assert service._record_provider_prompt_calibration(
+        {"provider_id": "llama.cpp", "model": "flint:latest"},
+        {"estimated_input_tokens": 100}, {"prompt_eval_count": 80},
+    )["observation_count"] == 1
+    saved = service.token_calibrations.load()
+    assert saved["llama.cpp|flint:latest"]["last_provider_tokens"] == 80
+
+
 def test_dynamic_models_and_full_advertised_context(service):
     assert service.handle("models", {}) == ["model-a:latest", "model-b:latest"]
     info = service.handle("model_info", {"model": "model-a:latest"})

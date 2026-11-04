@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 import os
 import queue
 import re
@@ -61,7 +62,7 @@ from mcp_support import MCPManager  # noqa: E402
 from project_knowledge import ProjectKnowledge  # noqa: E402
 from project_view import ProjectFilePageCursor, preview_file_page  # noqa: E402
 from project_diff import workspace_diff_text  # noqa: E402
-from persistence import MirroredSessionStore, WorkspaceHistory  # noqa: E402
+from persistence import MirroredSessionStore, ProviderTokenCalibrationStore, WorkspaceHistory  # noqa: E402
 from telemetry import Telemetry  # noqa: E402
 from turn_context import TurnContext, validate_selected_workspace  # noqa: E402
 from ui_events import AgentEventRelay  # noqa: E402
@@ -167,6 +168,7 @@ class AgentService:
     def __init__(self) -> None:
         self.sessions = MirroredSessionStore(APP_DATA)
         self.workspaces = WorkspaceHistory(APP_DATA)
+        self.token_calibrations = ProviderTokenCalibrationStore(APP_DATA / "provider-token-calibration.json")
         self.runtime = OllamaRuntime()
         self.telemetry = Telemetry()
         self.mcp = MCPManager(APP_DATA / "mcp.json")
@@ -220,6 +222,47 @@ class AgentService:
         self.output_ids: queue.SimpleQueue[str] = queue.SimpleQueue()
         self.project_file_page_lock = threading.RLock()
         self.project_file_page_cursor: ProjectFilePageCursor | None = None
+
+    def _seed_provider_token_calibration(self, checkpoint: dict[str, Any]) -> None:
+        """Merge durable app-wide measurements into this session without losing better local data."""
+        if not isinstance(checkpoint, dict):
+            return
+        session_rows = checkpoint.setdefault("provider_token_calibrations", {})
+        if not isinstance(session_rows, dict):
+            session_rows = checkpoint["provider_token_calibrations"] = {}
+        for key, stored in self.token_calibrations.load().items():
+            current = session_rows.get(key)
+            if not isinstance(current, dict):
+                session_rows[key] = copy.deepcopy(stored)
+                continue
+            current_ratio = current.get("max_observed_ratio", 0)
+            stored_ratio = stored.get("max_observed_ratio", 0)
+            current_count = current.get("observation_count", 0)
+            stored_count = stored.get("observation_count", 0)
+            if (not isinstance(current_ratio, (int, float)) or isinstance(current_ratio, bool)
+                    or not math.isfinite(current_ratio) or current_ratio <= 0):
+                current_ratio = 0.0
+            if not isinstance(current_count, int) or isinstance(current_count, bool) or current_count < 0:
+                current_count = 0
+            if (isinstance(current_ratio, (int, float)) and current_ratio > stored_ratio):
+                merged = copy.deepcopy(current)
+                merged["max_observed_ratio"] = current_ratio
+                merged["observation_count"] = max(current_count, int(stored_count or 0))
+                session_rows[key] = merged
+            else:
+                merged = copy.deepcopy(stored)
+                merged["observation_count"] = max(current_count, int(stored_count or 0))
+                session_rows[key] = merged
+
+    def _record_provider_prompt_calibration(self, state: dict[str, Any], run_state: dict[str, Any],
+                                            usage: dict[str, Any]) -> dict[str, Any] | None:
+        estimate = run_state.get("estimated_input_tokens")
+        actual = usage.get("prompt_eval_count")
+        if (not isinstance(estimate, int) or isinstance(estimate, bool)
+                or not isinstance(actual, int) or isinstance(actual, bool)):
+            return None
+        return self.token_calibrations.observe(
+            str(state.get("provider_id") or "ollama"), str(state.get("model", "")), estimate, actual)
 
     def _save_active_session(self, controller: dict[str, Any]) -> dict[str, Any]:
         """Persist an immutable active-session snapshot without blocking its state lock."""
@@ -590,6 +633,14 @@ class AgentService:
                     "estimated_input_tokens": run_state.get("estimated_input_tokens") if isinstance(run_state, dict) else None,
                     "timestamp": event.get("timestamp", time.time()),
                 })
+                try:
+                    enriched["token_calibration_saved"] = self._record_provider_prompt_calibration(
+                        state, run_state if isinstance(run_state, dict) else {},
+                        event.get("usage", {}) if isinstance(event.get("usage"), dict) else {}) is not None
+                except OSError as exc:
+                    # Calibration is an optimization, not a prerequisite for the active run.
+                    enriched["token_calibration_saved"] = False
+                    enriched["token_calibration_save_error"] = f"{type(exc).__name__}: {exc}"
             elif kind == "error":
                 activity = {"id": activity_id, "turnId": controller["turn_id"], "sessionId": state["session_id"],
                             "workspace": str(turn.workspace), "kind": "error",
@@ -2301,6 +2352,7 @@ class AgentService:
                                    "error": saved.get("error") or "Steering delivery was saved to only one session mirror."})
                     return True
 
+            self._seed_provider_token_calibration(state.setdefault("task_checkpoint", {}))
             engine = AgentEngine(
                 turn.workspace, turn.model, turn.context, turn.access, turn.approval_mode,
                 relay, approve, runtime_options=turn.runtime_options,
@@ -2319,6 +2371,7 @@ class AgentService:
                 approve_repeated_action=lambda name, args: approve(name, args, "repeated_identical_action"),
                 steering_handler=apply_steering,
                 steering_interrupt_event=controller["steering_interrupt"],
+                provider_id=str(state.get("provider_id", "ollama")),
             )
             chosen_runtime = self.providers.runtime_for(turn.model, engine.runtime, state.get("provider_id"))
             engine.runtime = RequestScopedOllama(chosen_runtime)
