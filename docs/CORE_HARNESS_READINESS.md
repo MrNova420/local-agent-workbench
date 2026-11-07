@@ -676,3 +676,9 @@ The engine now returns authoritative plan-change state, next open item, and acce
 ## 2026-11-04 Hugging Face batch selection source status
 
 - Removed the arbitrary 500-file cap from explicit Hugging Face file downloads. The existing background worker retains non-empty/string validation, catalog path validation, per-file cancellation, and per-file progress. A mocked 501-file regression is authored but not run; it belongs to the grouped verification pass. No live download or model setting change was made.
+
+## 2026-11-07 r3 follow-up
+
+The r3 direct chat and subsequent structured write/readback task both visibly reached `TURN COMPLETE` in the exact unpacked beta.3 candidate. The file task used the already-running Flint model at 65,536/8,192, model-default reasoning, and per-action approval; it preserved the disposable workspace, used same-task steering, and its exact LF-terminated file bytes were independently confirmed. Prompt cache reuse was provider-reported on all three completed requests after steering (21,264 cached tokens total; last request 86%). This is successful visible evidence for chat, steering, approval, file write, readback, terminal response, and live metrics, with a long 470.6-second task duration. It does not establish broad stability or close package worker, command, cancel, crash/compaction, or updater gates.
+
+A usability defect was found in Run Configuration: the form remains editable during an active task while its save action is disabled and the handler rejects session-setting writes. The UI now explains captured access/approval semantics and labels save as available after task end. This is unverified source work pending typecheck/package/visible check.
