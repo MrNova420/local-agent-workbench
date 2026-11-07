@@ -1,6 +1,6 @@
 # Product Backlog
 
-Current paired source before this implementation batch: app `717c4079c99fe10e7892ada2868710c28019d3c6` pinned engine `c110ce253344904026a6684a224e5379fba3b7a5`. The app worktree now pins engine HEAD `295047b02bd718077361d20b2cad9500d270d4c1`, including removal of synthetic plans and approval-aware parallel file batches; paired sidecar changes remain uncommitted and unverified. Historical verification below applies only to the listed revisions.
+Current paired source before this implementation batch: app `717c4079c99fe10e7892ada2868710c28019d3c6` pinned engine `c110ce253344904026a6684a224e5379fba3b7a5`. App `b2bc788f72ec06bcc5a78bfb83ad03e0cf9ac41e` pins engine HEAD `295047b02bd718077361d20b2cad9500d270d4c1`, including removal of synthetic plans and approval-aware parallel file batches. Current uncommitted sidecar work defers completed-operation activity until both journal mirrors save. Regressions are written and unverified. Historical verification below applies only to the listed revisions.
 
 ## 2026-11-07 core-flow correction
 

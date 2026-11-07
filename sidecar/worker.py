@@ -666,32 +666,42 @@ class AgentService:
                         activity_updates.append(copy.deepcopy(row))
             if kind == "generation_usage":
                 enriched["first_token_seconds"] = run_state.get("request_first_token_seconds") if isinstance(run_state, dict) else None
+            deferred_operation_events: list[dict[str, Any]] = []
+
+            def publish_event(payload: dict[str, Any]) -> None:
+                # A completion must not appear durable in the UI until the
+                # corresponding journal record has reached both session copies.
+                if kind == "tool_done":
+                    deferred_operation_events.append(copy.deepcopy(payload))
+                else:
+                    self.emit(payload)
+
             if activity and kind == "tool_call_progress":
                 # Keep transient token-level progress and the same resumable activity row.
-                self.emit(enriched)
-                self.emit({"type": "activity_event", "activity": copy.deepcopy(activity),
-                           "sessionId": state["session_id"], "turnId": controller["turn_id"]})
+                publish_event(enriched)
+                publish_event({"type": "activity_event", "activity": copy.deepcopy(activity),
+                               "sessionId": state["session_id"], "turnId": controller["turn_id"]})
             elif activity and kind == "error":
                 # A failure is both a durable activity row and a chat-visible
                 # terminal event. Do not replace the terminal error with the
                 # activity envelope or the renderer will never finish the turn.
-                self.emit(enriched)
-                self.emit({**enriched, "type": "activity_event", "activity": copy.deepcopy(activity)})
+                publish_event(enriched)
+                publish_event({**enriched, "type": "activity_event", "activity": copy.deepcopy(activity)})
             elif activity:
                 if kind in {"inference_settings", "generation_usage", "request_dispatched", "request_headers", "request_complete", "request_error"}:
                     # Keep live settings/metrics/phase events and publish the same
                     # durable prompt row update to the activity feed.
-                    self.emit(enriched)
-                    self.emit({**enriched, "type": "activity_event", "activity": copy.deepcopy(activity)})
+                    publish_event(enriched)
+                    publish_event({**enriched, "type": "activity_event", "activity": copy.deepcopy(activity)})
                 else:
                     enriched["type"] = "activity_event"
                     enriched["activity"] = copy.deepcopy(activity) if kind != "operation_output" else None
-                    self.emit(enriched)
+                    publish_event(enriched)
             else:
-                self.emit(enriched)
+                publish_event(enriched)
             for row in activity_updates:
-                self.emit({"type": "activity_event", "activity": row,
-                           "sessionId": state["session_id"], "turnId": controller["turn_id"]})
+                publish_event({"type": "activity_event", "activity": row,
+                               "sessionId": state["session_id"], "turnId": controller["turn_id"]})
 
             if (activity and kind != "operation_output") or activity_updates:
                 controller["activity_revision"] = int(controller.get("activity_revision", 0)) + 1
@@ -710,6 +720,8 @@ class AgentService:
                                             "workspace", "timestamp", "_journal_event_id", "_journal_recorded_at_ns"}}
             if event.get("type") == "generation_usage" and isinstance(run_state, dict):
                 journal_event["first_token_seconds"] = run_state.get("request_first_token_seconds")
+            if deferred_operation_events:
+                journal_event["_journal_deferred_events"] = deferred_operation_events
             if (pending and pending[-1].get("type") == journal_event.get("type")
                     and journal_event.get("type") in {"text", "thinking", "tool_call_progress"}
                     and pending[-1].get("turnId") == journal_event.get("turnId")
@@ -763,6 +775,12 @@ class AgentService:
                 fully_mirrored = [row for row in journal_rows if {"app", "project"}.issubset(set(row.get("_journal_saved_to", [])))]
                 pending.extend(row for row in journal_rows if row not in fully_mirrored)
                 pending.sort(key=lambda row: int(row.get("_journal_recorded_at_ns", 0)))
+                for row in fully_mirrored:
+                    deferred = row.pop("_journal_deferred_events", [])
+                    if isinstance(deferred, list):
+                        for payload in deferred:
+                            if isinstance(payload, dict):
+                                self.emit(payload)
                 if fully_mirrored:
                     state["journal_cursor_ns"] = max(int(state.get("journal_cursor_ns", 0)),
                                                       max(int(row.get("_journal_recorded_at_ns", 0)) for row in fully_mirrored))

@@ -1015,6 +1015,41 @@ def test_agent_plan_decisions_are_saved_to_checkpoint_and_activity(service, tmp_
     assert plan_activities[1]["taskMode"] == "plan_only"
 
 
+def test_completed_operation_is_not_published_until_both_journals_save(service, tmp_path, monkeypatch):
+    project = tmp_path / "completion-durability-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 8192)
+    controller = {"session": state, "turn_id": "turn-durable", "checkpoint_lock": threading.RLock(),
+                  "last_checkpoint": time.monotonic(), "last_journal_flush": time.monotonic(),
+                  "journal_pending": []}
+    order = []
+
+    def append_events(_session_id, _workspace, rows):
+        order.append(("journal", [row["type"] for row in rows]))
+        return {"app_saved": True, "project_saved": True, "error": None}
+
+    monkeypatch.setattr(service.sessions, "append_events", append_events)
+    monkeypatch.setattr(service, "emit", lambda event: order.append(("emit", event.get("type"),
+        (event.get("activity") or {}).get("status"), (event.get("activity") or {}).get("result"))))
+
+    service._publish_run_event(controller, SimpleNamespace(workspace=project), {
+        "type": "tool_start", "operationId": "op-1", "toolCallId": "call-1",
+        "name": "write_file", "arguments": {"path": "src/new.py"}, "startedAt": 1,
+    })
+    order.clear()
+    service._publish_run_event(controller, SimpleNamespace(workspace=project), {
+        "type": "tool_done", "operationId": "op-1", "toolCallId": "call-1",
+        "name": "write_file", "result": "Updated: src/new.py", "status": "completed",
+        "affectedFiles": ["src/new.py"], "completedAt": 2,
+    })
+
+    journal_index = next(index for index, row in enumerate(order) if row[0] == "journal")
+    completion_index = next(index for index, row in enumerate(order)
+                            if row[0] == "emit" and row[1] == "activity_event"
+                            and row[2] == "completed" and row[3] == "Updated: src/new.py")
+    assert journal_index < completion_index
+
+
 def test_due_context_checkpoint_prompt_forces_immediate_session_snapshot(service, tmp_path, monkeypatch):
     project = tmp_path / "context-checkpoint-project"
     project.mkdir()

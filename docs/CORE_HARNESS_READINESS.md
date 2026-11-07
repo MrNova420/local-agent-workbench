@@ -3,6 +3,7 @@
 ## 2026-11-07 implementation checkpoint
 
 - The prior app source was `717c4079c99fe10e7892ada2868710c28019d3c6`, paired with engine `c110ce253344904026a6684a224e5379fba3b7a5`. Engine commit `e2bbeb611e928cd5d97cbff6174552645358b1e8` removes automatic host-authored starter plans; `295047b02bd718077361d20b2cad9500d270d4c1` adds approval-aware parallel execution for independent file writes. The app sidecar starts a new task with an empty plan and no synthetic plan event; only an actual model `update_plan` event populates it. Saved historical Workbench plans continue to restore. Regressions are written but have not been run per the requested grouped-verification workflow. Packaged and visible behavior remain unverified.
+- App commit `b2bc788f72ec06bcc5a78bfb83ad03e0cf9ac41e` pins that engine pair and removes the sidecar's synthetic plan startup. The next app change makes completed operation activity wait for durable app and project journal writes; on a failed mirror write, completion stays queued and the existing persistence warning is emitted. Regression coverage for event ordering is authored; execution remains queued. This source is unverified and unpackaged.
 - This does not complete the full agent/chat stabilization plan. Same-task continuation, compaction and persistence, safe parallel write approvals, runtime controls/telemetry, restored rendering, and visible Flint acceptance remain in scope. No model or inference setting was changed.
 
 ## Current status (2026-11-04)
