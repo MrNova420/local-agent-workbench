@@ -1,6 +1,6 @@
 # Product Backlog
 
-Current paired source: app `b3e81c765566d1d7d76658f28d82a7dfbf1a136f` pins engine `4f30fac934556fe5da7e4dee41989b4c799c6331`. This pair removes synthetic plans, batches approved independent writes, budgets and carries forward checkpoint facts across repeated compaction, waits for mirrored operation journal writes before publishing completion, and covers restored Markdown/tool-cycle transcript rendering. Regression coverage remains unverified. Historical verification below applies only to the listed revisions.
+Current paired source: app `e7c5ea5` pins engine `aece455`. This pair removes synthetic plans, batches approved independent writes, budgets and carries forward checkpoint facts across repeated compaction, waits for mirrored operation journal writes before publishing completion, and covers restored Markdown/tool-cycle transcript rendering. Regression corrections are in grouped verification. Historical verification below applies only to the listed revisions.
 
 ## 2026-11-07 core-flow correction
 
