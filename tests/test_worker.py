@@ -1050,6 +1050,43 @@ def test_completed_operation_is_not_published_until_both_journals_save(service, 
     assert journal_index < completion_index
 
 
+def test_failed_project_journal_keeps_completion_queued_and_warns(service, tmp_path, monkeypatch):
+    project = tmp_path / "completion-journal-retry-project"
+    project.mkdir()
+    state = service.sessions.create(str(project), "model-a:latest", 8192)
+    controller = {"session": state, "turn_id": "turn-retry", "checkpoint_lock": threading.RLock(),
+                  "last_checkpoint": time.monotonic(), "last_journal_flush": time.monotonic(),
+                  "journal_pending": []}
+    emitted = []
+    append_count = 0
+    def append_events(*_args):
+        nonlocal append_count
+        append_count += 1
+        if append_count == 1:
+            return {"app_saved": True, "project_saved": True, "error": None}
+        return {"app_saved": True, "project_saved": False, "error": "project mirror is temporarily read-only"}
+    monkeypatch.setattr(service.sessions, "append_events", append_events)
+    monkeypatch.setattr(service, "emit", emitted.append)
+    service._publish_run_event(controller, SimpleNamespace(workspace=project), {
+        "type": "tool_start", "operationId": "op-1", "toolCallId": "call-1",
+        "name": "write_file", "arguments": {"path": "src/new.py"}, "startedAt": 1,
+    })
+    emitted.clear()
+
+    service._publish_run_event(controller, SimpleNamespace(workspace=project), {
+        "type": "tool_done", "operationId": "op-1", "toolCallId": "call-1",
+        "name": "write_file", "result": "Updated: src/new.py", "status": "completed",
+        "affectedFiles": ["src/new.py"], "completedAt": 2,
+    })
+
+    assert not any(event.get("type") == "activity_event"
+                   and event.get("activity", {}).get("status") == "completed" for event in emitted)
+    assert any(event.get("type") == "checkpoint_journal_error"
+               and event.get("projectSaved") is False for event in emitted)
+    pending = next(row for row in controller["journal_pending"] if row.get("type") == "tool_done")
+    assert pending["_journal_deferred_events"][0]["activity"]["result"] == "Updated: src/new.py"
+
+
 def test_due_context_checkpoint_prompt_forces_immediate_session_snapshot(service, tmp_path, monkeypatch):
     project = tmp_path / "context-checkpoint-project"
     project.mkdir()
