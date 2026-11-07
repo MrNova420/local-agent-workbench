@@ -4,13 +4,16 @@ All notable user-facing changes are recorded here. This project is in unstable b
 
 ## Unreleased
 
-- Enter during an active task now steers the same chat/task at a safe model/tool boundary; Queue next remains a separate action. Delivery status is saved in the task checkpoint. Regression and packaged-app acceptance remain queued.
+## 0.1.0-beta.4 — 2026-11-07 (candidate; release gates pending)
+
+- Same-task steering now preserves the active task and plan across safe model/tool boundaries; Queue next remains separate.
 - Kept the current task plan and acceptance criteria visible during same-task continuation until the sidecar publishes its authoritative update.
 - Made active-run follow-up drafting and durable queueing clearer, prevented duplicate submissions, and preserved Shift+Enter and IME composition behavior.
 - Added a live run-status line that distinguishes model reasoning from a structured tool call and reports elapsed time and the labeled prompt-size estimate.
 - Prioritized Plan and Activity Trace in the Live Work Sheet; migrated the previous built-in layout while retaining customized layouts.
 - The paired Ollama adapter now treats a stream without `done: true` as interrupted, preserving partial output and surfacing a request error instead of continuing from incomplete reasoning.
-- Added regression coverage. Tests, typecheck, package build, UI acceptance, and live inference are queued and unrun.
+- Clarified that workspace access and approval are separate, and why settings cannot be saved into a session while a task is active.
+- Verification so far: renderer 139, sidecar 168, engine 425 plus 12 subtests, and typecheck passed. A packaged Flint chat/write/read flow completed visibly. Fresh package and updater acceptance are still pending; this is not a stable-release claim.
 
 ## 0.1.0-beta.3 — 2026-11-01
 
