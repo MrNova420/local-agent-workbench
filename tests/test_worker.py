@@ -634,6 +634,8 @@ def test_steering_messages_are_delivered_in_order_before_same_task_continues(ser
     controller = service.active
     assert controller is not None
     assert started.wait(2)
+    assert controller["session"]["plan"] == []
+    assert not any(event.get("type") == "plan" for event in events), "a plan event must come from an actual model plan update"
     session_id = controller["session"]["session_id"]
     turn_id = controller["turn_id"]
 

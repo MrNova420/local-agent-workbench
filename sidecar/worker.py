@@ -50,7 +50,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from desktop_engine import AgentEngine, OllamaRuntime, RequestCancelled, ToolRegistry, Workspace  # noqa: E402
 from permission_policy import permission_rules_for_workspace, validate_permission_rules  # noqa: E402
-from task_checkpoint import begin_task, current_task, finish_task, initial_task_plan, record_plan, record_user_update  # noqa: E402
+from task_checkpoint import begin_task, current_task, finish_task, record_plan, record_user_update  # noqa: E402
 from disposable_workspace import (  # noqa: E402
     apply_reviewed_changes,
     capture_manifest,
@@ -2061,8 +2061,9 @@ class AgentService:
         new_task = (not isinstance(previous_task, dict) or not previous_task.get("task_id")
                     or previous_task.get("status") in {"completed", "cancelled", "failed", "stopped"})
         if new_task:
-            seed_intent = "plan" if access == "plan" and task_intent == "auto" else task_intent
-            state["plan"] = initial_task_plan(prompt, seed_intent)
+            # Plans are authored by the model through update_plan. Keep a new
+            # task visibly empty until an actual plan event arrives.
+            state["plan"] = []
         state["task_checkpoint"] = begin_task(
             state.get("task_checkpoint"),
             prompt=prompt,
@@ -2150,13 +2151,6 @@ class AgentService:
         self.emit({"type": "run_started", "sessionId": state["session_id"], "turnId": turn_id})
         self.emit({"type": "session_queue_update", "sessionId": state["session_id"], "workspace": str(source),
                    "queuedPrompts": copy.deepcopy(controller["session"].get("queued_prompts", []))})
-        if new_task:
-            starter_event = {"type": "plan", "items": copy.deepcopy(state["plan"]),
-                             "acceptanceCriteria": [], "source": "workbench"}
-            starter_mode = {"discuss": "discussion", "plan": "plan", "implement": "implement"}.get(task_intent)
-            if starter_mode:
-                starter_event["taskMode"] = starter_mode
-            self._publish_run_event(controller, turn, starter_event)
         thread = threading.Thread(target=self._run_turn, args=(controller, turn), name="agent-run", daemon=True)
         controller["thread"] = thread
         thread.start()

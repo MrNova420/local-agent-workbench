@@ -1,6 +1,10 @@
 # Product Backlog
 
-Current paired source: app `258e064` pins engine `255af48f9cc4f93c6623454261c2f3d419f7f427`. Historical verification below applies only to the listed revisions.
+Current paired source before this implementation batch: app `717c4079c99fe10e7892ada2868710c28019d3c6` pinned engine `c110ce253344904026a6684a224e5379fba3b7a5`. The app worktree now pins engine HEAD `295047b02bd718077361d20b2cad9500d270d4c1`, including removal of synthetic plans and approval-aware parallel file batches; paired sidecar changes remain uncommitted and unverified. Historical verification below applies only to the listed revisions.
+
+## 2026-11-07 core-flow correction
+
+Earlier notes saying “Auto publishes task progress before inference” describe superseded behavior, not current intent. New tasks wait for a model-authored plan event; old saved Workbench plans remain readable. The engine change removes the synthetic starter checklist and related progress events. Remaining core stabilization stays in scope: same-task continuation, durable compaction/recovery, safe approval-aware batching, runtime/telemetry truth, restored rendering, and visible Flint acceptance.
 
 - **2026-11-04 run-scoped stop decisions:** Cancel and finish-after-operation capture and transmit session/turn identity. Renderer and app-close paths target that identity; the sidecar rejects stale or identity-less requests and leaves a newer active turn untouched. Wrong-turn regressions were authored; tests/typecheck/package and visible dialog acceptance are queued. App `e515fde`.
 - **2026-11-04 structured question identity:** `ask_user` replies now include and validate the captured session and turn, just like approval and stop decisions. A stale answer cannot satisfy a question in another turn. Wrong-session/turn protocol regressions were authored; grouped verification is queued. App `65d966a`.
