@@ -832,7 +832,7 @@ def test_provider_request_settings_update_the_matching_prompt_activity_and_strea
                and event.get("activity", {}).get("status") == "response_stream_ended" for event in events)
 
 
-def test_plan_intent_seeds_live_checklist_and_enforces_read_only_builtin_tools(service, tmp_path, monkeypatch):
+def test_plan_intent_waits_for_model_plan_and_enforces_read_only_builtin_tools(service, tmp_path, monkeypatch):
     events = []
     captured = {}
     service.emit = events.append
@@ -883,14 +883,11 @@ def test_plan_intent_seeds_live_checklist_and_enforces_read_only_builtin_tools(s
     assert captured["kwargs"]["permission_workspace_root"] == project
     assert saved["run_state"]["settings"]["permission_rules"] == run_rules
     assert saved["task_intent"] == "plan"
-    assert saved["plan"][0]["title"] == "Use the task brief and project instructions as the objective"
+    assert saved["plan"] == []
     assert saved["task_checkpoint"]["current"]["acceptance_criteria_source"] == "awaiting_agent_refinement"
-    plan_activity = next(event["activity"] for event in events if event.get("type") == "activity_event" and event.get("activity", {}).get("kind") == "plan")
-    assert plan_activity["acceptanceCriteria"] == []
-    assert plan_activity["taskMode"] == "plan"
     assert saved["turns"][-1]["settings"]["task_intent"] == "plan"
     assert saved["turns"][-1]["settings"]["effective_access"] == "plan"
-    assert any(event.get("type") == "activity_event" and event.get("activity", {}).get("kind") == "plan" for event in events)
+    assert not any(event.get("type") == "activity_event" and event.get("activity", {}).get("kind") == "plan" for event in events)
 
 
 def test_copy_run_keeps_external_folder_grants_bound_to_original_project(service, tmp_path, monkeypatch):
