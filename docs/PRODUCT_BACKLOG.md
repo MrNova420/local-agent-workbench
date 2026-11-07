@@ -1,6 +1,6 @@
 # Product Backlog
 
-Current paired source: app `e7c5ea5` pins engine `aece455`. This pair removes synthetic plans, batches approved independent writes, budgets and carries forward checkpoint facts across repeated compaction, waits for mirrored operation journal writes before publishing completion, and covers restored Markdown/tool-cycle transcript rendering. Regression corrections are in grouped verification. Historical verification below applies only to the listed revisions.
+Current paired source: app `cdd5a1c` pins engine `aece455`; docs-only app commits through `f031aa5` follow it. The pair removes synthetic plans, batches approved independent writes, carries forward checkpoint facts across compaction, waits for mirrored operation journal writes before publishing completion, and covers restored Markdown/tool-cycle transcript rendering. Exact-pair suites and package checks passed. The short visible run's build identity is unresolved because launch by candidate path surfaced the installed beta.3 executable; current-build visible acceptance remains open. Historical verification below applies only to the listed revisions.
 
 ## 2026-11-07 core-flow correction
 
