@@ -1,7 +1,8 @@
 export type PersistedTranscriptRow = {
   role: string;
-  content?: string;
+  content?: unknown;
   thinking?: unknown;
+  tool_calls?: unknown[];
   turn_id?: string;
   steering_id?: string;
   steering_status?: 'pending' | 'interrupting' | 'delivered' | 'undelivered';

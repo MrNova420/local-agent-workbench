@@ -88,6 +88,37 @@ describe('resumed transcript rendering', () => {
     expect(markup).toContain('class="hljs-keyword"');
   });
 
+  it('restores a persisted tool cycle without turning internal call data into chat JSON', () => {
+    const finalContent = [
+      '## Changes made',
+      '',
+      '- Added the requested page.',
+      '- Verified the saved file.',
+      '',
+      '```typescript',
+      'export const ready: boolean = true;',
+      '```',
+    ].join('\n');
+    const restored = restoreTranscriptMessages([
+      { role: 'user', content: 'Add the page', turn_id: 'turn-1' },
+      { role: 'assistant', content: '', thinking: 'Inspecting the existing route.', turn_id: 'turn-1',
+        tool_calls: [{ id: 'call-1', function: { name: 'write_file', arguments: '{"path":"src/page.tsx"}' } }] },
+      { role: 'tool', content: '{"status":"completed","affectedFiles":["src/page.tsx"]}' },
+      { role: 'assistant', content: finalContent, thinking: 'The write completed and inspection passed.', turn_id: 'turn-1' },
+    ]);
+
+    expect(restored).toHaveLength(3);
+    expect(restored.map((row) => row.content)).toEqual([
+      'Add the page', '', finalContent,
+    ]);
+    const markup = renderToStaticMarkup(createElement(Markdown, { content: restored[2].content }));
+    expect(markup).toContain('<h2>Changes made</h2>');
+    expect(markup).toContain('<li>Added the requested page.</li>');
+    expect(markup).toContain('class="hljs language-typescript"');
+    expect(markup).not.toContain('affectedFiles');
+    expect(markup).not.toContain('tool_calls');
+  });
+
   it('restores provider-disconnected assistant text with an explicit partial marker', () => {
     const restored = restoreTranscriptMessages([
       { role: 'user', content: 'Implement this feature' },
