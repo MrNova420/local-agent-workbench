@@ -1,6 +1,6 @@
 # Product Backlog
 
-Current paired source before this implementation batch: app `717c4079c99fe10e7892ada2868710c28019d3c6` pinned engine `c110ce253344904026a6684a224e5379fba3b7a5`. Current app `e55c66a269a8261814d931acec4313cee17c5709` pins engine HEAD `f80557b59ebf2625039b3a39a59ecc564c42997b`; this pair removes synthetic plans, batches approved independent writes, budgets checkpoint handoff text before dispatch, and waits for mirrored operation journal writes before publishing completion. Failed mirror writes keep completion queued and visible through the persistence warning. Regression coverage remains unverified. Historical verification below applies only to the listed revisions.
+Current paired source: app `b3e81c765566d1d7d76658f28d82a7dfbf1a136f` pins engine `4f30fac934556fe5da7e4dee41989b4c799c6331`. This pair removes synthetic plans, batches approved independent writes, budgets and carries forward checkpoint facts across repeated compaction, waits for mirrored operation journal writes before publishing completion, and covers restored Markdown/tool-cycle transcript rendering. Regression coverage remains unverified. Historical verification below applies only to the listed revisions.
 
 ## 2026-11-07 core-flow correction
 
