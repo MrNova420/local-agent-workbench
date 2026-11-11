@@ -8,7 +8,7 @@ The current distributable is a **Windows 10/11 x64** Squirrel.Windows installer 
 
 1. Update the app version in `package.json` and `package-lock.json`; ensure the SemVer value matches the `v`-prefixed Git tag.
 2. Update `core-revision.txt` and both workflow engine checkouts together when the shared Python engine changes.
-3. Run the app typecheck, app/sidecar tests, engine tests, Windows package build, bundled-worker protocol smoke, and visible disposable-project workflow. The installed update canary is post-publication step 7 because the candidate cannot be discovered on the public feed before release.
+3. Run the app typecheck, app/sidecar tests, engine tests, Windows package build, bundled-worker protocol smoke, and visible disposable-project workflow. For engineering candidates use `npm run make:unique`, which places every build in a fresh `out/candidates/candidate-<timestamp>-<id>` directory and refuses an existing path. Do not overwrite or install over an earlier candidate; keep older artifacts available for comparison/recovery. The installed update canary is post-publication step 7 because the candidate cannot be discovered on the public feed before release.
 4. Inspect `out/make/squirrel.windows/x64/`: keep `RELEASES`, Setup `.exe`, and `*-full.nupkg` together. Keep the ZIP and `SHA256SUMS.txt` in the release assets too.
 5. Publish a GitHub Release from the matching `v<version>` tag and write user-facing notes from `CHANGELOG.md`. The Windows auto-update service consumes public, non-draft GitHub Releases and requires the Squirrel manifest and package assets. The release workflow therefore leaves GitHub's prerelease checkbox off while the SemVer version/title still says **Public beta**. Do not publish a draft or use GitHub's prerelease flag: the public Electron update service does not discover those releases.
 6. Verify the downloaded artifacts against `SHA256SUMS.txt`; verify the release page, setup instructions, screenshots, changelog, and platform limitations before announcing it.
@@ -17,6 +17,7 @@ The current distributable is a **Windows 10/11 x64** Squirrel.Windows installer 
 ## Version and release policy
 
 - Documentation-only, planning, and repository-governance commits do not change the app version, create a tag, or publish a release. A version is selected only when a distributable app build has passed the release gates below.
+- Candidate package builds must use a unique output directory. Never reuse a candidate directory or replace an older installer/ZIP; immutable historical candidates are needed for comparison and recovery. The release output for the final tagged build is also retained under a new version-specific path.
 - Give every published app release a new, strictly increasing SemVer tag matching `package.json` and `package-lock.json`. Never move or reuse a published tag.
 - The tag workflow packages the exact app commit and checks out the shared engine commit pinned by `core-revision.txt` and both workflows. Push the paired engine commit first whenever that pin changes, then publish the app source commit that references it.
 - Keep the beta designation in the tag, app version, release title, and notes. Leave GitHub's **prerelease** checkbox off because the configured Electron public update feed does not discover GitHub-marked prereleases.

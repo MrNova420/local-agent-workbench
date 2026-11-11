@@ -9,7 +9,7 @@ Design a new platform from scratch, informed by (not copied from) ChatGPT, Codex
 
 ## Required research
 
-For each platform, use current primary documentation/source where available. Capture date, URLs, evidenced behavior, and uncertainty. Compare:
+Build a broad, evidence-backed catalog of **up to 100** relevant platforms/tools (coding agents, IDE assistants, agent harnesses, local-model apps, CLI agents, review/worktree systems, MCP/extension ecosystems). Do not pad the catalog with irrelevant products. The catalog is only the index—not a substitute for depth. For **each selected platform individually**, conduct a comprehensive, in-depth review of its whole product and harness: every major surface, workflow, agent loop, model/runtime path, tool and integration system, context behavior, permission/safety boundary, recovery mechanism, visual interaction, customization path, release/operational model, strengths, weaknesses, and evidence gaps. Do this even when capabilities duplicate across products; those duplications are needed later for overlap analysis and deliberate synthesis. Capture research date, canonical URLs, versions, primary-source evidence, evidence quality, and uncertainty. Compare:
 - product surfaces and navigation; chat, editor, CLI, review, and worktree flows
 - agent loop/session ownership; send, steer, queue, delegation, and safe boundaries
 - context construction, prefix caching, compaction, tool-schema discovery, and model/runtime lifecycle
@@ -32,7 +32,7 @@ Do not treat a vendor's marketing claim as implementation evidence. Do not copy 
 | Pi / DeepAI Code | Pi offers session APIs, steer/follow-up, extensions and compaction; DeepAI Code emphasizes model/access modes, diff review, and branch/worktree isolation. [Pi SDK](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/sdk.md) · [DeepAI Code](https://deepai.org/docs) | Extensible event-driven sessions and a clean review loop; verify local/provider and recovery behavior independently. |
 | ChatGPT Projects / Canvas | Project-oriented conversations/files and an editable canvas are relevant interaction patterns; exact coding-agent integration varies by product and requires deeper first-party review. [Projects](https://help.openai.com/en/articles/10169521-projects-in-chatgpt) · [Canvas](https://help.openai.com/en/articles/9930697-what-is-the-canvas-feature-in-chatgpt-and-how-do-i-use-it) | Evaluate persistent project context and artifact-centric collaboration without assuming hosted features map directly to local execution. |
 
-These are workflow references, not claims that the products share implementations or that each pattern is suitable unchanged. Research coverage is incomplete: continue reviewing first-party docs/source for OpenAI Codex CLI/app-server, ChatGPT Projects/Canvas, Kilo modes/checkpoints, Pi session/extension details, and other local-first tools before architecture recommendation.
+These are initial, deliberately limited observations—not complete platform reviews and not claims that products share implementations or that any pattern should be copied unchanged. Research coverage is incomplete. The later research phase must individually review each chosen platform end to end from first-party docs/source and, where useful, hands-on evidence, including OpenAI Codex CLI/app-server, ChatGPT Projects/Canvas, Kilo, Pi, and local-first tools. Do not move to the new-platform architecture recommendation until the individual reviews and overlap analysis are complete.
 
 ## Expected design outputs
 
@@ -56,7 +56,7 @@ Do not start this track until the current Workbench branch has a truthful stabil
 - For OpenCode, trace a documented request loop and session/permission lifecycle across stable docs and source; label development-branch V2 ideas separately.
 - For Cline and Kilo, compare real checkpoint storage/restore boundaries and how they interact with Git, dirty worktrees, and user changes.
 - For Pi and Aider, measure prompt/context strategy, extension APIs, model routing, and action/undo semantics from primary docs/source.
-- Add additional platforms only when they offer evidenced differentiators (e.g. IDE-native, terminal-first, local runtime UX, remote sandbox); do not chase an arbitrary "top 100" list at the cost of product focus.
+- Expand the catalog toward 100 candidates only when each has a verifiable product identity and a relevant feature; group into tiers (deep-review, feature-reference, catalog-only) to avoid superficial claims or research bloat.
 
 ## Initial hypotheses to evaluate (not approved decisions)
 
@@ -68,3 +68,7 @@ Do not start this track until the current Workbench branch has a truthful stabil
 6. Test an original agent-workspace layout (project rail + active task/transcript canvas + contextual evidence/operations panel) against focused-chat and IDE-panel alternatives; do not select it from inspiration alone.
 
 These are research prompts only. No framework, runtime, brand, architecture, or UI is selected yet.
+
+## Research coverage plan for the up-to-100 catalog
+
+For each candidate, record canonical name, publisher, category, versions examined, supported platforms, current maintenance evidence, and a complete review dossier. The dossier must cover onboarding/navigation, project/context model, conversation and agent loop, model/provider lifecycle, prompt/context/cache/compaction, tools and batching, MCP/skills/extensions, approvals and actual containment, diff/review/undo/checkpoints, sessions/steering/queue/recovery, UI/accessibility, configuration, privacy, packaging/update/diagnostics, strengths, weaknesses, and known unknowns. Cite each factual claim and label marketing, documentation, source-code, and hands-on evidence separately. Then create cross-platform feature clusters—including duplicates—and a merge matrix: reuse as a requirement, combine, redesign, reject, or investigate further, with rationale and priority. The resulting design must be original and evidence-led, not a copied feature checklist or popularity ranking.
