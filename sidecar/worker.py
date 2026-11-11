@@ -82,6 +82,7 @@ from run_inbox import (  # noqa: E402
     QueuedPromptUnavailable,
     consume_queued_prompt,
     mutate_queue as _mutate_queue_impl,
+    active_reply_identity_matches,
     run_request_identity as _run_request_identity,
     run_start_replay_decision,
     validated_queued_prompts as _validated_queued_prompts,
@@ -2529,9 +2530,7 @@ class AgentService:
     def question_reply(self, question_id: str, session_id: str, turn_id: str, answer: str) -> bool:
         with self.active_lock:
             controller = self.active
-            state = controller.get("session") if isinstance(controller, dict) else None
-            if (not isinstance(state, dict) or state.get("session_id") != session_id
-                    or controller.get("turn_id") != turn_id):
+            if not active_reply_identity_matches(controller, session_id, turn_id):
                 return False
             pending = controller.get("pending_questions", {}).get(question_id)
         if not pending:
@@ -2575,8 +2574,7 @@ class AgentService:
             controller = self.active
             state = controller.get("session") if isinstance(controller, dict) else None
             if session_id is not None or turn_id is not None:
-                if (not isinstance(state, dict) or state.get("session_id") != session_id
-                        or controller.get("turn_id") != turn_id):
+                if not active_reply_identity_matches(controller, session_id, turn_id):
                     return False
             if controller:
                 controller["cancel"].set()

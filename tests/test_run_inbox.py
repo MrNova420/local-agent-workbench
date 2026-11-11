@@ -5,6 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sidecar"))
 
 from run_inbox import (  # noqa: E402
+    active_reply_identity_matches,
     QueuedPromptUnavailable,
     consume_queued_prompt,
     mutate_queue,
@@ -105,3 +106,23 @@ class QueueTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ActiveReplyIdentityTests(unittest.TestCase):
+    def _controller(self, workspace="C:/proj"):
+        return {"session": {"session_id": "s1", "workspace": workspace}, "turn_id": "t1"}
+
+    def test_matching_identity(self):
+        self.assertTrue(active_reply_identity_matches(self._controller(), "s1", "t1"))
+        self.assertTrue(active_reply_identity_matches(self._controller(), "s1", "t1", "C:/proj"))
+        self.assertTrue(active_reply_identity_matches(self._controller(), "s1", "t1", "c:\proj\\"))
+
+    def test_rejects_missing_or_mismatched(self):
+        self.assertFalse(active_reply_identity_matches(None, "s1", "t1"))
+        self.assertFalse(active_reply_identity_matches(self._controller(), "s2", "t1"))
+        self.assertFalse(active_reply_identity_matches(self._controller(), "s1", "t2"))
+        self.assertFalse(active_reply_identity_matches(self._controller(), "s1", "t1", "C:/other"))
+        self.assertFalse(active_reply_identity_matches({"session": "nope"}, "s1", "t1"))
+
+    def test_workspace_optional(self):
+        self.assertTrue(active_reply_identity_matches(self._controller(), "s1", "t1", None))

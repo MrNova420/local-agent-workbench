@@ -46,6 +46,27 @@ def run_start_replay_decision(state: dict[str, Any], request_id: str, fingerprin
             "priorTurnStatus": str(prior.get("status", "unknown"))}
 
 
+def active_reply_identity_matches(controller: dict[str, Any] | None, session_id: str, turn_id: str,
+                                  workspace: str | None = None) -> bool:
+    """Validate that a reply targets the currently active captured run.
+
+    Approval, question, and stop decisions carry the captured session, turn,
+    and (for approvals) workspace identity; a stale reply for a finished or
+    newer run must be rejected rather than applied. ``controller`` is the
+    active-run record under the worker's ``active_lock``.
+    """
+    if not isinstance(controller, dict):
+        return False
+    state = controller.get("session")
+    if not isinstance(state, dict) or state.get("session_id") != session_id:
+        return False
+    if controller.get("turn_id") != turn_id:
+        return False
+    if workspace is not None and Path(state.get("workspace", "")).resolve() != Path(workspace).resolve():
+        return False
+    return True
+
+
 def validated_queued_prompts(state: dict[str, Any]) -> list[dict[str, Any]]:
     rows = state.get("queued_prompts", [])
     if not isinstance(rows, list):
