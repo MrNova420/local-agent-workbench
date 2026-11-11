@@ -17,14 +17,18 @@ if ($LASTEXITCODE -ne 0 -or $ActualEngine -ne $PinnedEngine) {
 }
 $AppCommit = (& git -C $AppRoot rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Unable to identify app source commit.' }
+$AppBranch = (& git -C $AppRoot branch --show-current).Trim()
+if ($LASTEXITCODE -ne 0) { throw 'Unable to identify app branch.' }
+$EngineBranch = (& git -C $EnginePath branch --show-current).Trim()
+if ($LASTEXITCODE -ne 0) { throw 'Unable to identify engine branch.' }
 $Manifest = [ordered]@{
     candidate = $CandidateName
     created_at = (Get-Date).ToString('o')
     app_commit = $AppCommit
     engine_commit = $ActualEngine
     engine_pin = $PinnedEngine
-    app_branch = (& git -C $AppRoot branch --show-current).Trim()
-    engine_branch = (& git -C $EnginePath branch --show-current).Trim()
+    app_branch = $AppBranch
+    engine_branch = $EngineBranch
 }
 New-Item -ItemType Directory -Force -Path $OutputPath | Out-Null
 $Manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $OutputPath 'candidate-manifest.json') -Encoding UTF8
