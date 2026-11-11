@@ -38,14 +38,31 @@ class SessionInbox:
         self.admission_lock = threading.Lock()
         self.run_lock = threading.Lock()
 
-    def admit(self, replay_lookup, start_run):
-        """Replay an idempotent request or acquire the single active-run slot."""
-        with self.admission_lock:
+    def admit(self, replay_lookup, start_run, *, request_id: str | None = None):
+        """Replay an idempotent request or acquire the single active-run slot.
+
+        When a client request ID is supplied, a replay result must identify that
+        same request. This prevents a stale/unrelated replay lookup result from
+        acknowledging a different submission.
+        """
+        def checked_replay():
             replay = replay_lookup()
+            if replay is not None and request_id is not None:
+                matched = replay.get("clientRequestId", replay.get("client_request_id")) if isinstance(replay, dict) else None
+                if matched != request_id:
+                    raise ValueError("Replay result does not confirm the submitted client request ID.")
+            return replay
+
+        with self.admission_lock:
+            replay = checked_replay()
             if replay is not None:
                 return replay
             if not self.run_lock.acquire(blocking=False):
-                replay = replay_lookup()
+                # Another request may have completed admission between our first
+                # replay lookup and the active-slot check. Recheck once while
+                # serialized so duplicate IPC retries replay instead of reporting
+                # a generic busy error.
+                replay = checked_replay()
                 if replay is not None:
                     return replay
                 raise RuntimeError("A task is already running.")
