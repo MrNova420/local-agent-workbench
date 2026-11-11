@@ -86,10 +86,27 @@ class SessionInboxTests(unittest.TestCase):
 
     def test_replay_must_confirm_same_client_request_id(self):
         inbox = SessionInbox()
-        replay = {"started": False, "runAlreadyStarted": True, "clientRequestId": "other"}
+        for replay in (
+            {"started": False, "runAlreadyStarted": True, "clientRequestId": "other"},
+            {"started": False, "runAlreadyStarted": True},
+        ):
+            with self.assertRaisesRegex(ValueError, "does not confirm"):
+                inbox.admit(lambda: replay, lambda: self.fail("mismatched replay must not start"),
+                            request_id="req-1")
+            self.assertFalse(inbox.run_lock.locked())
+
+    def test_replay_resolver_cannot_confirm_unrelated_run(self):
+        inbox = SessionInbox()
+        replay = {"started": False, "runAlreadyStarted": True, "turnId": "other"}
         with self.assertRaisesRegex(ValueError, "does not confirm"):
-            inbox.admit(lambda: replay, lambda: self.fail("mismatched replay must not start"), request_id="req-1")
+            inbox.admit(lambda: replay, lambda: self.fail("mismatched replay must not start"),
+                        request_id="req-1", replay_request_id=lambda _value: "other-request")
         self.assertFalse(inbox.run_lock.locked())
+
+    def test_empty_request_id_does_not_enter_replay_contract(self):
+        inbox = SessionInbox()
+        replay = {"started": False, "runAlreadyStarted": True}
+        self.assertIs(inbox.admit(lambda: replay, lambda: None, request_id=None), replay)
 
     def test_second_replay_check_wins_race_after_slot_busy(self):
         inbox = SessionInbox()
