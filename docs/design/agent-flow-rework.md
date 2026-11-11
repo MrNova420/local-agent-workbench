@@ -108,3 +108,8 @@ Full pass over `PRODUCT_BACKLOG.md`, `MASTER_ROADMAP.md`, `DECISIONS.md`, and th
 2. 65k context renderer limit — label vs. block.
 3. r3 packaged first-response failure (runner "Stopping...") — reproduce with saved traceback before Stage 2 perf claims.
 4. Launch-identity collision (candidate exe opens installed beta.3) — blocks visible acceptance of any stage.
+
+## Baseline verification (2026-11-08, this branch)
+
+Branch cut at app `42c79b2` / engine `1c0774b`. Grouped baseline pass on this machine:
+engine **425 passed + 12 subtests** (54s), renderer **139 passed** (22 files), sidecar **168 passed** (89s), TypeScript typecheck clean. This is the green reference for all rework stages.
