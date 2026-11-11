@@ -369,3 +369,41 @@ Priority-order verification of the unverified leads, grouped to avoid re-reading
 8. **Legacy/adjacent:** Roo Code, Void, PearAI, Mentat, Plandex, Crush, AutoGPT, BabyAGI, OpenHarness, Agent Zero — mine for ideas, not dependencies.
 
 Each entry needs: primary-source citations, version/date, verified vs unknown, and a merge/adapt/reject decision.
+
+---
+
+# 7. Second research pass — remaining ~70 leads (2026-11-11)
+
+Four parallel source-cited passes covered the catalog entries that were still leads. This section records the decision-relevant findings. Full per-claim citation indexes live in the pass outputs; commit-pinned URLs below are stable.
+
+## 7.1 Memory, state and always-on agents
+
+**Verified products:** Letta / Letta Code, Mem0, Zep + Graphiti, Cognee, claude-mem, RAGFlow, Chroma, Hermes Agent, OpenClaw, Agent Zero, OpenHarness, Khoj, OpenAgents, PraisonAI, Agent Squad, TaskWeaver (archived).
+
+### Concrete durability mechanisms found (the useful part)
+
+| Product | Mechanism | Evidence |
+|---|---|---|
+| **Hermes Agent** | **Write-ahead log** (`hermes_state_wal.py`), **lock guard** (`hermes_state_lockguard.py`), **FTS index** (`hermes_state_fts.py`), separate `memory_manager` / `memory_context` / `context_compressor` | commit-pinned src |
+| **Letta Code** | **Memory filesystem** with **confinement** (`memory-confinement.ts`), MemFS sync over websocket, local store = `messages.jsonl` + `agents/<id>.json` | commit-pinned src; durability contract itself **unknown** |
+| **claude-mem** | SQLite schema + **restore-swap** backup/restore path | commit-pinned src |
+| **Graphiti** | Temporal graph; **LLM-driven contradiction classification**, `invalidated_edges` returned, soft-delete on persist | src for prompt + return shape; **inferred** for persistence step |
+| **Agent Zero** | Memory helpers + explicit **consolidation** pass | commit-pinned src |
+| **Agent Squad** | Pluggable chat storage incl. SQL | commit-pinned src |
+| **TaskWeaver** | Memory + experience modules | **archived** — historical only |
+
+### Adopted into the design
+
+1. **WAL + lock guard for session state.** Hermes's separation of write-ahead log from a lock guard is the right shape for crash-safe, concurrent session writes; it directly addresses the uncertain-effect problem.
+2. **Separate the three concerns** that these products separate: `state durability` (WAL) ≠ `memory curation` (manager) ≠ `context projection` (compressor). Our design already separates the third; this confirms the first two must also stay distinct.
+3. **Memory confinement as a scope primitive.** Letta's explicit confinement layer supports our rule that memory writes must be scoped (session / project / user / global) and authorized, not free-form.
+4. **FTS over memory/history** for retrieval without embeddings — cheaper and deterministic for a local-first product; complements (not replaces) canonical paged history reads.
+5. **Non-destructive invalidation** (Graphiti soft-delete rather than delete) matches Pi's non-destructive compaction principle and our "never destroy canonical history" rule.
+
+### Rejected
+
+- **Vector-store-first memory** (Mem0/Chroma/RAGFlow style) as the default session store. It adds an embedding dependency, non-determinism, staleness, and deletion/retention obligations that are disproportionate for a single-user coding session — and it cannot answer "what exactly did the agent do".
+- **LLM-judged memory mutation** as the only curation path (Graphiti contradiction prompts). Adds model calls, cost, and silent wrongness. Keep as an optional, inspectable curation step.
+- **Always-on autonomous daemons** (OpenClaw/Agent Zero style) as the primary product shape. Interesting for later; a coding platform needs explicit task boundaries first.
+
+**Blocker noted:** memory products make deletion/retention claims variably; any adoption must publish a data-type-specific retention statement (repo clones, indexes, transcripts, logs, snapshots, secrets) rather than "no training".
