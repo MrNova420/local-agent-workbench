@@ -31,10 +31,11 @@
 |---|---|---|
 | C1 | Design a **new platform from scratch**, independent of Electron and the current app architecture; any framework/language is acceptable. | Design drafted: `separate-platform-v1-design.md` |
 | C2 | Draw inspiration from ChatGPT, Codex, OpenCode, Cline, Kilo, DeepAI Code, Pi, Aider and others — as inspiration and research only, never copied. | Research record: `platform-landscape-research.md` |
-| C3 | **Comprehensively research each individual product** — its whole system, features, abilities, harness, loops, workflows, methodologies, tools — not a few hand-picked facts. Even when features duplicate, capture them, because they feed later synthesis/dedup/redesign. | Three independent source-cited passes completed; ~30 verified; each dossier covers loop, context, tools, permissions, recovery, UX, packaging |
-| C4 | Examine the **top ~100** best / most-used harnesses and similar systems. The user supplied a 100-item list to use as source material. | Your 100 mapped with honest verification status in `platform-landscape-research.md` §2; ~70 remain leads with a prioritized plan in §6 |
+| C3 | **Comprehensively research each individual product** — its whole system, features, abilities, harness, loops, workflows, methodologies, tools — not a few hand-picked facts. Even when features duplicate, capture them, because they feed later synthesis/dedup/redesign. | **Five** source-cited passes completed (~60 products verified); dossiers cover loop, context, tools, permissions, recovery, UX, packaging |
+| C4 | Examine the **top ~100** best / most-used harnesses and similar systems. The user supplied a 100-item list to use as source material. | Your 100 mapped with honest verification status; ~60 now have verified primary-source coverage, ~40 remain leads (mostly memory tools and long-tail frameworks) |
 | C5 | Compare features and **decide what to combine, redesign, or reject**. | Overlap matrix + adopted-pattern table + explicit rejects in research §4 and design §3b |
-| C6 | Aim for a **professional, high-quality, advanced** platform; be worthy of comparison with the best similar tools. | Quality bar and acceptance gates in design §3/§9 |
+| C6 | Aim for a **professional, high-quality, advanced** platform; be worthy of comparison with the best similar tools. | Quality bar in design §3; concrete screen flows, event protocol and executable acceptance tests in `separate-platform-spec.md` |
+| C8 | **Push further / continue focusing on the platform.** (2026-11-11) | Done: research consolidated, design refined, spec written, critical self-review added |
 | C7 | **Later research phase:** after the platform design, broadly research additional tools/technologies to improve **both** products. | Recorded as the next phase: research §6 and design §10b |
 
 ## D. Working style
@@ -52,7 +53,7 @@
 
 ## Immediate open items (truthful state)
 
-1. **Live cache acceptance** — blocked: Ollama offline, Ornith not resident. Probe fails closed with `ollama_unavailable`.
+1. **Live cache acceptance** — paused by user instruction. One probe request before the pause showed `load_duration` 293.9 s of a 351 s header wait, correcting the earlier assumption that the whole stall was prompt evaluation.
 2. **Packaged visible acceptance** — no current-pin package built; existing artifacts are old beta.2. `make:unique` is ready.
 3. **Durable inbox** — run-admission facade complete; event/steer/approval/cancel/recovery migration not started.
 4. **B-021 recovery defects** — source regressions exist; visible close/reopen acceptance pending.
