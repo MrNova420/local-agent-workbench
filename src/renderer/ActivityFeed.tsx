@@ -39,6 +39,14 @@ function promptRequestSummary(row: ActivityRecord): string[] {
   if (typeof outputTokens === 'number' && Number.isFinite(outputTokens) && outputTokens >= 0) {
     parts.push(`${outputTokens.toLocaleString()} output tokens`);
   }
+  // Cache-hit percentage: exact provider counts only, so a miss (0 cached on a
+  // multi-request task) is visible in the compact row instead of hidden in details.
+  const promptTokens = row.providerUsage?.prompt_eval_count;
+  const cachedTokens = row.providerUsage?.prompt_eval_cached_count;
+  if (typeof promptTokens === 'number' && Number.isFinite(promptTokens) && promptTokens > 0
+      && typeof cachedTokens === 'number' && Number.isFinite(cachedTokens) && cachedTokens >= 0) {
+    parts.push(`${Math.round((cachedTokens / promptTokens) * 100)}% prompt cached`);
+  }
   const finishReason = row.providerRequest?.provider_done_reason;
   if (finishReason === 'tool_calls') parts.push('tool calls returned');
   else if (finishReason === 'length') parts.push('output limit finish');
@@ -161,6 +169,11 @@ function PromptManifestDetails({ manifest, providerRequest, providerUsage }: { m
     ['Generated tokens', 'eval_count', false], ['Prompt evaluation time', 'prompt_eval_duration', true],
     ['Generation time', 'eval_duration', true], ['Model load time', 'load_duration', true],
   ];
+  const promptCount = providerUsage?.prompt_eval_count;
+  const cachedCount = providerUsage?.prompt_eval_cached_count;
+  const cachePercent = typeof promptCount === 'number' && promptCount > 0 && typeof cachedCount === 'number' && cachedCount >= 0
+    ? Math.round((cachedCount / promptCount) * 100)
+    : null;
   return <div className="prompt-manifest-details">
     <p>This is a source and size record for the request sent to the selected runtime. Prompt text is not duplicated in the journal.</p>
     {manifest.context_checkpoint_due === true && <div className="activity-plan-item"><b>Progress checkpoint requested before the next project change</b><span>Request estimate is {Math.round(Number(manifest.context_checkpoint_ratio || 0) * 100)}% of its available input budget. The host will allow inspection and planning while requiring a saved progress handoff before writes, commands, or MCP actions. The request rearms after compaction lowers usage below {Math.round(Number(manifest.context_checkpoint_reset_ratio || 0.60) * 100)}%. Selected model limits are unchanged.</span></div>}
@@ -171,7 +184,7 @@ function PromptManifestDetails({ manifest, providerRequest, providerUsage }: { m
       <h4>Additional request fields</h4><pre className="prompt-request-options">{additionalFields === undefined ? 'None reported by this runtime.' : JSON.stringify(additionalFields, null, 2)}</pre>
       {ignoredRuntimeOverrides && <p className="prompt-none">Runtime options tried to override controls owned by this run. The selected context, output-token limit, and temperature were sent instead; the conflicting values are recorded above.</p>}
     </> : <p className="prompt-none">Exact provider request settings were not recorded for this older session.</p>}
-    <h4>Provider returned usage</h4>{providerUsage ? <div className="prompt-manifest-stats">{usageRows.map(([label, key, duration]) => {
+    <h4>Provider returned usage</h4>{providerUsage ? <div className="prompt-manifest-stats">{cachePercent !== null && <span>Prompt cache hit <b>{cachePercent}%</b></span>}{usageRows.map(([label, key, duration]) => {
       const value = providerUsage[key];
       const formatted = typeof value !== 'number' ? 'not reported' : duration ? `${(value / 1_000_000_000).toFixed(2)} s` : value.toLocaleString();
       return <span key={key}>{label} <b>{formatted}</b></span>;
