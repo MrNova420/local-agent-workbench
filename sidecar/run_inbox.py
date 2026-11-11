@@ -24,6 +24,41 @@ except ImportError:  # pragma: no cover - engine import differs when frozen
     current_task = lambda checkpoint: checkpoint.get("current")  # type: ignore[assignment]
 
 
+class SessionInbox:
+    """Session-scoped admission lock and active-run gate.
+
+    This facade centralizes the serialization rules for run admission while
+    retaining the worker's existing external locks/behavior. It is not yet a
+    durable event inbox: durable journal events and safe-boundary delivery
+    remain in AgentService/AgentEngine and will be migrated in later stages.
+    """
+
+    def __init__(self) -> None:
+        import threading
+        self.admission_lock = threading.Lock()
+        self.run_lock = threading.Lock()
+
+    def admit(self, replay_lookup, start_run):
+        """Replay an idempotent request or acquire the single active-run slot."""
+        with self.admission_lock:
+            replay = replay_lookup()
+            if replay is not None:
+                return replay
+            if not self.run_lock.acquire(blocking=False):
+                replay = replay_lookup()
+                if replay is not None:
+                    return replay
+                raise RuntimeError("A task is already running.")
+            try:
+                result = start_run()
+                if isinstance(result, dict) and result.get("started") is False:
+                    self.run_lock.release()
+                return result
+            except Exception:
+                self.run_lock.release()
+                raise
+
+
 class QueuedPromptUnavailable(ValueError):
     """The selected queue row vanished after the run-start preflight check."""
 

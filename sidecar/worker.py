@@ -86,6 +86,7 @@ from run_inbox import (  # noqa: E402
     find_prior_steering_update,
     run_request_identity as _run_request_identity,
     run_start_replay_decision,
+    SessionInbox,
     validate_steering_identity,
     validate_steering_request_id,
     validated_queued_prompts as _validated_queued_prompts,
@@ -182,8 +183,10 @@ class AgentService:
         self.ollama_import_proc: subprocess.Popen | None = None
         self.ollama_import_thread: threading.Thread | None = None
         self.emit_lock = threading.Lock()
-        self.run_lock = threading.Lock()
-        self.run_admission_lock = threading.Lock()
+        self.session_inbox = SessionInbox()
+        # Compatibility aliases retained while the admission call sites migrate.
+        self.run_lock = self.session_inbox.run_lock
+        self.run_admission_lock = self.session_inbox.admission_lock
         self.ollama_preload_lock = threading.Lock()
         self.ollama_preload_thread: threading.Thread | None = None
         self.active_lock = threading.RLock()
@@ -1617,27 +1620,15 @@ class AgentService:
             options = message.get("options")
             if not isinstance(options, dict):
                 raise ValueError("Run settings are missing.")
-            with self.run_admission_lock:
-                replay = self._run_start_replay(options)
-                if replay is not None:
-                    return replay
-                if not self.ollama_preload_lock.acquire(blocking=False):
-                    raise RuntimeError("The selected model is still preloading.")
-                try:
-                    if not self.run_lock.acquire(blocking=False):
-                        replay = self._run_start_replay(options)
-                        if replay is not None:
-                            return replay
-                        raise RuntimeError("A task is already running.")
-                    try:
-                        start_result = self._start_run(options)
-                        if isinstance(start_result, dict) and start_result.get("started") is False:
-                            self.run_lock.release()
-                    except Exception:
-                        self.run_lock.release()
-                        raise
-                finally:
-                    self.ollama_preload_lock.release()
+            if not self.ollama_preload_lock.acquire(blocking=False):
+                raise RuntimeError("The selected model is still preloading.")
+            try:
+                start_result = self.session_inbox.admit(
+                    lambda: self._run_start_replay(options),
+                    lambda: self._start_run(options),
+                )
+            finally:
+                self.ollama_preload_lock.release()
             return start_result if isinstance(start_result, dict) else {"started": True}
         if command == "run_cancel":
             session_id, turn_id = message.get("sessionId"), message.get("turnId")

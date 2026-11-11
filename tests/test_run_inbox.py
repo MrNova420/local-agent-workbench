@@ -14,6 +14,7 @@ from run_inbox import (  # noqa: E402
     mutate_queue,
     run_request_identity,
     run_start_replay_decision,
+    SessionInbox,
     validated_queued_prompts,
 )
 
@@ -60,6 +61,80 @@ class RunStartReplayTests(unittest.TestCase):
             run_start_replay_decision(state, "r1", "f1", "different")
         decision = run_start_replay_decision(state, "r1", "f1", "task")
         self.assertEqual(decision["priorTurnId"], "t1")
+
+
+class SessionInboxTests(unittest.TestCase):
+    def test_new_run_acquires_single_active_slot_then_releases_on_idle_result(self):
+        inbox = SessionInbox()
+        calls = []
+        result = inbox.admit(lambda: None, lambda: calls.append("start") or {"started": True})
+        self.assertEqual(result, {"started": True})
+        self.assertEqual(calls, ["start"])
+        with self.assertRaisesRegex(RuntimeError, "already running"):
+            inbox.admit(lambda: None, lambda: calls.append("second"))
+        self.assertEqual(calls, ["start"])
+        inbox.run_lock.release()
+
+    def test_replay_returns_without_acquiring_or_starting(self):
+        inbox = SessionInbox()
+        replay = {"started": False, "runAlreadyStarted": True, "turnId": "t1"}
+        result = inbox.admit(lambda: replay, lambda: self.fail("replayed request must not start"))
+        self.assertIs(result, replay)
+        self.assertFalse(inbox.run_lock.locked())
+
+    def test_second_replay_check_wins_race_after_slot_busy(self):
+        inbox = SessionInbox()
+        self.assertEqual(inbox.admit(lambda: None, lambda: {"started": True}), {"started": True})
+        lookups = 0
+        replay = {"started": False, "runAlreadyStarted": True, "turnId": "t2"}
+        def replay_lookup():
+            nonlocal lookups
+            lookups += 1
+            return None if lookups == 1 else replay
+        self.assertIs(inbox.admit(replay_lookup, lambda: self.fail("busy slot must prevent start")), replay)
+        self.assertEqual(lookups, 2)
+        inbox.run_lock.release()
+
+    def test_failed_start_releases_active_slot(self):
+        inbox = SessionInbox()
+        with self.assertRaisesRegex(ValueError, "bad start"):
+            inbox.admit(lambda: None, lambda: (_ for _ in ()).throw(ValueError("bad start")))
+        self.assertFalse(inbox.run_lock.locked())
+
+    def test_same_request_retry_waits_for_start_then_replays(self):
+        import threading
+        inbox = SessionInbox()
+        started = threading.Event()
+        finish = threading.Event()
+        replay = {"started": False, "runAlreadyStarted": True, "turnId": "turn-1"}
+        calls = []
+        def lookup():
+            return replay if started.is_set() else None
+        def start():
+            calls.append("start")
+            started.set()
+            self.assertTrue(finish.wait(2))
+            return {"started": True, "turnId": "turn-1"}
+        first_result = []
+        first = threading.Thread(target=lambda: first_result.append(inbox.admit(lookup, start)))
+        first.start()
+        self.assertTrue(started.wait(2))
+        releaser = threading.Timer(0.1, finish.set)
+        releaser.start()
+        second_result = inbox.admit(lookup, lambda: self.fail("duplicate request started twice"))
+        releaser.join(2)
+        first.join(2)
+        self.assertFalse(first.is_alive())
+        self.assertEqual(calls, ["start"])
+        self.assertEqual(first_result, [{"started": True, "turnId": "turn-1"}])
+        self.assertIs(second_result, replay)
+        inbox.run_lock.release()
+
+    def test_non_started_result_releases_active_slot(self):
+        inbox = SessionInbox()
+        result = {"started": False, "queuedPromptUnavailable": True}
+        self.assertIs(inbox.admit(lambda: None, lambda: result), result)
+        self.assertFalse(inbox.run_lock.locked())
 
 
 class QueueTests(unittest.TestCase):
@@ -118,7 +193,7 @@ class ActiveReplyIdentityTests(unittest.TestCase):
     def test_matching_identity(self):
         self.assertTrue(active_reply_identity_matches(self._controller(), "s1", "t1"))
         self.assertTrue(active_reply_identity_matches(self._controller(), "s1", "t1", "C:/proj"))
-        self.assertTrue(active_reply_identity_matches(self._controller(), "s1", "t1", "c:\proj\\"))
+        self.assertTrue(active_reply_identity_matches(self._controller(), "s1", "t1", "c:\\proj\\"))
 
     def test_rejects_missing_or_mismatched(self):
         self.assertFalse(active_reply_identity_matches(None, "s1", "t1"))
