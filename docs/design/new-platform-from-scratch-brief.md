@@ -1,11 +1,48 @@
 # Separate Platform From-Scratch Design — Queued Brief
 
-**Status:** queued for after current harness Stage 1/2 stabilization and project-wide audit.
+**Status:** active design track, explicitly prioritized by the user on 2026-11-11. Design-only; separate future product, no implementation yet.
 **This is not a redesign of Local Agent Workbench.** It is a distinct future product/platform design exercise; no implementation or framework decision is authorized by this brief.
 
 ## User direction
 
 Design a new platform from scratch, informed by (not copied from) ChatGPT, Codex, OpenCode, Cline, Kilo, DeepAI Code, Pi, Aider, and other relevant products. The design may choose any suitable framework, language, desktop/web/CLI arrangement, or runtime architecture. It should improve on current agent-loop, model-request, safety, visual, and project-development limitations rather than inherit the current app's architecture by default.
+
+## Design baseline — provisional hypotheses to validate
+
+These translate prior user direction into a starting point for research, not approved implementation choices.
+
+### Vision and audience
+
+**Vision:** a professional agentic software-development environment that can take a real project from intent to verified result, with the user able to understand, steer, review, recover, and trust every consequential step.
+
+**Primary audience:** individual developers who want autonomous end-to-end project work, especially users combining local models and hosted models across a desktop/IDE/terminal workflow. Secondary audiences to evaluate: teams needing shared policy/review; power users building custom agents/tools; non-expert creators who need visual verification and guided setup.
+
+### Outcomes to optimize
+
+- User reaches a correct, tested, reviewable result with less supervision and fewer unnecessary model round-trips.
+- Every request exposes model/runtime state, elapsed phase, context/cache usage, and why work is waiting; no opaque multi-minute “thinking” gap.
+- No silent lost/double-run action; interruptions and recovery preserve completed/uncertain effects faithfully.
+- Safety is technically enforced where possible; approval is consent, not a sandbox. User changes are reversible and never silently overwritten.
+- Product feels coherent across project exploration, planning, editing, execution, review, and handoff—not like a chat pane with disconnected tools.
+
+### Anti-goals
+
+- Do not clone any named competitor’s UI, code, protected copy, or internal implementation.
+- Do not equate longer reasoning, larger context, more tools, model count, or “autonomy” with better outcomes.
+- Do not require a specific inference vendor, cloud account, editor, or framework before research supports it.
+- Do not hide tool effects, overwrite user work, replay uncertain side effects automatically, or present estimates as provider facts.
+- Do not implement the new platform inside the existing Workbench repository as a shortcut.
+
+### Initial quality bar (targets to validate)
+
+| Dimension | Initial target | Evidence required |
+|---|---|---|
+| Responsiveness | Warm, cacheable follow-up requests avoid full-prefix re-evaluation; user always sees current phase/elapsed time | Same-task provider metrics + latency distributions, across local and hosted adapters |
+| Task reliability | No accepted request or side effect disappears/duplicates across retry, crash, or resume | Fault-injection matrix and event-log replay tests |
+| Code quality | Completion requires relevant checks and inspection; reports distinguish attempted/passed/failed/unrun | Verifiable operation/test evidence; seeded task evaluations |
+| Safety | Permission rules explain what is allowed; contained mode proves OS boundary; uncertainty is visible | Threat model, adversarial tests, process/filesystem/network containment evidence |
+| Recovery | Restore code and conversation independently or together; preserve full transcript and result references | Checkpoint/reopen tests including dirty worktrees, untracked files, and crash windows |
+| Product clarity | Users can tell what agent is doing, what it needs, and what changed in seconds | Usability sessions and accessibility audit |
 
 ## Required research
 
@@ -34,6 +71,37 @@ Do not treat a vendor's marketing claim as implementation evidence. Do not copy 
 
 These are initial, deliberately limited observations—not complete platform reviews and not claims that products share implementations or that any pattern should be copied unchanged. Research coverage is incomplete. The later research phase must individually review each chosen platform end to end from first-party docs/source and, where useful, hands-on evidence, including OpenAI Codex CLI/app-server, ChatGPT Projects/Canvas, Kilo, Pi, and local-first tools. Do not move to the new-platform architecture recommendation until the individual reviews and overlap analysis are complete.
 
+## Candidate product interaction model — to validate, not selected
+
+A candidate concept to compare against ChatGPT-style focused conversation, IDE-native assistant, and terminal-first agent models:
+
+```text
+Project space
+├── Goals and active tasks
+├── Sessions / branches / background work
+├── Files, instructions, skills, integrations
+└── Evidence and recovery history
+
+Active task workspace
+├── User + assistant conversation (reasoning collapsed by default)
+├── Work status: next action, current phase, latency/context/cache
+├── Proposed/active operations with precise approvals
+└── Artifacts: plan, changed files, checks, preview, final report
+```
+
+Design questions: Is the primary object a project, task, session, or artifact? Should a single task have a continuous transcript with structured substeps, or distinct request cards? How can the user compare multiple agents/worktrees without fragmented context? How does the UI distinguish “model generating,” “waiting on provider,” “tool executing,” “needs approval,” and “blocked”? Resolve these with user journeys and prototypes, not by assuming the layout above.
+
+## Candidate architecture options — to research before choosing
+
+| Option | Shape | Potential strengths | Risks / evidence needed |
+|---|---|---|---|
+| A. Local session server + clients | Durable local daemon owns session/event log/runtime/tools; desktop, CLI, editor, and web clients connect through a versioned protocol | Shared state across surfaces; clear process ownership; easier headless/background sessions | Daemon lifecycle, auth/local IPC security, updates/migrations, multi-client conflicts |
+| B. Desktop shell + embedded durable runtime | Single desktop app contains session coordinator, model adapters, tool broker, and UI | Tight product integration; simpler setup for a desktop-first product | Harder CLI/editor reuse; renderer/main/runtime boundary and crash recovery complexity |
+| C. Editor/host plugin + standalone agent service | Integrate into existing editor(s), with separate reusable runner/service | Native editing/review and existing developer ergonomics | Host fragmentation; less control over polished cross-editor workflow |
+| D. Web/remote workspace platform | Web UI and isolated workspace executor; local connector optional | Strong asynchronous delegation, previews, reproducible environments | Cloud costs/privacy, network and identity/security, less suitable for offline/local models |
+
+**No option is recommended yet.** Compare at minimum a local-first server with desktop/CLI clients against a single desktop process and an editor-hosted model. Measure setup burden, crash boundaries, update/migration complexity, model-runtime ownership, cross-surface state, and containment feasibility.
+
 ## Expected design outputs
 
 1. Product vision, target users, goals/non-goals, differentiators, and measurable quality bar.
@@ -46,7 +114,7 @@ These are initial, deliberately limited observations—not complete platform rev
 
 ## Sequence / gate
 
-Do not start this track until the current Workbench branch has a truthful stabilized status, the initial project-wide audit/roadmap is reconciled, and the user is ready to review a separate design. Research and design only first; implementation requires approval of the written design. Keep any later implementation in a separate repository/branch.
+The user has now asked to move this separate-platform design forward before the broad 100-tool survey. Keep the research/build strictly design-only: no implementation, scaffolding, or changes to current Workbench behavior. Work in this order: (1) define vision, audience, use cases, and quality bar from prior discussion; (2) complete in-depth dossiers for the named inspiration set and relevant adjacent products; (3) synthesize overlaps into original requirements; (4) compare clean-slate architecture and framework options; (5) produce original flows/wireframes, threat model, model/runtime plan, and staged roadmap; (6) self-review against evidence and unresolved assumptions. After the design is complete, do the broader catalog of up to 100 relevant tools/harnesses and feature research requested for future improvement across both products. Any eventual implementation requires the written design to be reviewed/approved and must use a separate repository/branch.
 
 
 ## Next research gates (still required)

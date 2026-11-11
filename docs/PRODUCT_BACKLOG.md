@@ -349,7 +349,7 @@ The arbitrary 500-file download selection ceiling has been removed. The worker r
 
 ## Agent-flow rework branch follow-up (2026-11-10)
 
-- Active paired branches: app and engine `workbench/agent-flow-rework`; app pins engine `3aa0ebcd46df3259f7e12b884fcb06cadcb0aee6`. Latest grouped source gates pass: engine **433 + 12 subtests**, sidecar **195**, renderer **144**, typecheck. This is branch source evidence only, not package or release acceptance.
+- Active paired branches: app and engine `workbench/agent-flow-rework`; app pins engine `abad09d625fd014e2361544effdba6ae18b4ffc7`. Latest grouped source gates pass: engine **433 + 12 subtests**, sidecar **195**, renderer **144**, typecheck. This is branch source evidence only, not package or release acceptance.
 - Sticky per-task tool schemas fix prompt-prefix churn; explicit `load_tools` additions remain present/sticky on following requests. Compact request rows show exact cached/total prompt tokens, cache percentage, total request duration, and response-header wait when provider counters exist.
 - Retracted earlier 42s→3.1s live acceptance claim: that run used separate tasks, Qwen 4B, and no provider cached-token counts. New Ornith probe requires installed `ornith-1.5-9b-q4-k-m:64k`, a same-task pair, and exact usage. It refuses to load/evict; Ornith was not resident, so no live acceptance is claimed.
 - Remaining in order: complete durable `SessionInbox` event/steer/approval/cancel/recovery contract (Stage 1); same-task Ornith cache acceptance when model lifecycle can be respected; B-021 visible queue/reasoning recovery; Stage 3 safe batching/background command lifecycle; remaining Stage 4 timeline; package/visible acceptance and release gates.
@@ -358,7 +358,7 @@ The arbitrary 500-file download selection ceiling has been removed. The worker r
 
 ## Rework branch progress — 2026-11-10 follow-up
 
-- Stage 1 admission facade `SessionInbox` is committed and pushed as app `5b17749`. It centralizes run-start serialization/replay and active-slot release; it is **not** yet a complete durable event inbox. Engine/worker still own event journal, steering safe boundaries, approvals, cancellation, and recovery. Added concurrency, replay, failed-start, and non-started-result tests.
+- Stage 1 admission facade `SessionInbox` is committed and pushed as app `5b17749`, with a later request-ID replay guard (`8dc77d3`). It centralizes run-start serialization/replay and active-slot release; it is **not** yet a complete durable event inbox. Engine/worker still own event journal, steering safe boundaries, approvals, cancellation, and recovery. Added concurrency, replay, failed-start, and non-started-result tests.
 - Latest paired suite after Stage 1 facade and request-identity replay guard: engine **433 + 12 subtests**, sidecar **195**, renderer **144**, typecheck.
 - Context-control review: `buildTokenPresets` deliberately includes values above advertised maximum and all options remain enabled; custom number inputs have no 65,536 max. Added a regression for unknown model maximum showing 131,072 and 1,048,576 presets remain available. Runtime may still reject a requested value; app surfaces allocation mismatch rather than silently lowering it.
 - B-021 source review: stale queued-prompt reconciliation and assistant-segment finalization before subsequent provider requests have renderer/sidecar regressions. Packaged app close/reopen acceptance remains open; source coverage does not close it.
