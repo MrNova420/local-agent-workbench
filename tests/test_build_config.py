@@ -132,3 +132,56 @@ def test_workflows_checkout_the_revision_recorded_by_the_app(workflow: str):
     assert "core-revision.txt" in text
     assert "${{ steps.engine-pin.outputs.revision }}" in text
     assert "39ff5495256e12f5f7e43232f269e5ace8d1ff88" not in text
+
+
+def test_default_make_routes_to_unique_candidate_output():
+    package = json.loads((APP_ROOT / "package.json").read_text(encoding="utf-8"))
+    scripts = package["scripts"]
+
+    assert scripts["make"] == "npm run make:unique", (
+        "the default make target must never overwrite an earlier candidate"
+    )
+    assert "make-unique.ps1" in scripts["make:unique"]
+    # A fixed-output release build stays available, but only under its own name.
+    assert "electron-forge make" in scripts["make:release"]
+
+
+def test_sidecar_build_honours_isolated_worker_paths():
+    script = (APP_ROOT / "scripts" / "build-sidecar.ps1").read_text(encoding="utf-8")
+
+    assert "LOCAL_AGENT_WORKER_OUT_DIR" in script, "candidate builds must isolate the bundled worker"
+    assert "LOCAL_AGENT_WORKER_WORK_DIR" in script, "PyInstaller intermediates must stay in the candidate"
+    # Defaults still point at the repository path for the release build.
+    assert r"sidecar\dist" in script
+    assert r"sidecar\build" in script
+
+
+def test_forge_packages_the_worker_from_the_isolated_path():
+    config = (APP_ROOT / "forge.config.ts").read_text(encoding="utf-8")
+
+    assert "LOCAL_AGENT_WORKER_OUT_DIR" in config, (
+        "Forge must package the candidate worker, not a stale shared binary"
+    )
+    assert "agent-worker.exe" in config
+
+
+def test_unique_candidate_builder_refuses_to_overwrite_and_records_provenance():
+    script = (APP_ROOT / "scripts" / "make-unique.ps1").read_text(encoding="utf-8")
+
+    assert "Test-Path -LiteralPath $OutputPath" in script, "an existing candidate directory must abort"
+    assert "throw" in script
+    assert "candidate-manifest.json" in script
+    for field in ("app_commit", "engine_commit", "engine_pin", "package_lock_sha256",
+                  "node_version", "npm_version", "python_version", "pyinstaller_version"):
+        assert field in script, f"candidate manifest must record {field}"
+    # Candidate artefacts, worker output and work files share one unique root.
+    assert "LOCAL_AGENT_OUT_DIR" in script
+    assert "LOCAL_AGENT_WORKER_OUT_DIR" in script
+
+
+def test_unique_candidate_builder_restores_previous_environment():
+    script = (APP_ROOT / "scripts" / "make-unique.ps1").read_text(encoding="utf-8")
+
+    for name in ("LOCAL_AGENT_OUT_DIR", "LOCAL_AGENT_WORKER_OUT_DIR", "LOCAL_AGENT_WORKER_WORK_DIR"):
+        assert f"$Previous" in script or f"Previous" in script
+    assert "finally" in script, "environment variables must be restored even when packaging fails"
