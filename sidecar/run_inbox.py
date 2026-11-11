@@ -38,7 +38,8 @@ class SessionInbox:
         self.admission_lock = threading.Lock()
         self.run_lock = threading.Lock()
 
-    def admit(self, replay_lookup, start_run, *, request_id: str | None = None):
+    def admit(self, replay_lookup, start_run, *, request_id: str | None = None,
+              replay_request_id=None):
         """Replay an idempotent request or acquire the single active-run slot.
 
         When a client request ID is supplied, a replay result must identify that
@@ -48,7 +49,8 @@ class SessionInbox:
         def checked_replay():
             replay = replay_lookup()
             if replay is not None and request_id is not None:
-                matched = replay.get("clientRequestId", replay.get("client_request_id")) if isinstance(replay, dict) else None
+                matched = replay_request_id(replay) if replay_request_id is not None else (
+                    replay.get("clientRequestId", replay.get("client_request_id")) if isinstance(replay, dict) else None)
                 if matched != request_id:
                     raise ValueError("Replay result does not confirm the submitted client request ID.")
             return replay

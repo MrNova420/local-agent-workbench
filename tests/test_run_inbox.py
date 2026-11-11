@@ -79,7 +79,8 @@ class SessionInboxTests(unittest.TestCase):
         inbox = SessionInbox()
         replay = {"started": False, "runAlreadyStarted": True, "turnId": "t1",
                   "clientRequestId": "req-1"}
-        result = inbox.admit(lambda: replay, lambda: self.fail("replayed request must not start"), request_id="req-1")
+        result = inbox.admit(lambda: replay, lambda: self.fail("replayed request must not start"),
+                             request_id="req-1", replay_request_id=lambda value: value.get("clientRequestId"))
         self.assertIs(result, replay)
         self.assertFalse(inbox.run_lock.locked())
 
@@ -94,12 +95,13 @@ class SessionInboxTests(unittest.TestCase):
         inbox = SessionInbox()
         self.assertEqual(inbox.admit(lambda: None, lambda: {"started": True}), {"started": True})
         lookups = 0
-        replay = {"started": False, "runAlreadyStarted": True, "turnId": "t2"}
+        replay = {"started": False, "runAlreadyStarted": True, "turnId": "t2", "clientRequestId": "req-1"}
         def replay_lookup():
             nonlocal lookups
             lookups += 1
             return None if lookups == 1 else replay
-        self.assertIs(inbox.admit(replay_lookup, lambda: self.fail("busy slot must prevent start")), replay)
+        self.assertIs(inbox.admit(replay_lookup, lambda: self.fail("busy slot must prevent start"),
+                                  request_id="req-1", replay_request_id=lambda value: value.get("clientRequestId")), replay)
         self.assertEqual(lookups, 2)
         inbox.run_lock.release()
 
@@ -125,12 +127,14 @@ class SessionInboxTests(unittest.TestCase):
             self.assertTrue(finish.wait(2))
             return {"started": True, "turnId": "turn-1"}
         first_result = []
-        first = threading.Thread(target=lambda: first_result.append(inbox.admit(lookup, start, request_id="req-1")))
+        first = threading.Thread(target=lambda: first_result.append(inbox.admit(lookup, start, request_id="req-1",
+                                                               replay_request_id=lambda value: value.get("clientRequestId"))))
         first.start()
         self.assertTrue(started.wait(2))
         releaser = threading.Timer(0.1, finish.set)
         releaser.start()
-        second_result = inbox.admit(lookup, lambda: self.fail("duplicate request started twice"), request_id="req-1")
+        second_result = inbox.admit(lookup, lambda: self.fail("duplicate request started twice"), request_id="req-1",
+                                    replay_request_id=lambda value: value.get("clientRequestId"))
         releaser.join(2)
         first.join(2)
         self.assertFalse(first.is_alive())

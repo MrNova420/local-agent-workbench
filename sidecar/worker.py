@@ -1626,6 +1626,8 @@ class AgentService:
                 start_result = self.session_inbox.admit(
                     lambda: self._run_start_replay(options),
                     lambda: self._start_run(options),
+                    request_id=options.get("clientRequestId"),
+                    replay_request_id=lambda replay: options.get("clientRequestId") if replay.get("runAlreadyStarted") else None,
                 )
             finally:
                 self.ollama_preload_lock.release()
