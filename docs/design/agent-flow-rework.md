@@ -179,3 +179,35 @@ message-prefix contract tests; exact renderer summary tests; grouped source test
 Still required: same-task Ornith run with exact cache counts/timing, package the
 fix, then visible packaged acceptance. Code-level tests alone do not prove a
 performance improvement.
+
+## Live-run pause and one real measurement (2026-11-11)
+
+**User directive: stop live model runs for now.** No further inference will be executed in this
+track until the user asks. No model was loaded or evicted by us; an already-resident model was
+used and left resident.
+
+Before the pause, one probe request ran against the already-resident model
+(`hf.co/dima6312/Flint-40B-A2.5B-abliterated-GGUF:IQ4_XS`). **This is a single request, not a
+cache comparison — it is evidence about *where* the time goes, not proof of the fix.**
+
+| Metric | Observed |
+|---|---|
+| Response-header wait | **351.0 s** |
+| Provider-reported `load_duration` | **293.9 s** |
+| `prompt_eval_duration` | 56.9 s (~6,279 prompt tokens) |
+| `prompt_eval_cached_count` | 0 (expected: first request of a task) |
+| Generated tokens | 120 |
+
+**Finding that corrects an earlier assumption:** the model was reported resident by
+`ollama ps`, yet the request recorded a **293.9-second model load**. So a large share of the
+user-reported 1–3 minute stall can be a **runner (re)load**, not prompt evaluation. The earlier
+design note attributing the whole wait to prompt eval was incomplete.
+
+**Consequence for the design:** the request-phase pipeline must distinguish and display
+`connecting → model load → prompt eval (cached/uncached) → first token`. It must also surface
+*why* a resident model reloaded (idle unload, expired keep-alive, runner restart, context
+change) instead of hiding it inside "waiting for response headers".
+
+**Still unproven:** whether the sticky-tool-schema change raises `prompt_eval_cached_count` on
+request 2+ of the same task. That requires the two-message probe to complete, which needs a
+live run.
