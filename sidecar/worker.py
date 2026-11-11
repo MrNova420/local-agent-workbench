@@ -83,6 +83,7 @@ from run_inbox import (  # noqa: E402
     consume_queued_prompt,
     mutate_queue as _mutate_queue_impl,
     run_request_identity as _run_request_identity,
+    run_start_replay_decision,
     validated_queued_prompts as _validated_queued_prompts,
 )
 
@@ -1051,23 +1052,17 @@ class AgentService:
         state = self._load_session_state(session_id)
         if Path(state["workspace"]).resolve(strict=True) != source:
             raise ValueError("Selected session belongs to a different project. Open that project's workspace explicitly first.")
-        turns = state.get("turns", [])
-        prior = next((row for row in reversed(turns) if isinstance(row, dict)
-                      and row.get("client_request_id") == request_id), None) if isinstance(turns, list) else None
-        if prior is None:
+        decision = run_start_replay_decision(state, request_id, fingerprint, str(options.get("prompt", "")).strip())
+        if decision is None:
             return None
-        saved_fingerprint = prior.get("request_fingerprint")
-        if ((isinstance(saved_fingerprint, str) and saved_fingerprint != fingerprint)
-                or (not isinstance(saved_fingerprint, str) and prior.get("prompt") != str(options.get("prompt", "")).strip())):
-            raise ValueError("This run request ID was already used for different task settings.")
-        turn_id = str(prior.get("turn_id", ""))
+        turn_id = decision["priorTurnId"]
         with self.active_lock:
             active = self.active
             active_session = active.get("session") if isinstance(active, dict) else None
             run_active = bool(isinstance(active_session, dict) and active_session.get("session_id") == session_id
                               and active.get("turn_id") == turn_id)
         return {"started": False, "runAlreadyStarted": True, "runActive": run_active,
-                "turnId": turn_id or None, "turnStatus": str(prior.get("status", "unknown"))}
+                "turnId": turn_id or None, "turnStatus": decision["priorTurnStatus"]}
 
     @staticmethod
     def _mutate_queue(prompts: list[dict[str, Any]], *, add_prompt: str | None,

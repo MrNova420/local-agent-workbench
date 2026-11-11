@@ -23,6 +23,29 @@ class QueuedPromptUnavailable(ValueError):
     """The selected queue row vanished after the run-start preflight check."""
 
 
+def run_start_replay_decision(state: dict[str, Any], request_id: str, fingerprint: str | None,
+                              prompt: str) -> dict[str, Any] | None:
+    """Decide whether an ordinary run request is a replay of a recorded turn.
+
+    Returns the replay result when the request ID matches a prior turn of the
+    same session, ``None`` when the request is new. A saved fingerprint that
+    differs from the presented one (or an absent fingerprint with different
+    prompt text) is rejected so one request ID cannot carry different work.
+    The caller supplies active-run state separately.
+    """
+    turns = state.get("turns", [])
+    prior = next((row for row in reversed(turns) if isinstance(row, dict)
+                  and row.get("client_request_id") == request_id), None) if isinstance(turns, list) else None
+    if prior is None:
+        return None
+    saved_fingerprint = prior.get("request_fingerprint")
+    if ((isinstance(saved_fingerprint, str) and saved_fingerprint != fingerprint)
+            or (not isinstance(saved_fingerprint, str) and prior.get("prompt") != prompt)):
+        raise ValueError("This run request ID was already used for different task settings.")
+    return {"priorTurnId": str(prior.get("turn_id", "")),
+            "priorTurnStatus": str(prior.get("status", "unknown"))}
+
+
 def validated_queued_prompts(state: dict[str, Any]) -> list[dict[str, Any]]:
     rows = state.get("queued_prompts", [])
     if not isinstance(rows, list):

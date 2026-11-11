@@ -9,6 +9,7 @@ from run_inbox import (  # noqa: E402
     consume_queued_prompt,
     mutate_queue,
     run_request_identity,
+    run_start_replay_decision,
     validated_queued_prompts,
 )
 
@@ -31,6 +32,30 @@ class RunRequestIdentityTests(unittest.TestCase):
         self.assertNotEqual(first[1], changed_prompt[1])
         queued_variant = {**base, "queuedPromptId": "q1"}
         self.assertEqual(first[1], run_request_identity(queued_variant, workspace="C:/proj")[1])
+
+
+class RunStartReplayTests(unittest.TestCase):
+    def _state(self, request_id: str, fingerprint: str | None, prompt: str = "task"):
+        return {"turns": [{"client_request_id": request_id, "request_fingerprint": fingerprint,
+                           "turn_id": "t1", "status": "completed", "prompt": prompt}]}
+
+    def test_new_request_returns_none(self):
+        self.assertIsNone(run_start_replay_decision({"turns": []}, "r1", "f1", "task"))
+
+    def test_matching_replay_reports_prior_turn(self):
+        decision = run_start_replay_decision(self._state("r1", "f1"), "r1", "f1", "task")
+        self.assertEqual(decision, {"priorTurnId": "t1", "priorTurnStatus": "completed"})
+
+    def test_conflicting_fingerprint_rejected(self):
+        with self.assertRaises(ValueError):
+            run_start_replay_decision(self._state("r1", "f1"), "r1", "f2", "task")
+
+    def test_legacy_turn_falls_back_to_prompt_match(self):
+        state = self._state("r1", None)
+        with self.assertRaises(ValueError):
+            run_start_replay_decision(state, "r1", "f1", "different")
+        decision = run_start_replay_decision(state, "r1", "f1", "task")
+        self.assertEqual(decision["priorTurnId"], "t1")
 
 
 class QueueTests(unittest.TestCase):
