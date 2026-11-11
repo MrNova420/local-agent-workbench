@@ -49,7 +49,8 @@ export function promptRequestSummary(row: ActivityRecord): string[] {
   const cachedTokens = row.providerUsage?.prompt_eval_cached_count;
   if (typeof promptTokens === 'number' && Number.isFinite(promptTokens) && promptTokens > 0
       && typeof cachedTokens === 'number' && Number.isFinite(cachedTokens) && cachedTokens >= 0) {
-    parts.push(`${Math.round((cachedTokens / promptTokens) * 100)}% prompt cached`);
+    parts.push(`${cachedTokens.toLocaleString()}/${promptTokens.toLocaleString()} prompt tokens cached`);
+    parts.push(`${Math.round((cachedTokens / promptTokens) * 100)}% cached`);
   }
   const finishReason = row.providerRequest?.provider_done_reason;
   if (finishReason === 'tool_calls') parts.push('tool calls returned');
