@@ -3,7 +3,7 @@
 **Status:** active staged rework; implementation and regression fixes are in progress.
 **App branch:** `workbench/agent-flow-rework`, based on beta.4-candidate app commit `42c79b2`.
 **Engine branch:** `workbench/agent-flow-rework`; app pin is `abad09d625fd014e2361544effdba6ae18b4ffc7`.
-**Last paired verification:** engine 433 passed + 12 subtests; sidecar 197; renderer 144; TypeScript typecheck clean. App rework branch pushed; beta/main untouched.
+**Last paired verification:** engine 433 passed + 12 subtests; sidecar 202; renderer 144; TypeScript typecheck clean. App rework branch pushed; beta/main untouched.
 
 ## Why
 
@@ -110,7 +110,7 @@ Full pass over `PRODUCT_BACKLOG.md`, `MASTER_ROADMAP.md`, `DECISIONS.md`, and th
 - `SessionInbox` now serializes run-start replay and admission, performs the busy-slot replay recheck, and guarantees active-slot release on failed or non-started results. `worker.py` lock attributes remain compatibility aliases; operation/persistence/safe-boundary behavior remains in the worker/engine.
 - A dedicated same-request concurrency regression confirms retries wait for in-progress admission and replay instead of double-starting. `tests/test_run_inbox.py`: **28 passed**.
 - Stage 1 is **admission-facade complete, durable-inbox incomplete**: event journal, steering delivery, approval lifecycle, cancellation, and recovery remain owned by their current subsystems. Do not describe this as a unified durable inbox until those paths are explicitly migrated and fault-tested.
-- Latest grouped suites after Stage 1 facade, telemetry, and request-ID replay guard: engine **433 + 12 subtests**, sidecar **197**, renderer **144**, TypeScript typecheck clean. Engine calibration scope is regression-tested; app pin is `abad09d`.
+- Latest grouped suites after Stage 1 facade, telemetry, and request-ID replay guard: engine **433 + 12 subtests**, sidecar **202**, renderer **144**, TypeScript typecheck clean. Engine calibration scope is regression-tested; app pin is `abad09d`.
 
 ## Stage 2 implementation notes (reviewed 2026-11-10)
 
@@ -134,7 +134,7 @@ Full pass over `PRODUCT_BACKLOG.md`, `MASTER_ROADMAP.md`, `DECISIONS.md`, and th
 
 ## Baseline verification (2026-11-08; latest paired pass 2026-11-10)
 
-Branch cut at app `42c79b2` / engine `1c0774b`. Original baseline: engine **425 passed + 12 subtests**, renderer **139**, sidecar **168**, typecheck clean. Latest after rework: engine **433 + 12**, renderer **144**, sidecar **197**, typecheck clean. Source verification only; package and visible acceptance remain separate gates.
+Branch cut at app `42c79b2` / engine `1c0774b`. Original baseline: engine **425 passed + 12 subtests**, renderer **139**, sidecar **168**, typecheck clean. Latest after rework: engine **433 + 12**, renderer **144**, sidecar **202**, typecheck clean. Source verification only; package and visible acceptance remain separate gates.
 
 ## Stage 2 — root cause found and fixed (2026-11-08)
 
