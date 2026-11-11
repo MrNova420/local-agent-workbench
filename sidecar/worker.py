@@ -2319,15 +2319,6 @@ class AgentService:
                 provider_id=str(state.get("provider_id", "ollama")),
             )
             chosen_runtime = self.providers.runtime_for(turn.model, engine.runtime, state.get("provider_id"))
-            def publish_usage(event: dict[str, Any]) -> None:
-                if event.get("type") == "generation_usage":
-                    # The engine knows provider response counters; relay identity
-                    # lets the durable activity row receive them per request.
-                    event["turn_id"] = controller["turn_id"]
-                    event["session_id"] = state["session_id"]
-                    if not event.get("request_index"):
-                        event["request_index"] = engine.state.get("request_index")
-                self._publish_run_event(controller, turn, event)
             prior_event = getattr(engine, "event", lambda _event: None)
             def relay_event(event: dict[str, Any]) -> None:
                 if event.get("type") == "generation_usage":
