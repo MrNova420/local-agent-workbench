@@ -3,7 +3,9 @@
 **Status:** active design track, prioritized by the user on 2026-11-11.
 **Research: COMPLETE for the first pass** — three source-cited review passes consolidated in [`platform-landscape-research.md`](platform-landscape-research.md) (~30 products verified; your 100-item catalog mapped with verification status).
 **Design: DRAFTED** — [`separate-platform-v1-design.md`](separate-platform-v1-design.md).
-**Next:** design review, then the later research phase (memory/durability/sandbox/evaluation) listed in `platform-landscape-research.md` §6.
+**Research: COMPLETE for all four passes** — CLI/terminal harnesses, IDE/desktop agents, hosted platforms, plus a second pass covering memory/state, execution/sandbox/browser, extensions/tool-discovery/evaluation, and multi-agent frameworks. Consolidated in `platform-landscape-research.md` §1-7 (roughly 60 products verified against primary sources; the 100-item catalog mapped with honest status).
+**Design: DRAFTED and research-refined** — `separate-platform-v1-design.md`, including §3b/§3c engineering decisions resolved by evidence.
+**Next:** user review of the design, then prototyping. Live model runs are paused by user instruction.
 **Nothing here is implemented and no framework is selected.**
 **This is not a redesign of Local Agent Workbench.** It is a distinct future product/platform design exercise; no implementation or framework decision is authorized by this brief.
 

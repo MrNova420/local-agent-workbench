@@ -90,6 +90,71 @@ Approval-as-security; one flattened tool catalog; in-process third-party extensi
 | OS sandbox / container | OS/container policy | unattended or untrusted work | *contained: FS/network/process* |
 | Remote VM | hypervisor + network policy | long-running or third-party code | *contained, remote, data leaves machine* |
 
+## 3c. Engineering decisions resolved by research
+
+These are now settled design constraints, each traceable to evidence in `platform-landscape-research.md` §7.
+
+### Session durability
+
+| Decision | Rationale |
+|---|---|
+| **`sync` durability for every tool-calling step** — persist before the next step begins | LangGraph's default `async` mode *can lose the last superstep on hard crash*; ADK resumes at-least-once and requires idempotent tools. Our one-run-at-a-time model makes the throughput cost ~zero |
+| **Checkpoint format carries `v`, monotonic `id`, `source ∈ {input, loop, update, fork}` and parent ids** | Copied from LangGraph's checkpointer. Makes migrations safe and makes "restore history only" and branching explicit rather than bespoke |
+| **Snapshots are immutable by construction** — never hand out mutable references to committed state | LlamaIndex's own docstring admits in-place mutation silently defeats its diff |
+| **Retry creates a branch, not a mutation** (`parent_id` + `branch`) | CrewAI's `fork()`/`prune()` shape. "Retry with duplicate-action warning" becomes inspectable and discardable |
+| **State is scoped by prefix** (`app:` / `user:` / `temp:`) | ADK. Prevents the task checkpoint becoming a junk drawer |
+| **Publish at-least-once semantics plainly** | Our "uncertain operation" contract already exceeds this; state it in the same words ADK uses |
+
+### Context compaction
+
+| Decision | Rationale |
+|---|---|
+| Compaction keeps an **overlap window** plus an explicit **retention count** | ADK `EventsCompactionConfig`. Overlap is what stops a summary losing the turn boundary that just happened |
+| A **replay-invariant test suite** guards compaction | AG2's `_replay.py` table: a tool result without its call, or tool calls without the provider turn item, produce exactly the orphaned-history bugs that make local models hallucinate |
+| Canonical history is never destroyed; compaction only shapes the request view | Pi's non-destructive model, corroborated across the landscape |
+
+### Tool and skill economics (measured)
+
+| Decision | Rationale |
+|---|---|
+| **Tool schemas are appended at the message tail, never by mutating the `tools` array or system prompt mid-session** | Mutating the array invalidates the KV prefix and collapses cache reuse to zero. This is the same defect our own harness had |
+| **Tier 0**: 8–14 core tools, byte-stable ordering, resolved once | 864–1,300 tokens (1.3–2.0% of a 65k window) |
+| **Tier 1**: declared packs resolved **at session start only** | Keeps the prefix stable for the whole session |
+| **Tier 2**: `find_tools` — regex/BM25 first, vector fallback, server→tool prefilter, returns 3–5 schemas | Break-even: never worth deferring a 12-tool core; ~46× cheaper per activation at 300 tools. Anthropic ships regex **and** BM25, not embeddings-only |
+| **Agent Skills format adopted verbatim**, plus semver + content digest + per-project lock, trust tiers, and `exec: none|script` | Open spec; the ecosystem lacks versioning and trust, which we add |
+| Skill bodies **exempt from compaction pruning**; catalog capped and metered | Official client guidance; a 314-skill pack costs 15.7k–31.4k always-on tokens |
+| **Never exceed ~30–50 resident tools** | Anthropic's published accuracy degradation threshold |
+
+### Execution and containment
+
+| Decision | Rationale |
+|---|---|
+| Supervisor has **both a timeout and a sweep**, and reports state-orphans separately from cost-orphans | Every reviewed product with only one mechanism leaked something |
+| **Teardown is verified, never assumed** | Modal's readiness timeout and Browser Use's CDP close both *documented* failures to clean up |
+| Verification runs start from a **deterministic reset** | WebArena's property; without it evidence is not comparable |
+| **Screenshots are appearance, not evidence** | Only assertions, console/runtime errors and repeatable interaction tests count |
+
+### Approval and policy
+
+| Decision | Rationale |
+|---|---|
+| Approvals use a **predicate per tool** (`needsApproval(action) → bool`), not one global mode | AI SDK's shape; enables "approve `run_command` unless it matches this argv prefix" |
+| Approval is **cryptographically bound to the run identity** | AI SDK signs approvals precisely because replayed client history is untrusted |
+| **Hooks and MCP bypassing policy must be structurally impossible** | At least one shipped skill pack documents that hooks bypass its permission system |
+
+### Subagents
+
+| Decision | Rationale |
+|---|---|
+| Subagents are **child sessions with their own journal, approval scope and token budget**; the parent records only the handoff | An in-process nested agent inherits none of the recovery contract and would silently break "never replay a tool automatically" |
+| The **only** justified uses are read-only fan-out with an output budget, a separate verifier call, and context isolation for oversized artifacts | Multi-agent multiplies tokens by agent count and failures by handoff count — paid in the currency local models have least of |
+| **No role-play teams, debate loops, or manager/worker hierarchies** | They destroy the linear recoverable transcript that durability depends on |
+| If child-session isolation is too expensive to build, the answer is **no subagents** | An uncheckpointed nested agent is worse than no delegation |
+
+### Evaluation
+
+Adopt the six-metric set from §7.3 (`task_success_rate` split into deterministic vs graded, `requests_per_task`, `cached_token_ratio` with a post-tool-discovery regression assertion, `recovery_correctness` via boundary fault injection, `permission_violations` = 0, `false_verification_rate`), with **SWE-bench explicitly excluded as a KPI** (32.67% leakage, 76% file-path recall from issue text, METR's measured −19% for experienced developers).
+
 ## 4. Product principles
 
 1. **One task, one durable truth.** UI panels, model prompts, event logs, and recovery derive from a canonical task record; no parallel state machines that silently drift.
