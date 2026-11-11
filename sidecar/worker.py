@@ -2500,6 +2500,11 @@ class AgentService:
             identity = controller.get("pending_approval_identity", {}).get(action_id) if controller else None
         if not pending or identity != {"session_id": session_id, "turn_id": turn_id, "workspace": workspace}:
             return False
+        if controller and not active_reply_identity_matches(controller, session_id, turn_id, workspace):
+            # The stored identity also matches the active captured run; a
+            # mismatch here means the recorded decision context drifted from
+            # the live controller. Fail closed.
+            return False
         if approved and controller and controller.get("approval_mode") == "per-session":
             state = controller["session"]
             with controller.setdefault("approval_persist_lock", threading.Lock()):
