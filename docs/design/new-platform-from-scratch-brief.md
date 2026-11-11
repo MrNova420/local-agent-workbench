@@ -1,6 +1,10 @@
 # Separate Platform From-Scratch Design — Queued Brief
 
-**Status:** active design track, explicitly prioritized by the user on 2026-11-11. Design-only; separate future product, no implementation yet.
+**Status:** active design track, prioritized by the user on 2026-11-11.
+**Research: COMPLETE for the first pass** — three source-cited review passes consolidated in [`platform-landscape-research.md`](platform-landscape-research.md) (~30 products verified; your 100-item catalog mapped with verification status).
+**Design: DRAFTED** — [`separate-platform-v1-design.md`](separate-platform-v1-design.md).
+**Next:** design review, then the later research phase (memory/durability/sandbox/evaluation) listed in `platform-landscape-research.md` §6.
+**Nothing here is implemented and no framework is selected.**
 **This is not a redesign of Local Agent Workbench.** It is a distinct future product/platform design exercise; no implementation or framework decision is authorized by this brief.
 
 ## User direction

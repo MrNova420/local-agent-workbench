@@ -114,6 +114,13 @@ This is the cross-repository execution order. It preserves the full approved pro
 | Version, packaging, updater, and release mechanics | [RELEASE_RUNBOOK.md](RELEASE_RUNBOOK.md) |
 | Dated test, live-use, package, and visual evidence | [ACCEPTANCE_LOG.md](ACCEPTANCE_LOG.md) |
 | Shared engine implementation handoff | Engine repository `IMPLEMENTATION_STATUS.md` |
+| Current-app agent-flow rework design and staged plan | [design/agent-flow-rework.md](design/agent-flow-rework.md) |
+| Future separate-platform research record (catalog + verified dossiers) | [design/platform-landscape-research.md](design/platform-landscape-research.md) |
+| Future separate-platform product/architecture design | [design/separate-platform-v1-design.md](design/separate-platform-v1-design.md) |
+| Future platform research protocol and scope | [design/new-platform-from-scratch-brief.md](design/new-platform-from-scratch-brief.md) |
+| Long-term positioning and market context | [design/vision-and-positioning.md](design/vision-and-positioning.md) |
+
+**Separate-platform track:** these design docs describe a *different, future product*. They do not authorize changes to this app. Any implementation requires reviewed design approval and a separate repository.
 
 Keep old evidence as history. When status changes, add a dated entry and update the current summary rather than rewriting past results as if they never happened.
 

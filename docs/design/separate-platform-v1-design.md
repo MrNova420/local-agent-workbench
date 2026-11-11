@@ -2,8 +2,8 @@
 
 **Status:** Draft v1 for design review; no code/framework has been selected or started.
 **Product:** a new platform distinct from Local Agent Workbench.
-**Research basis:** prior project discussions plus source-backed preliminary reviews of Codex, Claude Code, Gemini CLI, OpenCode, Pi, Aider, Cline, Kilo, Cursor, GitHub Copilot, OpenHands, Deep Agents Code, Goose, Open Interpreter, IDE agents, and hosted builders. See `new-platform-from-scratch-brief.md` for the research protocol and the user-supplied 100-candidate catalog.
-**Evidence note:** cited sources document product behavior; they do not prove quality, security, or reliability. Hands-on verification remains future work.
+**Research basis:** prior project discussions plus three independent source-cited research passes over CLI harnesses, IDE/desktop agents, and hosted/project platforms. Consolidated in `platform-landscape-research.md` (~30 products verified against primary sources; the user's 100-item catalog is mapped there with honest verification status). Protocol in `new-platform-from-scratch-brief.md`.
+**Evidence note:** cited sources document product behavior; they do not prove quality, security, or reliability. No hands-on verification has been done yet in this track.
 
 ## 1. Vision
 
@@ -46,6 +46,49 @@ Validate which of these groups is truly in scope before architecture selection; 
 - Treat model chain-of-thought as user-visible progress or store private reasoning as durable project memory.
 - Copy competitor implementations, visual assets, proprietary wording, or unverified claims.
 - Replace the existing Workbench or merge this product into its implementation branch.
+
+## 3b. Research-backed refinements (from the landscape study)
+
+These conclusions come from `platform-landscape-research.md` and are now design requirements, not open questions.
+
+### The four concepts must stay four concepts
+
+Every reviewed product blends these. Failure modes are documented: Claude's shell sandbox explicitly does not cover file tools, MCP, or hooks; Cursor calls its approvals/sandboxing "best-effort guardrails"; GitHub states content exclusion is not a filesystem boundary.
+
+1. **History** — what was said and observed. Append-only, complete, recoverable.
+2. **Checkpoint** — what can be undone, in which scope (files / conversation / environment / data).
+3. **Approval** — consent to attempt an action. Never a security boundary.
+4. **Containment** — what the executing process can actually reach. Per capability, measured, disclosed.
+
+The product must never let one stand in for another in UI text, docs, or error messages.
+
+### Adopted patterns (with source product)
+
+| Pattern | Borrowed from | How we apply it |
+|---|---|---|
+| Thread → turn → item typed streaming protocol | Codex App Server | Base event schema for the session protocol |
+| Append-only conversation/event log + persistence services | OpenHands | Canonical store; UI/projection rebuild from it |
+| Non-destructive compaction (summarize, never delete originals) | Pi | Derived prompt view only; canonical history immutable |
+| Conflict-aware restore (skip files changed since agent last wrote) | GitHub Copilot CLI | Default checkpoint restore semantic |
+| Selectable restore scope (files only / +conversation / broader) | Cursor vs Gemini vs Replit | Explicit choice in the restore dialog |
+| Ordered, argument-aware allow/ask/deny with deny precedence | OpenCode, Gemini CLI, Kilo | Policy engine contract |
+| Deferred tool-schema loading | Augment MCP Tool Search, Codex/OpenCode paging | Context budget protection |
+| Structured verification artifacts (lint/test evidence) | Aider, Agentless | Completion requires evidence records, not prose |
+| Portable/exportable sessions | OpenCode | Export/sanitize/import as a first-class feature |
+| Shadow-Git checkpoints outside project Git | Cline, Kilo, Cursor | Reversibility without touching the user's history |
+
+### Explicitly rejected
+
+Approval-as-security; one flattened tool catalog; in-process third-party extensions by default; destructive compaction; a single YOLO autonomy switch; benchmark-repair pipelines presented as general agents; default multi-agent complexity; shadow-Git called isolation; "any model" claims without capability disclosure.
+
+### Execution-boundary menu (decision aid, not default)
+
+| Backend | Enforced by | Use when | Must be disclosed as |
+|---|---|---|---|
+| User checkout | nothing | maximum speed, trusted single-user work | *uncontained* |
+| Isolated worktree | Git isolation only | parallel tasks, merge review | *filesystem-isolated, not process-contained* |
+| OS sandbox / container | OS/container policy | unattended or untrusted work | *contained: FS/network/process* |
+| Remote VM | hypervisor + network policy | long-running or third-party code | *contained, remote, data leaves machine* |
 
 ## 4. Product principles
 
@@ -195,6 +238,16 @@ IDE adapters, multimodal artifacts, scheduler/automation, marketplace, analytics
 Carry forward as lessons: exact request/provenance telemetry; no false cache metrics; context/output separation; durable mirrored event records; uncertain effects never replay automatically; approvals are not containment; cache stable-prefix design; immutable package provenance; preserve user model state. Re-evaluate, rather than automatically inherit: Electron/Python architecture, `AgentService` controller shape, current UI layout, old permission defaults, existing session format, and current tool inventory.
 
 Do not move existing Workbench requirements into the new product silently. Maintain a traceability table during design: requirement, origin (user/project/market), keep/adapt/drop, why, and acceptance criteria. User-approved scope is not lost merely because the new design chooses a different implementation.
+
+## 10b. Research status and next verification
+
+**Verified (primary sources reviewed):** Codex CLI/App Server, Claude Code/Agent SDK, Gemini CLI, OpenCode, Pi, Aider, OpenHands, Cline (+SDK), Kilo, Cursor (+Cloud), GitHub Copilot (IDE/cloud/CLI), Continue, Goose, Deep Agents Code, Kiro, Amp, Augment, Qoder, TRAE, Tabnine, Cody, Junie, Sweep, BLKBOX, Devin, Jules, Replit, v0, Lovable, Bolt, Firebase Studio (sunset), AI Studio Build Mode, Factory, Ona, Codegen, Augment Cosmos, GitLab Duo, Qodo, CodeRabbit, Greptile, LangGraph, Pydantic AI, OpenAI Agents SDK, Mastra, Deep Agents SDK, Microsoft Agent Framework, DSPy, ACP, MCP, Ollama, Temporal, LiteLLM.
+
+**Still leads only:** ~70 entries in the user's catalog (see `platform-landscape-research.md` §2), with the prioritized plan in §6 there.
+
+**Next research phase (after this design is reviewed):** memory/state runtimes (Letta, Mem0, Zep, Graphiti, Cognee, Hermes, OpenClaw), durability/orchestration internals, measurable sandbox evidence (E2B, Daytona, Modal, Windows containment), browser/computer verification semantics, and evaluation methodology (SWE-bench, Inspect, Braintrust, Langfuse, Phoenix). Each must end in a merge/adapt/reject decision, not a summary.
+
+**Not yet done:** hands-on prototyping, performance measurement, security testing, accessibility/user testing, and framework selection.
 
 ## 11. Decisions still open
 
