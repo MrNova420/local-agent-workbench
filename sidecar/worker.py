@@ -2572,7 +2572,6 @@ class AgentService:
     def cancel(self, session_id: str | None = None, turn_id: str | None = None) -> bool:
         with self.active_lock:
             controller = self.active
-            state = controller.get("session") if isinstance(controller, dict) else None
             if session_id is not None or turn_id is not None:
                 if not active_reply_identity_matches(controller, session_id, turn_id):
                     return False
