@@ -93,6 +93,16 @@ What stays (verified good, keep): dual-mirror persistence (app + project journal
 - Engine `AgentEngine.run` is a single 2,577-line module; Stage 1/2 require careful extraction with the existing test suites as the net (engine ~425 tests, sidecar ~168, renderer ~139 at last recorded run).
 - Renderer/sidecar protocol changes must remain backward-compatible with saved journals (recovery replays old events).
 
+## Alignment with the existing backlog (2026-11-07 review)
+
+Full pass over `PRODUCT_BACKLOG.md`, `MASTER_ROADMAP.md`, `DECISIONS.md`, and the acceptance/readiness records confirms:
+
+- The backlog's grouped-verification convention (author regressions as you go, run one coordinated pass) is adopted for every stage of this rework.
+- The backlog says "finish steering/queue crash/cancel acceptance instead of redesigning a durable inbox." This design deliberately supersedes that with Stage 1's unified inbox: the steering/queue behavior is preserved, but its scattered identity checks (`_run_request_identity`, `consume_queued_prompt`, per-path turn bindings) are the accumulated special cases Stage 1 consolidates. Recorded here as a design decision; carry D-00x entry into `DECISIONS.md` when implementation starts.
+- Backlog items that fold into this rework rather than duplicating it: B-009 (small-model workflow/cache telemetry, prompt-prefix stability A/B), B-011 (KV/cache telemetry surfacing — Stage 4), B-021 (long-run composer/transcript recovery defects — must be reproduced before Stage 2 touches context paths), B-004 (GPU offload measurement — hardware context for the 1–3 min toll), B-012 (capability registry/containment — post-rework), B-008/B-002 (warm preload + analytics — align with Stage 2/4).
+- Active release blockers that stay independent of this branch: r3 packaged first-response failure, launch-identity collision, beta.4 gates. This branch must not be used to claim those closed.
+- Decision-log constraints honored: D-003 (no auto-load change beyond B-008's warm-on-select; keep-alive already sent), D-004 (approval/isolation unchanged), D-006 (Windows x64 updater untouched).
+
 ## Open items to verify during implementation
 1. Why cache misses in real runs (hypotheses: per-request checkpoint/user-context suffix placement, tool-schema ordering, skill-catalog churn, timestamp-bearing fields in prefix messages).
 2. 65k context renderer limit — label vs. block.
