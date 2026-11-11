@@ -103,6 +103,17 @@ Full pass over `PRODUCT_BACKLOG.md`, `MASTER_ROADMAP.md`, `DECISIONS.md`, and th
 - Active release blockers that stay independent of this branch: r3 packaged first-response failure, launch-identity collision, beta.4 gates. This branch must not be used to claim those closed.
 - Decision-log constraints honored: D-003 (no auto-load change beyond B-008's warm-on-select; keep-alive already sent), D-004 (approval/isolation unchanged), D-006 (Windows x64 updater untouched).
 
+## Stage 1 progress (2026-11-08)
+
+- `sidecar/run_inbox.py` introduced as the admission-primitives module: run request identity/fingerprint, queued-prompt validation/consumption/mutation, run-start replay decision, and active-run reply identity validation. `worker.py` keeps compatibility aliases; call sites now delegate.
+- Consolidated so far: run admission identity + replay, queue add/remove/consume, question-reply and cancel identity binding. Next: steering acceptance binding and approval-reply identity, then the single `SessionInbox` facade over `run_admission_lock`/`run_lock` in `handle("run_start")`.
+- 13 focused unit tests added (`tests/test_run_inbox.py`). Grouped passes recorded at each commit; behavior unchanged.
+
+## Stage 2 preparation notes (from code read)
+
+- `OllamaRuntime.stream` (engine `desktop_engine.py` L1697) sends full `messages` + all tool schemas every request with `keep_alive` 30m; `request_headers`/`header_wait_seconds` and `generation_usage` (incl. `prompt_eval_cached_count`) are already emitted — Stage 4 only needs UI surfacing.
+- Cache-miss suspects to verify first: message-array prefix stability across requests (system message position/content, tool-result message field ordering), per-request checkpoint/user-context suffix placement, and tool-schema ordering (`registry.schemas + mcp_tools` order).
+
 ## Open items to verify during implementation
 1. Why cache misses in real runs (hypotheses: per-request checkpoint/user-context suffix placement, tool-schema ordering, skill-catalog churn, timestamp-bearing fields in prefix messages).
 2. 65k context renderer limit — label vs. block.
