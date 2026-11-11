@@ -407,3 +407,50 @@ Four parallel source-cited passes covered the catalog entries that were still le
 - **Always-on autonomous daemons** (OpenClaw/Agent Zero style) as the primary product shape. Interesting for later; a coding platform needs explicit task boundaries first.
 
 **Blocker noted:** memory products make deletion/retention claims variably; any adoption must publish a data-type-specific retention statement (repo clones, indexes, transcripts, logs, snapshots, secrets) rather than "no training".
+
+## 7.2 Execution, sandbox, browser and computer-use
+
+**Verified products:** E2B, Daytona, Modal, Docker Sandboxes, Browser Use (Cloud + OSS), Stagehand, Skyvern, Playwright, Puppeteer, WebArena, Crush, Plandex, Mentat, Open Interpreter (current Rust vs legacy Python).
+
+### The decisive finding: cleanup is the real containment risk
+
+Every product's documented failure mode is *not* escape — it is **orphaned state and orphaned cost**.
+
+| Product | Expiry behaviour | Leak surface (documented) |
+|---|---|---|
+| E2B | 5 min default; `onTimeout:'kill'` destroys state, `'pause'` retains memory | **Paused sandboxes have no TTL — "kept indefinitely"**. Leak is billing, not processes |
+| Daytona | auto-stop **15 min idle**, triggers even with processes running | `stop ≠ delete`; stopped sandboxes persist without an explicit delete policy |
+| Modal | 5 min (max 24 h), plus `idle_timeout` | **Documented leak:** a readiness-probe `TimeoutError` *"does not automatically terminate the Sandbox"* — uncaught failure leaks a VM |
+| Docker Sandboxes | persists until `sbx rm` | **No auto-reap documented** → highest laptop-side leak risk of the set |
+| `docker run` | `--rm` or nothing | Needs `--init`/SIGCHLD reaper or grandchildren become zombies |
+| Browser Use Cloud | `keepAlive` 120–14400 s; 4 h hard cap | *"Closing CDP does not stop a browser"* — nor its billing; a client timeout does **not** cancel the server-side run |
+| Stagehand | explicit close | Persistent profile is **single-instance**; concurrent clients conflict |
+| Skyvern | 240 min session cap (extendable to 360) | state in SQLite/Postgres |
+| WebArena | per-run **reset to initial state** | the deterministic property worth copying |
+
+### State persistence across runs
+
+| Product | What survives |
+|---|---|
+| E2B | Filesystem **and memory** (running processes, loaded vars) via pause→diff→object storage; **volumes outlive sandboxes**; fork up to 100 |
+| Daytona | Container: stopped/archived fs. VM: pause/resume **with memory**, fork, hot snapshot on S3 |
+| Modal | fs 30 d, directory 30 d, **memory 7 d (not extendable)** |
+| Docker Sandboxes | Everything in the VM across stop/restart; clone mode leaves a `sandbox-<name>` git remote |
+| Stagehand | User data dir / `storageState` + **action cache** that replays deterministically with self-healing **off**, exposing `HIT`/`MISS`/`DISABLED` |
+| Playwright | `storageState` JSON — cookies/localStorage but **not** sessionStorage |
+| Crush | Per-project SQLite session history; `--yolo` is **first-wins per `--cwd`** across attached clients |
+
+### Requirements this forces on our design
+
+1. **A supervisor with two independent mechanisms:** a *timeout* and a *sweep*. Every reviewed product that only had one leaked something.
+2. **Never assume handle-release works.** Modal and Browser Use each document a cleanup gesture that does not clean up. Our teardown must verify the resource is gone, then record the result.
+3. **Distinguish state orphans from cost orphans**, and surface both to the user ("3 sandboxes still billed", "1 container from 2 days ago").
+4. **Deterministic reset for verification environments** (WebArena's property): every verification run starts from a known state, or its evidence is not comparable.
+5. **Publish TTLs explicitly**, per resource type — the products that leaked were the ones whose TTL was implicit or absent.
+6. **Browser/computer-use evidence is not proof.** Screenshots and CDP liveness show appearance; only assertions, console/runtime errors, and repeatable interaction tests count as verification evidence.
+7. **Windows reality:** none of the cloud sandbox providers solve local Windows containment. Our containment claim must come from an OS-boundary we implement and test, or be stated as unavailable.
+
+### Adopted / rejected
+
+- **Adopt:** explicit TTL + sweep supervisor; verified teardown; state-vs-cost orphan reporting; deterministic verification reset; `storageState`-style cookie/session capture (never sessionStorage); action-cache concept for repeatable browser steps.
+- **Reject:** treating CDP/browser close as job completion; relying on a vendor's implicit reap; presenting a container as "sandboxed" when its network is open; counting screenshots as functional evidence.
