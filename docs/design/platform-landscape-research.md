@@ -454,3 +454,92 @@ Every product's documented failure mode is *not* escape — it is **orphaned sta
 
 - **Adopt:** explicit TTL + sweep supervisor; verified teardown; state-vs-cost orphan reporting; deterministic verification reset; `storageState`-style cookie/session capture (never sessionStorage); action-cache concept for repeatable browser steps.
 - **Reject:** treating CDP/browser close as job completion; relying on a vendor's implicit reap; presenting a container as "sandboxed" when its network is open; counting screenshots as functional evidence.
+
+## 7.3 Extensions, skills, tool discovery and evaluation
+
+**Verified:** Anthropic Agent Skills (+ open `agentskills.io` spec), Everything Claude Code, Superpowers (+ quorum evals), GStack, Oh My Pi (two unrelated projects), AutoHarness (paper), RepoMaster (paper), Claw Code Agent (no canonical upstream), MCP-Zero (paper), ToolRAG (two unrelated projects), n8n, Langflow, LiteLLM, Langfuse, Arize Phoenix, Braintrust, Inspect AI, SWE-bench.
+
+### ⚠️ Independent confirmation of this project's cache bug
+
+This research pass measured and sourced exactly the failure mode fixed in the Workbench harness, without knowing about it:
+
+> **KV/prompt reuse requires a byte-identical prefix.** Mutating the `tools` array mid-conversation invalidates that prefix and collapses cache reuse to zero — you save static tokens and pay a full re-prefill on every subsequent turn.
+
+Sources: llama.cpp `timings.cache_n` = "number of prompt tokens reused from cache", total = `prompt_n + cache_n + predicted_n`; Ollama `prompt_eval_cached_count` = "number of prompt tokens read from the cache".
+
+**Workbench already fixed this** (sticky per-task tool-schema selection, engine `1a4f939`). This is the first external corroboration that the diagnosis was correct.
+
+**Design rule adopted:** append discovered tool schemas as a **message payload appended at the tail**, never by editing the `tools` array or the system prompt. Resolve tool packs *before* the first request so the prefix never shifts mid-session.
+
+### Measured token economics (o200k_base proxy; ±10–15% vs Qwen/Llama tokenizers)
+
+| Artifact | Tokens |
+|---|---|
+| One core tool schema (`edit_file`, 3 params) | **108** |
+| One lean MCP tool | **125** |
+| One skill catalog line | **30** |
+| Cross-check: MCP-Zero's 2,797 tools | 248,100 total = **88.7/tool** |
+
+| Resident catalog | Tokens | % of 65,536 window |
+|---|---|---|
+| 8 core tools | 864 | 1.3% |
+| 12 core tools | 1,296 | 2.0% |
+| 31 tools | 3,348 | 5.1% |
+| 50 tools | 5,400 | 8.2% |
+| 100 tools | 10,800 | 16.5% |
+| 300 tools | 32,400 | 49.4% |
+| 2,797 tools | 248,100 | **3.8 windows** |
+
+A `find_tools` activation costs ≈ 150 (search tool) + 3–5 × 108 ≈ **500–700 tokens**.
+**Break-even:** 12-tool core → never worth deferring; 50 tools → pays when ≥13% of turns don't need the full set; 300 tools → **~46× cheaper per activation**.
+
+Anthropic's published guidance corroborates the shape: 5 MCP servers can consume ~55k definition tokens; tool search typically cuts >85%; **selection accuracy degrades past 30–50 tools**.
+
+### Adopted extension/tooling model
+
+| Layer | Decision | Why |
+|---|---|---|
+| Format | **Adopt Agent Skills verbatim** (`SKILL.md`, `name`/`description`/`allowed-tools`, `scripts|references|assets`) | Open spec; portable across Claude Code, Codex, Pi, Cursor |
+| Versioning | `metadata.semver` + **sha256 content digest** + per-project `skills.lock.json`; updates are explicit, diffed | No filesystem skill format has versions today |
+| Trust | Tiers `bundled → verified → community → local-draft`; **project skills gated on workspace trust**; unverified packs **hidden**, not listed-then-blocked | Official `agentskills` client guidance |
+| Capability | `exec: none|script` declared; `allowed-tools` flows through normal permission — never auto-granted | Claude Code semantics; **hooks bypass permission systems** in at least one shipped pack |
+| Context | Level-1 catalog only; per-pack token budget with a meter; **skill bodies exempt from compaction pruning** | 314-skill pack ≈ 15.7k–31.4k always-on tokens (24–48% of a 65k window) |
+| Tool tiers | Tier 0 (8–14 core, byte-stable) · Tier 1 (declared packs, resolved at session start) · Tier 2 (`find_tools`, hybrid regex/BM25-first + vector fallback, server→tool prefilter) | Measured break-even math above; Anthropic ships regex **and** BM25, not embeddings-only |
+
+### Adopted evaluation model
+
+Four layers: **L0** deterministic (no model, CI-safe) → **L1** seeded tasks with executable criteria → **L2** behavioral (recovery, permissions, steering, skill triggering) → **L3** external benchmarks (never a KPI).
+
+**Six metrics that matter, with exact source fields:**
+
+| Metric | Definition |
+|---|---|
+| `task_success_rate` | Deterministic gate **first**; rubric grader only if it passed. Report `deterministic_pass` and `grader_pass` separately, never merged |
+| `requests_per_task` | Model calls per task; median + p90 — the interactive-cost metric tokens/sec hides |
+| `cached_token_ratio` | Ollama `prompt_eval_cached_count / prompt_eval_count`; llama.cpp `cache_n / (prompt_n + cache_n)`. **Assert it does not drop after a tool-discovery event** — turns the cache trap into a regression test |
+| `recovery_correctness` | Fault-inject at every effect boundary (before approval, after approval before effect, after effect before log commit, mid-stream, mid-compaction). Assert no lost request, no double effect, no silent replay |
+| `permission_violations` | Must be **0**; three counters: executed-without-approval, policy-bypassed (incl. hooks), denied-then-retried-via-alias |
+| `false_verification_rate` | Agent claimed success while the deterministic gate failed |
+
+Harness mechanics to copy: append-only JSONL event log + raw transcripts (never summarized for grading); limits distinguishing `time_limit` from `working_limit`; **private criteria and private post-checks** so the agent under test cannot read the answer; graders as code wherever possible.
+
+### Rejected, with reasons
+
+- **Full skill-body injection at startup** — linear, uncacheable context cost.
+- **300+ skills enabled by default** — 24–48% of a 65k window before the user types.
+- **Embeddings-only tool retrieval** — exact tool names beat semantics; Anthropic ships regex + BM25; the headline accuracy figure rests on n=56.
+- **Langfuse / Phoenix / Braintrust as embedded dependencies** — 4-service stack / ELv2 hosting restriction / control plane always vendor-side. Emit OTLP optionally; keep the canonical record local.
+- **n8n as automation/eval layer** — license forbids distribution and third-party hosting.
+- **SWE-bench as a product KPI** — see below.
+- **Auto-update to main / install-time code execution** — documented supply-chain incidents in this ecosystem.
+
+### Why SWE-bench is a lab test, not a KPI
+
+| Finding | Number | Source |
+|---|---|---|
+| Successful patches involving direct solution leakage | **32.67%** | SWE-MERA (arXiv 2507.11059) |
+| Passes due to inadequate tests | **31.08%** | same |
+| Buggy-file-path identification from issue text alone | up to **76%** | The SWE-Bench Illusion (arXiv 2506.12286) |
+| Experienced devs using AI on their own repos: forecast / believed / actual | −24% / −20% / **+19% slower** | METR RCT, 246 tasks (arXiv 2507.09089) |
+
+It measures one-shot autonomous patching against a known oracle on saturated public issues. It does not measure steering, interruption, approval friction, cache behavior, recovery, or human time-to-reviewable-result.
