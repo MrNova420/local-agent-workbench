@@ -369,3 +369,61 @@ Each phase's gate is executable, not a checklist of impressions.
 3. **Model strategy:** local-first only at v1, or local + BYOK hosted from the start?
 4. **Skill packs:** ship zero, ship a small curated set, or ship none and rely on discovery?
 5. **Task scope:** one task per session, or multiple concurrent tasks per project from day one?
+
+---
+
+## 8. Self-review: gaps and risks found in this specification
+
+A design review of the documents above, looking for what would actually break a builder.
+
+### 8.1 Definitions that were ambiguous and are now fixed
+
+| Term | Definition |
+|---|---|
+| **Project** | A filesystem root plus its identity hash. Survives every task. |
+| **Task** | A durable unit with a goal, a plan, an event log, and a terminal outcome. One task = one log. |
+| **Turn** | One user message plus everything that follows until the model produces a terminal response for it. A task may contain many turns. |
+| **Request** | One model HTTP call. Many per turn. This is the unit every timing and cache metric attaches to. |
+| **Operation** | One tool invocation with an `operationId`. This is the unit that can be *uncertain*. |
+
+Without these five words fixed, "resume the task" and "retry the operation" get conflated — which is exactly how an uncertain effect becomes a duplicate effect.
+
+### 8.2 Gaps this review found (not yet resolved)
+
+| Gap | Why it matters | Provisional direction |
+|---|---|---|
+| **No performance budget** | "Fast" is not a spec. Without numbers, a builder ships something that feels slow and blames the model. | Define: cold start < 2 s to first paint; context assembly < 50 ms; event append < 5 ms p95; ledger render 1,000 events without frame drops. Model time is excluded and displayed separately. |
+| **No long-session behaviour** | A 2-hour task with 5,000 events and 400 MB of tool output will break naive rendering and naive snapshots. | Virtualise the ledger; snapshot every N events plus at compaction; cap in-memory tool output and page from disk. Needs measurement, not assumption. |
+| **MCP approval path unspecified** | MCP tools are the highest-risk surface (arbitrary code, external data) and the approval dialog above only covers `run_shell`. | MCP gets its own proposal event carrying server identity, tool schema digest, and the *data* being sent. Approval must name the server, not just the tool. |
+| **No error taxonomy** | "Failed" hides whether the model failed, the provider failed, the tool failed, or policy blocked it. Users cannot act on an undifferentiated failure. | Four distinct terminal reasons — `model_failure`, `provider_failure`, `tool_failure`, `policy_block` — each with a different recovery affordance. |
+| **Accessibility unspecified** | A dense three-column ledger is a real accessibility risk (keyboard traversal, screen readers, motion). | Keyboard-first navigation across ledger/evidence; visible focus; ledger as an ARIA live region with an option to silence; reduced-motion honoured. Not optional for v1. |
+| **No data-deletion story** | Sessions contain code, paths, and potentially secrets in tool output. | Per-scope deletion (session, project, all), with a statement of what deletion does *not* reach (backups, exports already taken). |
+| **No migration/versioning policy for the log** | `v: 1` exists but nothing says what happens at `v: 2`. | Forward-compatible readers: unknown event types render as inert rows, never dropped. Snapshot mismatch triggers log replay, not data loss. |
+| **Uncertainty about "task" concurrency** | The spec assumes one active task per project but never says so. | State it: one *running* task per project at v1; additional tasks queue. Concurrent tasks need worktree isolation first. |
+
+### 8.3 Risks where the design could be wrong
+
+| Risk | Consequence if wrong | How to find out early |
+|---|---|---|
+| **Three-column ledger is too dense** | Users ignore the evidence column and read the transcript anyway, so the whole premise fails | Prototype both layouts; measure whether users find *why did it change this file* faster |
+| **Event-log-only UI blocks fast iteration** | Every UI tweak needs a new event type, slowing development | Prototype with a minimal event set; confirm derived-view approach survives real change requests |
+| **`sync` durability is too slow on real disks** | Every tool step waits on fsync; interactivity suffers | Measure fsync cost on target Windows hardware before committing to the default |
+| **Tool discovery (`find_tools`) is worse than a bigger static catalog for small local models** | Retrieval errors cost more than the tokens saved on a weak model | A/B on the actual small model; if retrieval accuracy is poor, keep more tools resident |
+| **Sandbox default is too slow to start** | Users disable it, and the safety story collapses | Measure container start time; if > ~2 s, offer worktree as the fast-but-still-isolated default |
+| **Subagent-as-child-session is too expensive to build** | Feature never ships, or ships uncheckpointed and breaks recovery | Decide after Phase 3; if costly, ship without subagents — that is an acceptable v1 |
+
+### 8.4 What this specification deliberately does *not* claim
+
+- No claim that this design is better than any competitor — only that its stated properties are testable.
+- No claim that the acceptance tests have been run. None have.
+- No claim about performance on Windows hardware. Nothing has been measured beyond token counting.
+- No claim that the five open questions in §7 have been answered by anyone.
+
+### 8.5 Recommended next action
+
+The honest next step is **not** more documentation. It is one prototype that answers the two highest-risk unknowns:
+
+1. **Does a `sync`-durable event log feel acceptable on this machine?** Measurable in a day — write events, fsync, measure.
+2. **Does the three-column ledger beat a transcript for "why did it change this file"?** Testable with a clickable mockup and three real tasks.
+
+Everything else in this design is downstream of those two answers.
