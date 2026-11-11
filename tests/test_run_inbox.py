@@ -6,6 +6,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sidecar"))
 
 from run_inbox import (  # noqa: E402
     active_reply_identity_matches,
+    find_prior_steering_update,
+    validate_steering_identity,
+    validate_steering_request_id,
     QueuedPromptUnavailable,
     consume_queued_prompt,
     mutate_queue,
@@ -126,3 +129,32 @@ class ActiveReplyIdentityTests(unittest.TestCase):
 
     def test_workspace_optional(self):
         self.assertTrue(active_reply_identity_matches(self._controller(), "s1", "t1", None))
+
+
+class SteeringValidationTests(unittest.TestCase):
+    def _controller(self, workspace="C:/proj"):
+        return {"session": {"session_id": "s1", "workspace": workspace}, "turn_id": "t1"}
+
+    def test_request_id_rules(self):
+        self.assertIsNone(validate_steering_request_id(None))
+        self.assertEqual(validate_steering_request_id("  abc  "), "abc")
+        for bad in ("", "   ", 7, True, "x" * 257):
+            with self.assertRaises(ValueError):
+                validate_steering_request_id(bad)
+
+    def test_identity_matching(self):
+        state = validate_steering_identity(self._controller(), "s1", Path("C:/proj"))
+        self.assertEqual(state["session_id"], "s1")
+        with self.assertRaises(RuntimeError):
+            validate_steering_identity(self._controller(), "s2", Path("C:/proj"))
+        with self.assertRaises(ValueError):
+            validate_steering_identity(self._controller(), "s1", Path("C:/other"))
+
+    def test_prior_update_lookup(self):
+        checkpoint = {"current": {"user_updates": [{"client_request_id": "r1", "id": "u1"}]},
+                      "task_history": [{"user_updates": [{"client_request_id": "r0", "id": "u0"}]}]}
+        prior = find_prior_steering_update(checkpoint, "r1")
+        self.assertEqual(prior["id"], "u1")
+        self.assertEqual(find_prior_steering_update(checkpoint, "r0")["id"], "u0")
+        self.assertIsNone(find_prior_steering_update(checkpoint, "missing"))
+        self.assertIsNone(find_prior_steering_update(checkpoint, None))

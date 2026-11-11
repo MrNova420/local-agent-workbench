@@ -83,8 +83,11 @@ from run_inbox import (  # noqa: E402
     consume_queued_prompt,
     mutate_queue as _mutate_queue_impl,
     active_reply_identity_matches,
+    find_prior_steering_update,
     run_request_identity as _run_request_identity,
     run_start_replay_decision,
+    validate_steering_identity,
+    validate_steering_request_id,
     validated_queued_prompts as _validated_queued_prompts,
 )
 
@@ -951,35 +954,20 @@ class AgentService:
         clean = prompt.strip() if isinstance(prompt, str) else ""
         if not clean:
             raise ValueError("Steering input must contain text.")
-        client_request_id = message.get("clientRequestId")
-        if client_request_id is not None and (not isinstance(client_request_id, str) or not client_request_id.strip() or len(client_request_id) > 256):
-            raise ValueError("Steering request identity must be a non-empty string of at most 256 characters.")
-        if isinstance(client_request_id, str):
-            client_request_id = client_request_id.strip()
+        client_request_id = validate_steering_request_id(message.get("clientRequestId"))
         session_id = str(message.get("sessionId", ""))
         selected_workspace = validate_selected_workspace(True, str(message.get("workspace", "")))
         with self.active_lock:
             controller = self.active
         if controller is None:
             raise RuntimeError("There is no active task to steer. Use the composer to start a task or queue a follow-up.")
-        state = controller["session"]
-        if state.get("session_id") != session_id:
-            raise RuntimeError("Steering is limited to the task's captured chat session.")
-        if Path(state["workspace"]).resolve(strict=True) != selected_workspace:
-            raise ValueError("The active task belongs to a different project.")
+        state = validate_steering_identity(controller, session_id, selected_workspace)
         with controller.setdefault("steering_persist_lock", threading.Lock()):
             with controller["checkpoint_lock"]:
                 if not controller.get("accepting_steering", False):
                     raise RuntimeError("This task is finishing; use the saved message as a follow-up after it completes.")
                 checkpoint = state.setdefault("task_checkpoint", {})
-                current = current_task(checkpoint)
-                task_history = checkpoint.get("task_history", [])
-                saved_tasks = [*([row for row in task_history if isinstance(row, dict)] if isinstance(task_history, list) else []), current]
-                prior_updates = [update for task in saved_tasks for update in
-                                 (task.get("user_updates", []) if isinstance(task.get("user_updates", []), list) else [])]
-                prior_update = next((row for row in reversed(prior_updates)
-                                     if isinstance(row, dict) and client_request_id
-                                     and row.get("client_request_id") == client_request_id), None)
+                prior_update = find_prior_steering_update(checkpoint, client_request_id)
                 if prior_update is not None:
                     if prior_update.get("instruction") != clean:
                         raise ValueError("This steering request identity was already used for different steering text.")

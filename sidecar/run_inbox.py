@@ -18,6 +18,11 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+try:
+    from task_checkpoint import current_task
+except ImportError:  # pragma: no cover - engine import differs when frozen
+    current_task = lambda checkpoint: checkpoint.get("current")  # type: ignore[assignment]
+
 
 class QueuedPromptUnavailable(ValueError):
     """The selected queue row vanished after the run-start preflight check."""
@@ -65,6 +70,44 @@ def active_reply_identity_matches(controller: dict[str, Any] | None, session_id:
     if workspace is not None and Path(state.get("workspace", "")).resolve() != Path(workspace).resolve():
         return False
     return True
+
+
+def validate_steering_identity(controller: dict[str, Any], session_id: str, workspace: Path) -> dict[str, Any]:
+    """Validate a steering request against the active captured run.
+
+    Returns the controller's session state when the steering target matches
+    the active session and workspace; raises the historical user-facing
+    errors otherwise. Steer is intentionally stricter than bool-returning
+    reply paths because the composer surfaces the reason.
+    """
+    state = controller.get("session") if isinstance(controller, dict) else None
+    if not isinstance(state, dict) or state.get("session_id") != session_id:
+        raise RuntimeError("Steering is limited to the task's captured chat session.")
+    if Path(state.get("workspace", "")).resolve(strict=False) != workspace.resolve():
+        raise ValueError("The active task belongs to a different project.")
+    return state
+
+
+def validate_steering_request_id(client_request_id: Any) -> str | None:
+    """Validate the optional steering idempotency key; returns the stripped id."""
+    if client_request_id is None:
+        return None
+    if not isinstance(client_request_id, str) or not client_request_id.strip() or len(client_request_id) > 256:
+        raise ValueError("Steering request identity must be a non-empty string of at most 256 characters.")
+    return client_request_id.strip()
+
+
+def find_prior_steering_update(checkpoint: dict[str, Any], client_request_id: str | None) -> dict[str, Any] | None:
+    """Locate a prior durably saved user update with the same request ID."""
+    if not client_request_id:
+        return None
+    current = current_task(checkpoint)
+    task_history = checkpoint.get("task_history", [])
+    saved_tasks = [*([row for row in task_history if isinstance(row, dict)] if isinstance(task_history, list) else []), current]
+    prior_updates = [update for task in saved_tasks for update in
+                     (task.get("user_updates", []) if isinstance(task.get("user_updates", []), list) else [])]
+    return next((row for row in reversed(prior_updates)
+                 if isinstance(row, dict) and row.get("client_request_id") == client_request_id), None)
 
 
 def validated_queued_prompts(state: dict[str, Any]) -> list[dict[str, Any]]:
