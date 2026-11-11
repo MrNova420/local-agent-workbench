@@ -169,6 +169,23 @@ def test_stream_reports_exact_usage_for_every_ollama_response():
     }}]
 
 
+def test_stream_usage_adapter_preserves_header_wait_and_total_duration_fields():
+    class UsageRuntime:
+        def stream(self, _state, _messages, _cancel, emit):
+            return {"prompt_eval_count": 12, "prompt_eval_cached_count": 9,
+                    "total_duration": 2_500_000_000, "prompt_eval_duration": 50_000_000,
+                    "message": {"content": "ok"}}
+        def cancel(self): pass
+
+    events = []
+    adapter = RequestScopedOllama(UsageRuntime())
+    adapter.stream({"request_index": 3}, [], threading.Event(), events.append)
+    assert events == [{"type": "generation_usage", "request_index": 3, "usage": {
+        "prompt_eval_count": 12, "prompt_eval_cached_count": 9,
+        "total_duration": 2_500_000_000, "prompt_eval_duration": 50_000_000,
+    }}]
+
+
 def test_context_retrieval_and_compaction_keep_recent_task_and_configured_window(tmp_path):
     (tmp_path / "alpha.py").write_text("def target_function():\n    return 42\n", encoding="utf-8")
     (tmp_path / "unrelated.md").write_text("notes about a different subject", encoding="utf-8")

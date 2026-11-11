@@ -116,7 +116,7 @@ class RequestScopedOllama:
             result = self.runtime.stream(state, messages, cancel, emit)
             usage = {
                 key: result[key]
-                for key in ("prompt_eval_count", "prompt_eval_cached_count", "prompt_eval_duration", "eval_count", "eval_duration", "load_duration")
+                for key in ("prompt_eval_count", "prompt_eval_cached_count", "prompt_eval_duration", "eval_count", "eval_duration", "load_duration", "total_duration")
                 if isinstance(result.get(key), (int, float)) and not isinstance(result.get(key), bool)
             }
             if usage:
