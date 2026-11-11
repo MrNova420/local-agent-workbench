@@ -2,7 +2,7 @@
 
 ## Current paired development checkpoint (2026-11-10)
 
-The active rework is isolated on app and engine branches `workbench/agent-flow-rework` (paired app pin `abad09d625fd014e2361544effdba6ae18b4ffc7`). Latest grouped source gates: engine **433 passed + 12 subtests**, sidecar **202 passed**, renderer **144 passed**, TypeScript typecheck passed. These branches do not alter beta/main.
+The active rework is isolated on app and engine branches `workbench/agent-flow-rework` (paired app pin `97ef6bd31d170ab6c26d8158ce956618ee55ee43`). Latest grouped source gates: engine **433 passed + 12 subtests**, sidecar **202 passed**, renderer **144 passed**, TypeScript typecheck passed. These branches do not alter beta/main.
 
 The app-flow changes add exact per-request header-wait, total-duration, and cached/total prompt-token summaries; the engine stabilizes task tool schemas and keeps explicitly loaded schemas in the sticky set. A correction is important: the prior 42s→3.1s probe used separate tasks and did not capture provider cached-token counts, so it is not cache acceptance evidence. Ornith 1.5 9B Q4_K_M is installed but was not resident; the corrected probe safely refused to load it. A later read-only `ollama ps` check showed no model resident; the latest Ollama endpoint check is offline. The probe now emits `ollama_unavailable` and exits nonzero rather than a traceback/false pass. Same-task Ornith acceptance remains open. Available package artifacts are from 2026-10-31 beta.2 and do not verify this branch. The run-start inbox now checks replay acknowledgements against the submitted client request ID; latest full sidecar tests pass. A fresh exact-pin package, identity-safe visible acceptance, and updater/recovery gates remain open.
 
