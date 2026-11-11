@@ -543,3 +543,89 @@ Harness mechanics to copy: append-only JSONL event log + raw transcripts (never 
 | Experienced devs using AI on their own repos: forecast / believed / actual | −24% / −20% / **+19% slower** | METR RCT, 246 tasks (arXiv 2507.09089) |
 
 It measures one-shot autonomous patching against a known oracle on saturated public issues. It does not measure steering, interruption, approval friction, cache behavior, recovery, or human time-to-reviewable-result.
+
+## 7.4 Multi-agent platforms and general frameworks
+
+**Method:** live GitHub API status, PyPI/npm release cadence, unpacked wheels read at source (CrewAI 1.15.39, ADK 2.14.0, Haystack 3.5.0, AG2 1.3.1, AgentScope 2.0.11, smolagents 1.26.0, llama-index-workflows 2.26.1, burr 0.42.0) plus raw LangGraph checkpointer source.
+
+### Status corrections — six of these are dead, dying, or renamed
+
+| Product | Reality |
+|---|---|
+| **Microsoft AutoGen** | **ARCHIVED.** README: *"no longer actively maintained… Microsoft is not providing bug fixes, security fixes… we continue to advise against production use."* Superseded by Microsoft Agent Framework |
+| **Semantic Kernel** | **Superseded.** README banner: *"now Microsoft Agent Framework"* |
+| **Flowise** | **SHUT DOWN** — repo archived 2026-08-13; maintainers: *"we've decided to wind down our operations… fork the repo"* |
+| **SuperAGI** | **Abandoned** — no push since 2025-01-22 (~22 months) |
+| **AgentVerse** | **Dead** — PyPI 0.1.8.1 (2023-10-27), no push since 2024-09-09 |
+| **MetaGPT** | **Stale OSS** (release 2025-03-09); company pivoted to closed SaaS **MGX** |
+| **Llama Stack** | **Renamed to OGX** — *"The name changed, and so did the mission"* |
+| **Burr** | Moved to **Apache incubating**; `burr` is now a shim for `apache-burr` |
+| **ChatDev** | v2.0 "DevAll" is a **different product**; 1.0 on a maintenance branch |
+| **AutoGPT** | Now a **hosted multi-tenant SaaS**; the classic loop is gone |
+
+**Stars are not evidence:** Flowise had 55.6k★ and shut down. MetaGPT has 71.2k★ and is stale. AutoGen had 61.8k★ and was archived.
+
+### The finding that matters most: CrewAI has no security model
+
+`crewai/security/security_config.py` ships with literal source comments where auth and scoping should be:
+
+```
+"Authentication credentials *TODO*"
+"Scoping rules *TODO*"
+"Impersonation/delegation tokens *TODO*"
+```
+
+The implemented "security" is a `Fingerprint` (uuid5) used for tracking/auditing. **CrewAI has no tool-permission or sandbox model in the library** — approval is prompt/HITL-shaped, not enforced. Despite marketing language and 60.8k★.
+
+### Durability models, ranked by actual guarantee
+
+| Product | Guarantee | Honest limitation |
+|---|---|---|
+| **LangGraph** | `sync` / `async`(default) / `exit` modes; checkpoint = versioned channels, `versions_seen`, `source ∈ {input,loop,update,fork}` | **`async` can lose the last superstep on hard crash**; `exit` can lose the run. "Resumes exactly where it left off" is only true under `sync` |
+| **Google ADK** | Append-only events; `app:`/`user:`/`temp:` scoped state; SQLite backend with `StaleSessionError` | Documented: *"ADK resumes the invocation in a best-effort manner: tool call to resume needs to be idempotent because we only guarantee an at-least-once behavior… temporary/in-memory state will be lost"* |
+| **CrewAI 1.x** | Flow per-method persistence + Crew checkpoint DAG with `fork()`/`prune(max_keep, branch)` | **The interrupted unit re-runs** (their code comment admits it) |
+| **LlamaIndex Workflows** | `StateCheckpoint` + JSON-patch `diff()` | Own docstring: *"Mutating a value from `store.get` changes every checkpoint sharing that value. The diff cannot detect those edits."* |
+| **Haystack** | Pipeline `PipelineSnapshot` at breakpoints | File saving **off by default**; no agent-level crash contract |
+| **Vercel AI SDK v7** | `WorkflowAgent` + `'use step'` durable tools; **signed approvals** via `experimental_toolApprovalSecret` | Requires **Workflow DevKit runtime** — durability is a runtime you adopt, not a library property |
+| **smolagents / AG2 / CAMEL / OWL / MetaGPT / ChatDev / SuperAGI / BabyAGI** | **No checkpoint/resume contract** | Crash = restart the run |
+
+### Security honesty, per product
+
+| Product | Enforced boundary |
+|---|---|
+| **smolagents** | Own README: `LocalPythonExecutor` *"is not a security sandbox… can be bypassed and must not be used as a security boundary"* — delegates to E2B/Modal/Docker |
+| **AI SDK** | `needsApproval` predicate + **cryptographically signed** approvals (only product treating "client rewrites history before replay" as a threat) |
+| **AgentScope** | Per-backend sandbox (Docker/bubblewrap/E2B/K8s) — breadth ≠ strength |
+| LangGraph / ADK / Haystack / LangChain / SK / CrewAI / Burr / LlamaIndex | **None built in** |
+
+### Reusable concepts adopted
+
+1. **Checkpoint schema discipline** (LangGraph): format `v`, monotonic `id`, `source` enum, parent ids. Our snapshots lack a format version and a fork concept — both cheap.
+2. **`sync` durability for tool-calling steps.** Local runs are slow and user-visible; losing a step is unacceptable and our one-run-at-a-time model makes the throughput cost ~zero.
+3. **Scoped state keys** (ADK `app:`/`user:`/`temp:`) so the task checkpoint doesn't become a junk drawer.
+4. **Compaction with overlap + retention count** (ADK `EventsCompactionConfig`) — overlap is what stops a summary losing the turn boundary that just happened.
+5. **AG2's replay-invariant table** as a test suite: never emit a tool result without its call; never emit tool calls without the provider turn item. These are exactly the orphan-tool-result bugs that make local models hallucinate.
+6. **CrewAI's `fork()`/`prune()`** — make "retry with duplicate-action warning" create an inspectable branch instead of mutating the only timeline.
+7. **LlamaIndex's warning as a rule:** never hand out mutable references to committed state.
+8. **AI SDK's `needsApproval` predicate shape** — per-tool rules rather than one global mode.
+9. **Explicit at-least-once disclosure** in user docs — our "uncertain operation" model is a superset; say it in the same words.
+
+### Rejected
+
+- **LangChain / LangGraph as a runtime dependency** — we'd get the schema ideas for free in a day; the cost is a large dependency graph, `async`-by-default durability, and a SaaS observability story. Our engine is already checkpointed behind JSONL; adopting a graph runtime means rewriting `TurnContext`, approvals, and the two-store journal.
+- **CrewAI runtime** — its security module is `*TODO*`; role-teams add handoffs without containment.
+- **AutoGen, Semantic Kernel, Flowise, SuperAGI, AgentVerse, BabyAGI, MetaGPT repo** — unmaintained or superseded, no security-fix commitment.
+- **Dify / Agno AgentOS / AgentScope service tier / AutoGPT platform** — multi-tenant control planes (RBAC, tenancy, scheduling, marketplaces): pure overhead for one user and each is a surface to defend.
+- **Role-team / SOP / society abstractions** — token multiplier, handoff failure modes, and it destroys the linear recoverable transcript our architecture depends on.
+- **`LocalPythonExecutor` as containment.**
+
+### Subagent verdict: almost never for open-ended coding
+
+Multi-agent multiplies tokens by agent count and failure probability by handoff count — paid in the currency local models have least of (context window, tool-call reliability). Every serious durability contract surveyed exists to make a **single linear run** recoverable; none makes a *team* recoverable trustworthily.
+
+Worth it, in order, and all three are really *tools* not agents:
+1. **Read-only fan-out with a hard output token budget** — N searches → one merged summary.
+2. **A differently-prompted verifier pass** — a second call, not a subagent.
+3. **Context isolation for an oversized artifact** — "return <N tokens of facts".
+
+**Architectural precondition:** a subagent must be a **child session with its own journal, own approval scope, and token budget**; the parent records only the handoff. An in-process nested agent inherits none of our recovery contract and would silently break "never replay a tool automatically". If that is too expensive to build, the honest answer is **no subagents**.
