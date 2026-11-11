@@ -117,6 +117,7 @@ This is the cross-repository execution order. It preserves the full approved pro
 | Current-app agent-flow rework design and staged plan | [design/agent-flow-rework.md](design/agent-flow-rework.md) |
 | Future separate-platform research record (catalog + verified dossiers) | [design/platform-landscape-research.md](design/platform-landscape-research.md) |
 | Future separate-platform product/architecture design | [design/separate-platform-v1-design.md](design/separate-platform-v1-design.md) |
+| Future separate-platform concrete spec (flows, protocol, tests) | [design/separate-platform-spec.md](design/separate-platform-spec.md) |
 | Future platform research protocol and scope | [design/new-platform-from-scratch-brief.md](design/new-platform-from-scratch-brief.md) |
 | Long-term positioning and market context | [design/vision-and-positioning.md](design/vision-and-positioning.md) |
 | Standing user directives and open items | [design/user-directives-ledger.md](design/user-directives-ledger.md) |

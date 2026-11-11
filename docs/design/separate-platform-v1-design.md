@@ -314,6 +314,12 @@ Do not move existing Workbench requirements into the new product silently. Maint
 
 **Not yet done:** hands-on prototyping, performance measurement, security testing, accessibility/user testing, and framework selection.
 
+## 10c. Concrete specification
+
+Screen flows, the append-only event protocol with its enforced invariants, the session state schema, the request pipeline with per-phase attribution, and executable acceptance tests per phase are specified in [`separate-platform-spec.md`](separate-platform-spec.md).
+
+That document is the build-facing layer: a builder should not need to invent a screen, an event type, or an acceptance test to begin prototyping.
+
 ## 11. Decisions still open
 
 - Primary user: solo local-first developer, broad software team, or app builder?
