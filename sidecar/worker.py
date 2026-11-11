@@ -2337,7 +2337,16 @@ class AgentService:
                     if not event.get("request_index"):
                         event["request_index"] = engine.state.get("request_index")
                 self._publish_run_event(controller, turn, event)
-            engine.event = publish_usage
+            prior_event = getattr(engine, "event", lambda _event: None)
+            def relay_event(event: dict[str, Any]) -> None:
+                if event.get("type") == "generation_usage":
+                    event = {**event, "turn_id": controller["turn_id"], "session_id": state["session_id"]}
+                    if not event.get("request_index"):
+                        event["request_index"] = engine.state.get("request_index")
+                    self._publish_run_event(controller, turn, event)
+                    return
+                prior_event(event)
+            engine.event = relay_event
             engine.runtime = RequestScopedOllama(chosen_runtime)
             engine.state["reasoning"] = state.get("reasoning")
             engine.state["reasoning_budget_tokens"] = state.get("reasoning_budget_tokens")
