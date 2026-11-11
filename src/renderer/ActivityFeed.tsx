@@ -28,9 +28,13 @@ function ProgressiveText({ value, sessionId, activityId, field }: { value: strin
   return <div className="activity-output-block"><pre>{shown}</pre>{remaining > 0 && <button className="activity-show-more" onClick={showNext}>Show next {Math.min(16_000, remaining).toLocaleString()} characters · {remaining.toLocaleString()} remaining</button>}</div>;
 }
 
-function promptRequestSummary(row: ActivityRecord): string[] {
+export function promptRequestSummary(row: ActivityRecord): string[] {
   const request = row.promptManifest?.request_index ?? row.providerRequest?.request_index;
   const parts = [request == null ? 'Model request' : `Model request ${String(request)}`];
+  const headerWait = row.providerRequest?.header_wait_seconds;
+  if (typeof headerWait === 'number' && Number.isFinite(headerWait) && headerWait >= 0) {
+    parts.push(`headers in ${headerWait.toFixed(1)} s`);
+  }
   const duration = row.providerUsage?.total_duration;
   if (typeof duration === 'number' && Number.isFinite(duration) && duration >= 0) {
     parts.push(`${(duration / 1_000_000_000).toFixed(1)} s`);
