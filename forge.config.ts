@@ -8,7 +8,7 @@ const config: ForgeConfig = {
   outDir: process.env.LOCAL_AGENT_OUT_DIR || 'out',
   packagerConfig: {
     asar: true,
-    extraResource: [path.resolve('sidecar/dist/agent-worker.exe')],
+    extraResource: [path.resolve(process.env.LOCAL_AGENT_WORKER_OUT_DIR || 'sidecar/dist', 'agent-worker.exe')],
   },
   makers: [
     new MakerSquirrel({ name: 'LocalAgentWorkbench' }),

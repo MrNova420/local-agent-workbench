@@ -21,9 +21,10 @@ foreach ($RequiredCoreFile in @(
         throw "Required agent engine source '$RequiredCoreFile' not found under $CorePath"
     }
 }
-$OutputDir = Join-Path $AppRoot 'sidecar\dist'
-$WorkDir = Join-Path $AppRoot 'sidecar\build'
+$OutputDir = if ($env:LOCAL_AGENT_WORKER_OUT_DIR) { $env:LOCAL_AGENT_WORKER_OUT_DIR } else { Join-Path $AppRoot 'sidecar\dist' }
+$WorkDir = if ($env:LOCAL_AGENT_WORKER_WORK_DIR) { $env:LOCAL_AGENT_WORKER_WORK_DIR } else { Join-Path $AppRoot 'sidecar\build' }
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
 python -m PyInstaller --noconfirm --clean --onefile --name agent-worker `
     --distpath $OutputDir --workpath $WorkDir --paths $CorePath `
     (Join-Path $AppRoot 'sidecar\worker.py')
