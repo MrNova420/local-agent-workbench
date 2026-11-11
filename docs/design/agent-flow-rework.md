@@ -144,3 +144,10 @@ regression added (`tests/test_tool_schema_stability.py`). Full engine suite: 427
 message and transcript* (next suspected source: per-request checkpoint/user-context
 suffix placement), leaner default system prompt, then live Flint acceptance measuring
 `prompt_eval_cached_count` ≥80% from request 2 and header wait <15s warm.
+
+## Stage 2/4 progress update (2026-11-08, later session)
+
+- Message-prefix architecture verified stable by contract tests: deterministic system prompt, continuation guidance appended as request-local suffix (history never mutated), provider-history metadata stripping locked. The tool-schema fix remains the operative cache change.
+- Stage 4 quick win shipped: compact chat rows show `<n>% prompt cached` from exact provider counts; request details add a "Prompt cache hit" stat. 0% misses are user-visible.
+- Engine pin advanced to `f178110` (prefix-stability contract tests).
+- Next queue: live Flint acceptance measurement (cached % + header wait), system-prompt leanness pass (measure before trim), B-021 reproduction, Stage 1 residual (SessionInbox facade over run_admission gate — deferred until after live measurement), Stage 3 batching.
