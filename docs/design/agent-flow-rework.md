@@ -1,8 +1,9 @@
 # Agent Flow Rework — Design
 
-**Status:** planning / design only. No behavior changes yet.
-**Branch:** `workbench/agent-flow-rework` (cut from `origin/workbench/core-chat-activity` at `42c79b2`, "prepare beta.4 release candidate").
-**Engine pair:** `local-9b-dev-app` (`4348529` at time of writing).
+**Status:** active staged rework; implementation and regression fixes are in progress.
+**App branch:** `workbench/agent-flow-rework`, based on beta.4-candidate app commit `42c79b2`.
+**Engine branch:** `workbench/agent-flow-rework`; app pin is `3aa0ebcd46df3259f7e12b884fcb06cadcb0aee6`.
+**Last paired verification:** engine 431 passed + 12 subtests; sidecar 187; renderer 143; TypeScript typecheck clean. Both branches pushed; beta/main untouched.
 
 ## Why
 
@@ -10,7 +11,7 @@ Observed on the developer's machine (Flint IQ2_XXS, ~12 GB model, 4 GB GPU → ~
 
 - Every model request waits 1–3 minutes between `prompt_manifest` ("Model request N") and `request_headers`. With the model resident, this is **prompt evaluation**, not model loading.
 - The loop issues tiny tool batches per request (2 shell calls → approval → next request), so the toll repeats many times per task. A simple website task took 2–3 hours.
-- Live runs report **0 cached prompt tokens** in real tool-loop requests, while a controlled warm-prefix test showed 93.4% reuse (prompt eval 91.5s → 7.0s). Prefix caching works when the prefix is byte-stable; real runs break it.
+- Historical evidence is mixed: a controlled prefix pair once showed 93.4% reuse (prompt eval 91.5s → 7.0s), while other real requests reported 0 cached tokens. This rework found and fixed changing tool-schema selection, but **the new fix has not yet passed same-task live acceptance with exact provider cache-token counts**.
 - The prompt resends the full system prompt (~8k chars measured), all tool/skill schemas, full transcript incl. reasoning, all tool results, and the checkpoint on **every** request, growing each turn.
 - 65k-context UI behavior: presets above provider-reported metadata should be labeled, not blocked; verify the renderer does not hard-limit.
 
@@ -64,15 +65,15 @@ What stays (verified good, keep): dual-mirror persistence (app + project journal
 ```
 
 ### Stage 1 — Session runner
-- One inbox; all current identity checks consolidate into admission (send/steer/queue/approve/cancel become inbox items with request IDs and content fingerprints).
-- Behavior-preserving. Suite green before Stage 2.
+- Extract shared admission/identity/replay/queue primitives into `sidecar/run_inbox.py` while preserving existing behavior.
+- Remaining: a real `SessionInbox`/runner facade over run-start admission and safe-boundary delivery. Approval, steering, queue, cancellation, and recovery still use distinct operational paths. Do not mark the stage complete until this facade and its regression matrix land.
 
 ### Stage 2 — Context engine (biggest latency win)
-- Build stable prefix once per session; enforce ordering so Ollama's automatic prefix cache engages (target: verify `prompt_eval_cached_count` > 0 on real tool-loop requests 2+).
-- Trim default prompt: system prompt budget, tool/skill schemas paged on demand.
-- Proactive background compaction (before context exhaustion), replacing mid-task stalls.
-- Continuation/checkpoint requests append a suffix only.
-- Acceptance: a multi-request task shows ≥80% cached tokens from request 2 onward on Flint; per-request `header_wait_seconds` drops from ~90–130s to <15s on warm prefix.
+- Keep tool-schema and skill-catalog selection stable per task; retain explicit tool loading and context-budget behavior.
+- Trim the default prompt only after measuring its actual token contribution and preserving task capability.
+- Design proactive compaction; do not replace safe-boundary compaction until tested.
+- Keep continuation/checkpoint guidance suffix-only and preserve canonical history.
+- Acceptance: a same-task multi-request run on installed Ornith 9B records exact `prompt_eval_count`, `prompt_eval_cached_count`, `prompt_eval_duration`, and header wait; target ≥80% cached from request 2 onward. This is pending.
 
 ### Stage 3 — Execution layer
 - Batching policy: model encouraged/allowed to issue larger batches; parallel reads stay; add batched independent writes; background command reattach.
@@ -140,10 +141,7 @@ budget ("sticky selection"). Explicit `load_tools` selections still recompute; b
 overflow falls back to recomputation; deferred schemas stay reachable. Red/green
 regression added (`tests/test_tool_schema_stability.py`). Full engine suite: 427+12.
 
-**Remaining Stage 2 items:** verify message-array prefix stability for the *system
-message and transcript* (next suspected source: per-request checkpoint/user-context
-suffix placement), leaner default system prompt, then live Flint acceptance measuring
-`prompt_eval_cached_count` ≥80% from request 2 and header wait <15s warm.
+**Remaining Stage 2 items:** verify actual same-task cache reuse with exact provider counters; assess system prompt token contribution before any trim; then packaged visible acceptance. The earlier planned Flint acceptance is superseded by the user's instruction to use Ornith 1.5 9B.
 
 ## Stage 2/4 progress update (2026-11-08, later session)
 
@@ -152,22 +150,21 @@ suffix placement), leaner default system prompt, then live Flint acceptance meas
 - Engine pin advanced to `f178110` (prefix-stability contract tests).
 - Next queue: live Flint acceptance measurement (cached % + header wait), system-prompt leanness pass (measure before trim), B-021 reproduction, Stage 1 residual (SessionInbox facade over run_admission gate — deferred until after live measurement), Stage 3 batching.
 
-## Stage 2 live acceptance — PASS (2026-11-08)
+## Live cache acceptance — NOT PASSED (corrected 2026-11-10)
 
-Read-only two-request diagnostic (`live_cache_check.py`, all tool approvals denied,
-throwaway workspace, unchanged 65,536/8,192/model-default settings, no model
-load/unload) against the installed `qwen3.5-3d-coder-4b:64k`:
+The previous 42.0s → 3.1s observation is **retracted as cache-acceptance evidence**.
+That probe used two separate `AgentEngine` instances and tasks, chose the first
+installed Qwen model rather than Ornith, and failed to capture the provider usage
+event. It measured header wait only; it did not establish cache reuse or same-task
+prefix stability.
 
-| Request | Header wait | Notes |
-|---|---|---|
-| 1 (cold prefix) | **42.0 s** | full prompt eval |
-| 2 (warm prefix) | **3.1 s** | prefix cache engaged |
+`live_cache_check.py` was rewritten to use one engine across two user messages and
+capture exact provider usage. It refuses to load or evict a model. Ornith is installed
+as `ornith-1.5-9b-q4-k-m:64k`, but was not resident on the last check; Qwen was
+resident, so the live run was correctly deferred and no model was displaced.
 
-Warm header wait dropped **~93%**. On Flint's slower CPU-heavy runner the warm
-savings scale far larger (prior evidence: 91.5s → 7.0s cold/warm prompt eval with
-cache engaged). The sticky tool-schema selection is verified working end-to-end
-through the real provider. Acceptance target (<15s warm) met on this model.
-
-Remaining: package the fix and run the visible packaged-app acceptance on the
-developer's Flint setup; note the installed app does not include this fix until
-a verified package is built and installed.
+Verified: sticky tool-schema selection and explicit `load_tools` regression tests;
+message-prefix contract tests; exact renderer summary tests; grouped source tests.
+Still required: same-task Ornith run with exact cache counts/timing, package the
+fix, then visible packaged acceptance. Code-level tests alone do not prove a
+performance improvement.
