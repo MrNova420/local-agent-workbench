@@ -156,7 +156,7 @@ regression added (`tests/test_tool_schema_stability.py`). Full engine suite: 427
 ## Stage 2/4 progress update (2026-11-10)
 
 - Message-prefix architecture is contract-tested: deterministic system prompt, request-local continuation suffix does not mutate canonical history, and provider-only metadata is stripped.
-- Stage 4 initial UI slice: compact request rows show exact provider cache percentage and header-wait latency; details show cached and total tokens. Source tests exercise the real summary helper; packaged visual acceptance remains open.
+- Stage 4 initial UI slice: compact request rows show exact cached/total prompt tokens, cache percentage, total request duration, and header-wait latency when provider counters exist; details show the exact metrics. Source tests exercise the real summary helper; packaged visual acceptance remains open.
 - Sticky tool selection preserves explicitly loaded schemas and removes them from deferred tools; regression covers evolving prompts, actual `load_tools`, and the subsequent stable request. App Stage 1 commit `5b17749`; engine pin `3aa0ebc`.
 - B-021 source regression exists for sealing one assistant request segment before reconciling the next; stale queued-item recovery has source tests. Both still need visible packaged/reopen acceptance. Next: same-task Ornith cache acceptance only when it can run without displacing a resident model; complete inbox event/steer/approval/recovery design and fault coverage; package/visible acceptance; then Stage 3 and remaining Stage 4.
 
@@ -170,8 +170,9 @@ prefix stability.
 
 `live_cache_check.py` was rewritten to use one engine across two user messages and
 capture exact provider usage. It refuses to load or evict a model. Ornith is installed
-as `ornith-1.5-9b-q4-k-m:64k`, but was not resident on the last check; Qwen was
-resident, so the live run was correctly deferred and no model was displaced.
+as `ornith-1.5-9b-q4-k-m:64k`, but was not resident; the probe safely refused. A
+later read-only runtime check found no model resident. No model was displaced or
+loaded for acceptance.
 
 Verified: sticky tool-schema selection and explicit `load_tools` regression tests;
 message-prefix contract tests; exact renderer summary tests; grouped source tests.
