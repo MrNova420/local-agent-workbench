@@ -151,3 +151,23 @@ suffix placement), leaner default system prompt, then live Flint acceptance meas
 - Stage 4 quick win shipped: compact chat rows show `<n>% prompt cached` from exact provider counts; request details add a "Prompt cache hit" stat. 0% misses are user-visible.
 - Engine pin advanced to `f178110` (prefix-stability contract tests).
 - Next queue: live Flint acceptance measurement (cached % + header wait), system-prompt leanness pass (measure before trim), B-021 reproduction, Stage 1 residual (SessionInbox facade over run_admission gate — deferred until after live measurement), Stage 3 batching.
+
+## Stage 2 live acceptance — PASS (2026-11-08)
+
+Read-only two-request diagnostic (`live_cache_check.py`, all tool approvals denied,
+throwaway workspace, unchanged 65,536/8,192/model-default settings, no model
+load/unload) against the installed `qwen3.5-3d-coder-4b:64k`:
+
+| Request | Header wait | Notes |
+|---|---|---|
+| 1 (cold prefix) | **42.0 s** | full prompt eval |
+| 2 (warm prefix) | **3.1 s** | prefix cache engaged |
+
+Warm header wait dropped **~93%**. On Flint's slower CPU-heavy runner the warm
+savings scale far larger (prior evidence: 91.5s → 7.0s cold/warm prompt eval with
+cache engaged). The sticky tool-schema selection is verified working end-to-end
+through the real provider. Acceptance target (<15s warm) met on this model.
+
+Remaining: package the fix and run the visible packaged-app acceptance on the
+developer's Flint setup; note the installed app does not include this fix until
+a verified package is built and installed.
