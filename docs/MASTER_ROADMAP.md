@@ -2,7 +2,7 @@
 
 ## Current paired development checkpoint (2026-11-10)
 
-The active rework is isolated on app and engine branches `workbench/agent-flow-rework` (paired app pin `3aa0ebcd46df3259f7e12b884fcb06cadcb0aee6`). Latest grouped source gates: engine **431 passed + 12 subtests**, sidecar **187 passed**, renderer **143 passed**, TypeScript typecheck passed. These branches do not alter beta/main.
+The active rework is isolated on app and engine branches `workbench/agent-flow-rework` (paired app pin `3aa0ebcd46df3259f7e12b884fcb06cadcb0aee6`). Latest grouped source gates: engine **431 passed + 12 subtests**, sidecar **193 passed**, renderer **144 passed**, TypeScript typecheck passed. These branches do not alter beta/main.
 
 The app-flow changes add exact per-request header-wait and cache-hit summaries; the engine stabilizes task tool schemas and keeps explicitly loaded schemas in the sticky set. A correction is important: the prior 42s→3.1s probe used separate tasks and did not capture provider cached-token counts, so it is not cache acceptance evidence. Ornith 1.5 9B Q4_K_M is installed but was not resident; the probe refuses to evict the active Qwen model. Correct same-task Ornith acceptance remains open. The candidate app has not been freshly packaged or visibly accepted, and release blockers remain open.
 

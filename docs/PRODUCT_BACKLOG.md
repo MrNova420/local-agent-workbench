@@ -354,3 +354,13 @@ The arbitrary 500-file download selection ceiling has been removed. The worker r
 - Retracted earlier 42s→3.1s live acceptance claim: that run used separate tasks, Qwen 4B, and no provider cached-token counts. New Ornith probe requires installed `ornith-1.5-9b-q4-k-m:64k`, a same-task pair, and exact usage. It refuses to load/evict; Ornith was not resident, so no live acceptance is claimed.
 - Remaining in order: finish `SessionInbox` facade (Stage 1); same-task Ornith cache acceptance when model lifecycle can be respected; B-021 queue/reasoning recovery reproduction; context-control check; Stage 3 safe batching/background command lifecycle; remaining Stage 4 timeline; package/visible acceptance and release gates.
 - Separate future platform from-scratch design is queued at `docs/design/new-platform-from-scratch-brief.md`; do not conflate it with this app's rework.
+
+
+## Rework branch progress — 2026-11-10 follow-up
+
+- Stage 1 admission facade `SessionInbox` is committed and pushed as app `5b17749`. It centralizes run-start serialization/replay and active-slot release; it is **not** yet a complete durable event inbox. Engine/worker still own event journal, steering safe boundaries, approvals, cancellation, and recovery. Added concurrency, replay, failed-start, and non-started-result tests.
+- Latest paired suite after that commit: engine **431 + 12 subtests**, sidecar **193**, renderer **143**, typecheck.
+- Context-control review: `buildTokenPresets` deliberately includes values above advertised maximum and all options remain enabled; custom number inputs have no 65,536 max. Added a regression for unknown model maximum showing 131,072 and 1,048,576 presets remain available. Runtime may still reject a requested value; app surfaces allocation mismatch rather than silently lowering it.
+- B-021 source review: stale queued-prompt reconciliation and assistant-segment finalization before subsequent provider requests have renderer/sidecar regressions. Packaged app close/reopen acceptance remains open; source coverage does not close it.
+- Ornith cache acceptance remains unrun because the installed Ornith 1.5 9B tag was not resident and the probe preserves the existing model lifecycle (no unload/load).
+- Future platform from-scratch design is queued separately in `docs/design/new-platform-from-scratch-brief.md`; it makes no framework assumption and must not be merged into the Workbench implementation branch.

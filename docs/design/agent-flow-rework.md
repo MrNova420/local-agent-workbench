@@ -3,7 +3,7 @@
 **Status:** active staged rework; implementation and regression fixes are in progress.
 **App branch:** `workbench/agent-flow-rework`, based on beta.4-candidate app commit `42c79b2`.
 **Engine branch:** `workbench/agent-flow-rework`; app pin is `3aa0ebcd46df3259f7e12b884fcb06cadcb0aee6`.
-**Last paired verification:** engine 431 passed + 12 subtests; sidecar 187; renderer 143; TypeScript typecheck clean. Both branches pushed; beta/main untouched.
+**Last paired verification:** engine 431 passed + 12 subtests; sidecar 193; renderer 143; TypeScript typecheck clean. App Stage 1 commit `5b17749`; engine pin `3aa0ebcd46df3259f7e12b884fcb06cadcb0aee6`. App rework branch pushed; beta/main untouched.
 
 ## Why
 
@@ -65,8 +65,8 @@ What stays (verified good, keep): dual-mirror persistence (app + project journal
 ```
 
 ### Stage 1 — Session runner
-- Extract shared admission/identity/replay/queue primitives into `sidecar/run_inbox.py` while preserving existing behavior.
-- Remaining: a real `SessionInbox`/runner facade over run-start admission and safe-boundary delivery. Approval, steering, queue, cancellation, and recovery still use distinct operational paths. Do not mark the stage complete until this facade and its regression matrix land.
+- Shared admission/identity/replay/queue primitives and a `SessionInbox` facade over serialized run-start replay/active-slot acquisition are implemented and regression-tested.
+- Remaining for a durable unified inbox: move or explicitly adapt event admission, safe-boundary steering, queue delivery, approval/question, cancellation, and crash-recovery replay under a single session-owned contract. Preserve existing subsystem ownership until each migration has fault-injection coverage.
 
 ### Stage 2 — Context engine (biggest latency win)
 - Keep tool-schema and skill-catalog selection stable per task; retain explicit tool loading and context-budget behavior.
@@ -104,16 +104,27 @@ Full pass over `PRODUCT_BACKLOG.md`, `MASTER_ROADMAP.md`, `DECISIONS.md`, and th
 - Active release blockers that stay independent of this branch: r3 packaged first-response failure, launch-identity collision, beta.4 gates. This branch must not be used to claim those closed.
 - Decision-log constraints honored: D-003 (no auto-load change beyond B-008's warm-on-select; keep-alive already sent), D-004 (approval/isolation unchanged), D-006 (Windows x64 updater untouched).
 
-## Stage 1 progress (2026-11-08)
+## Stage 1 progress (updated 2026-11-10)
 
-- `sidecar/run_inbox.py` introduced as the admission-primitives module: run request identity/fingerprint, queued-prompt validation/consumption/mutation, run-start replay decision, and active-run reply identity validation. `worker.py` keeps compatibility aliases; call sites now delegate.
-- Consolidated so far: run admission identity + replay, queue add/remove/consume, question-reply and cancel identity binding. Next: steering acceptance binding and approval-reply identity, then the single `SessionInbox` facade over `run_admission_lock`/`run_lock` in `handle("run_start")`.
-- 13 focused unit tests added (`tests/test_run_inbox.py`). Grouped passes recorded at each commit; behavior unchanged.
+- `sidecar/run_inbox.py` owns shared run request identity/fingerprinting, run-start replay decisions, queued-prompt validation/consumption/mutation, active reply identity checks, and steering validation/prior-update lookup.
+- `SessionInbox` now serializes run-start replay and admission, performs the busy-slot replay recheck, and guarantees active-slot release on failed or non-started results. `worker.py` lock attributes remain compatibility aliases; operation/persistence/safe-boundary behavior remains in the worker/engine.
+- A dedicated same-request concurrency regression confirms retries wait for in-progress admission and replay instead of double-starting. `tests/test_run_inbox.py`: **25 passed**.
+- Stage 1 is **admission-facade complete, durable-inbox incomplete**: event journal, steering delivery, approval lifecycle, cancellation, and recovery remain owned by their current subsystems. Do not describe this as a unified durable inbox until those paths are explicitly migrated and fault-tested.
+- Latest grouped suites after Stage 1 facade: engine **431 + 12 subtests**, sidecar **193**, renderer **144**, TypeScript typecheck clean. Commit `5b17749` pushed to the app rework branch.
 
-## Stage 2 preparation notes (from code read)
+## Stage 2 implementation notes (reviewed 2026-11-10)
 
-- `OllamaRuntime.stream` (engine `desktop_engine.py` L1697) sends full `messages` + all tool schemas every request with `keep_alive` 30m; `request_headers`/`header_wait_seconds` and `generation_usage` (incl. `prompt_eval_cached_count`) are already emitted — Stage 4 only needs UI surfacing.
-- Cache-miss suspects to verify first: message-array prefix stability across requests (system message position/content, tool-result message field ordering), per-request checkpoint/user-context suffix placement, and tool-schema ordering (`registry.schemas + mcp_tools` order).
+- `OllamaRuntime.stream` sends full `messages` and selected tool schemas on each stateless request, with `keep_alive` defaulting to 30m. Stable-prefix reuse can reduce re-evaluation, but does not avoid retransmitting request JSON.
+- Runtime emits `request_headers` with `header_wait_seconds`; desktop `RequestScopedOllama` emits exact `generation_usage`. The corrected live probe wraps this same adapter behavior; the old direct-engine probe did not.
+- Tool schemas were prompt-relevance ranked each request. `AgentEngine` now retains the task's initial selection, merges explicitly requested `load_tools` schemas, checks budget, and updates deferred names. If a newly loaded schema cannot fit, selection must fail/recompute without silently omitting it.
+- Other cache-risk surfaces still require real same-task measurement: message history growth, checkpoint suffix, compaction, tool results, skill text, and provider template behavior. Byte-stable tool schema alone is not proof that the entire prompt cache reuses.
+
+## Recovered audit queue (project-wide, still open)
+
+- Cross-repo architecture and source maps: `docs/ARCHITECTURE.md`, engine README/IMPLEMENTATION_STATUS, Electron boundary, sidecar protocol, persistence and provider modules.
+- Current feature/status sources: PRODUCT_BACKLOG, MASTER_ROADMAP, CORE_HARNESS_READINESS, FULL_PRODUCT_PARITY_AUDIT, MODEL_RUNTIME_EXPANSION, SESSION_CONTINUITY_IMPLEMENTATION, DECISIONS, ACCEPTANCE_LOG, RELEASE_RUNBOOK, README/SECURITY/CONTRIBUTING, engine docs and tests.
+- History and left-behind work: review recent app and engine commits, active/past branches, deferred test notes, all backlog IDs and unverified release logs. Identify superseded statements but preserve them as history.
+- Outstanding concrete items: B-021 queue/reasoning close/reopen acceptance; exact context-limit behavior (source suggests custom values above 65k are allowed); beta.4 candidate launch identity, first-response, updater and install gates; Windows command/MCP containment; full parity requirements. These are not closed by the rework source tests.
 
 ## Open items to verify during implementation
 1. Why cache misses in real runs (hypotheses: per-request checkpoint/user-context suffix placement, tool-schema ordering, skill-catalog churn, timestamp-bearing fields in prefix messages).
@@ -121,10 +132,9 @@ Full pass over `PRODUCT_BACKLOG.md`, `MASTER_ROADMAP.md`, `DECISIONS.md`, and th
 3. r3 packaged first-response failure (runner "Stopping...") — reproduce with saved traceback before Stage 2 perf claims.
 4. Launch-identity collision (candidate exe opens installed beta.3) — blocks visible acceptance of any stage.
 
-## Baseline verification (2026-11-08, this branch)
+## Baseline verification (2026-11-08; latest paired pass 2026-11-10)
 
-Branch cut at app `42c79b2` / engine `1c0774b`. Grouped baseline pass on this machine:
-engine **425 passed + 12 subtests** (54s), renderer **139 passed** (22 files), sidecar **168 passed** (89s), TypeScript typecheck clean. This is the green reference for all rework stages.
+Branch cut at app `42c79b2` / engine `1c0774b`. Original baseline: engine **425 passed + 12 subtests**, renderer **139**, sidecar **168**, typecheck clean. Latest after rework: engine **431 + 12**, renderer **144**, sidecar **193**, typecheck clean. Source verification only; package and visible acceptance remain separate gates.
 
 ## Stage 2 — root cause found and fixed (2026-11-08)
 
@@ -143,12 +153,12 @@ regression added (`tests/test_tool_schema_stability.py`). Full engine suite: 427
 
 **Remaining Stage 2 items:** verify actual same-task cache reuse with exact provider counters; assess system prompt token contribution before any trim; then packaged visible acceptance. The earlier planned Flint acceptance is superseded by the user's instruction to use Ornith 1.5 9B.
 
-## Stage 2/4 progress update (2026-11-08, later session)
+## Stage 2/4 progress update (2026-11-10)
 
-- Message-prefix architecture verified stable by contract tests: deterministic system prompt, continuation guidance appended as request-local suffix (history never mutated), provider-history metadata stripping locked. The tool-schema fix remains the operative cache change.
-- Stage 4 quick win shipped: compact chat rows show `<n>% prompt cached` from exact provider counts; request details add a "Prompt cache hit" stat. 0% misses are user-visible.
-- Engine pin advanced to `f178110` (prefix-stability contract tests).
-- Next queue: live Flint acceptance measurement (cached % + header wait), system-prompt leanness pass (measure before trim), B-021 reproduction, Stage 1 residual (SessionInbox facade over run_admission gate — deferred until after live measurement), Stage 3 batching.
+- Message-prefix architecture is contract-tested: deterministic system prompt, request-local continuation suffix does not mutate canonical history, and provider-only metadata is stripped.
+- Stage 4 initial UI slice: compact request rows show exact provider cache percentage and header-wait latency; details show cached and total tokens. Source tests exercise the real summary helper; packaged visual acceptance remains open.
+- Sticky tool selection preserves explicitly loaded schemas and removes them from deferred tools; regression covers evolving prompts, actual `load_tools`, and the subsequent stable request. App Stage 1 commit `5b17749`; engine pin `3aa0ebc`.
+- B-021 source regression exists for sealing one assistant request segment before reconciling the next; stale queued-item recovery has source tests. Both still need visible packaged/reopen acceptance. Next: same-task Ornith cache acceptance only when it can run without displacing a resident model; complete inbox event/steer/approval/recovery design and fault coverage; package/visible acceptance; then Stage 3 and remaining Stage 4.
 
 ## Live cache acceptance — NOT PASSED (corrected 2026-11-10)
 

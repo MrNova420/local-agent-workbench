@@ -13,6 +13,14 @@ describe('model capability controls', () => {
     expect(Object.values(labels)[0]).not.toBe(Object.values(labels)[1]);
   });
 
+  it('does not cap context presets at 65,536 when model maximum is unknown', () => {
+    const presets = buildTokenPresets({ contextLimit: null, contextLimitKnown: false, outputLimit: null });
+    expect(presets.contextLimitKnown).toBe(false);
+    expect(presets.context.some((item) => item.value === 65_536)).toBe(true);
+    expect(presets.context.some((item) => item.value === 131_072 && !item.disabled)).toBe(true);
+    expect(presets.context.some((item) => item.value === 1_048_576 && !item.disabled)).toBe(true);
+  });
+
   it('builds context tiers beyond one million and includes the exact nonstandard maximum', () => {
     const presets = buildTokenPresets({ contextLimit: 2_500_000, outputLimit: 1_500_000 });
 
