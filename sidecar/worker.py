@@ -76,51 +76,15 @@ from providers.registry import ProviderRegistry  # noqa: E402
 APP_DATA = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "LocalAgentWorkbench"
 
 
-def _validated_queued_prompts(state: dict[str, Any]) -> list[dict[str, Any]]:
-    rows = state.get("queued_prompts", [])
-    if not isinstance(rows, list):
-        raise ValueError("Saved follow-up prompt queue is invalid.")
-    result: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for row in rows:
-        if (not isinstance(row, dict) or not isinstance(row.get("id"), str) or not row["id"]
-                or row["id"] in seen or not isinstance(row.get("prompt"), str) or not row["prompt"].strip()
-                or isinstance(row.get("queued_at"), bool) or not isinstance(row.get("queued_at"), (int, float))):
-            raise ValueError("Saved follow-up prompt queue contains an invalid entry.")
-        seen.add(row["id"])
-        result.append(copy.deepcopy(row))
-    return result
-
-
-def _run_request_identity(options: dict[str, Any], workspace: Path | None = None) -> tuple[str | None, str | None]:
-    request_id = options.get("clientRequestId")
-    if request_id is None:
-        return None, None
-    if not isinstance(request_id, str) or not request_id.strip() or len(request_id) > 256:
-        raise ValueError("Run request identity must be a non-empty string of at most 256 characters.")
-    request_id = request_id.strip()
-    fingerprint_options = {key: value for key, value in options.items()
-                          if key not in {"clientRequestId", "queuedPromptId"}}
-    payload = {"workspace": str(workspace) if workspace is not None else options.get("workspace"),
-               "options": fingerprint_options}
-    encoded = json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"), default=str).encode("ascii")
-    return request_id, hashlib.sha256(encoded).hexdigest()
-
-
-class QueuedPromptUnavailable(ValueError):
-    """The selected queue row vanished after the run-start preflight check."""
-
-
-def consume_queued_prompt(state: dict[str, Any], queued_prompt_id: str, prompt: str) -> dict[str, Any]:
-    rows = _validated_queued_prompts(state)
-    index = next((index for index, row in enumerate(rows) if row["id"] == queued_prompt_id), None)
-    if index is None:
-        raise QueuedPromptUnavailable("That queued prompt no longer exists.")
-    item = rows[index]
-    if item["prompt"] != prompt:
-        raise ValueError("The queued prompt text does not match the selected queue entry.")
-    state["queued_prompts"] = [row for row in rows if row["id"] != queued_prompt_id]
-    return item
+# Admission primitives live in run_inbox.py (agent flow rework, Stage 1).
+# The local aliases below keep the historical in-module call sites stable.
+from run_inbox import (  # noqa: E402
+    QueuedPromptUnavailable,
+    consume_queued_prompt,
+    mutate_queue as _mutate_queue_impl,
+    run_request_identity as _run_request_identity,
+    validated_queued_prompts as _validated_queued_prompts,
+)
 
 
 def _saved_operation_result(state: dict[str, Any], operation_id: str) -> str | None:
@@ -1108,20 +1072,7 @@ class AgentService:
     @staticmethod
     def _mutate_queue(prompts: list[dict[str, Any]], *, add_prompt: str | None,
                       remove_id: str | None, request_id: str | None = None) -> dict[str, Any]:
-        updated = copy.deepcopy(prompts)
-        if add_prompt is not None:
-            clean = add_prompt.strip()
-            if not clean:
-                raise ValueError("Enter a follow-up prompt before queuing it.")
-            item = {"id": uuid.uuid4().hex, "prompt": clean, "queued_at": time.time()}
-            if request_id:
-                item["request_id"] = request_id
-            updated.append(item)
-            return {"queued": item, "removed": False, "queuedPrompts": updated}
-        removed = next((item for item in updated if item.get("id") == remove_id), None)
-        if removed is not None:
-            updated = [item for item in updated if item.get("id") != remove_id]
-        return {"queued": None, "removed": removed is not None, "queuedPrompts": updated}
+        return _mutate_queue_impl(prompts, add_prompt=add_prompt, remove_id=remove_id, request_id=request_id)
 
     def handle(self, command: str, message: dict[str, Any]) -> Any:
         if command == "ping":
