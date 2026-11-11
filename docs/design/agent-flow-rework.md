@@ -124,3 +124,23 @@ Full pass over `PRODUCT_BACKLOG.md`, `MASTER_ROADMAP.md`, `DECISIONS.md`, and th
 
 Branch cut at app `42c79b2` / engine `1c0774b`. Grouped baseline pass on this machine:
 engine **425 passed + 12 subtests** (54s), renderer **139 passed** (22 files), sidecar **168 passed** (89s), TypeScript typecheck clean. This is the green reference for all rework stages.
+
+## Stage 2 — root cause found and fixed (2026-11-08)
+
+**Confirmed cache killer:** `AgentEngine._tools_for_request` re-scored tool schemas
+against the evolving task prompt on **every** request. The selected subset and order
+changed as prompts changed, and since chat templates render the tools array early in
+the prompt, Ollama's automatic prefix cache was invalidated on every tool-loop request
+→ 0% cached tokens → full re-evaluation of ~15–25k tokens per request (~1–3 min on the
+dev machine's CPU-heavy runner).
+
+**Fix (engine `1a4f939`, app pin advanced):** tool selection and inline skill-catalog
+text are now computed once per task and reused byte-identically while they fit the
+budget ("sticky selection"). Explicit `load_tools` selections still recompute; budget
+overflow falls back to recomputation; deferred schemas stay reachable. Red/green
+regression added (`tests/test_tool_schema_stability.py`). Full engine suite: 427+12.
+
+**Remaining Stage 2 items:** verify message-array prefix stability for the *system
+message and transcript* (next suspected source: per-request checkpoint/user-context
+suffix placement), leaner default system prompt, then live Flint acceptance measuring
+`prompt_eval_cached_count` ≥80% from request 2 and header wait <15s warm.
