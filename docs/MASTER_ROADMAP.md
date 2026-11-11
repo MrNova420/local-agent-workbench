@@ -119,6 +119,7 @@ This is the cross-repository execution order. It preserves the full approved pro
 | Future separate-platform product/architecture design | [design/separate-platform-v1-design.md](design/separate-platform-v1-design.md) |
 | Future platform research protocol and scope | [design/new-platform-from-scratch-brief.md](design/new-platform-from-scratch-brief.md) |
 | Long-term positioning and market context | [design/vision-and-positioning.md](design/vision-and-positioning.md) |
+| Standing user directives and open items | [design/user-directives-ledger.md](design/user-directives-ledger.md) |
 
 **Separate-platform track:** these design docs describe a *different, future product*. They do not authorize changes to this app. Any implementation requires reviewed design approval and a separate repository.
 
