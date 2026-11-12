@@ -629,3 +629,147 @@ Worth it, in order, and all three are really *tools* not agents:
 3. **Context isolation for an oversized artifact** — "return <N tokens of facts".
 
 **Architectural precondition:** a subagent must be a **child session with its own journal, own approval scope, and token budget**; the parent records only the handoff. An in-process nested agent inherits none of our recovery contract and would silently break "never replay a tool automatically". If that is too expensive to build, the honest answer is **no subagents**.
+
+---
+
+# 7.5 Second-pass depth dossiers (2026-11-11)
+
+A second round of full-depth dossiers was commissioned in 4 batches of 10. One batch failed on a provider rate limit; two batches (memory/state, frameworks) were found to substantially duplicate §7.1 and §7.4 already on record. This section records the batch that added new ground: **execution / browser / evaluation**.
+
+Products: Playwright, Puppeteer, WebArena, Browser Use, Stagehand, Skyvern, Inspect AI, SWE-bench, LiteLLM, n8n. All versions verified live against GitHub API, npm and PyPI on 2026-11-11. Labels: `[doc]` docs, `[src]` source, `[paper]` preprint, `[measured]` verified in-session, `[marketing]` vendor claim, `[unknown]` not established.
+
+## 7.5.1 Status and licence reality (the decisive table)
+
+| Product | Version / date | Licence | Verdict |
+|---|---|---|---|
+| Playwright (Microsoft) | 1.65.0, 2026-11-05 | Apache-2.0 | Active; 99.9k★, only 32 open issues |
+| Puppeteer (Google) | 25.17.0, browsers pkg 2026-11-10 | Apache-2.0 | Active; 95.8k★ |
+| WebArena (CMU et al.) | v0.2.0, **2023-10-21** | Apache-2.0 | **Frozen / superseded** by AgentLab + WebArena-Infinity |
+| Browser Use | 1.0.2, **same day as research** | MIT | Extremely active; rewritten architecture in v1.0 |
+| Stagehand (Browserbase) | TS 4.4.0 / Py 0.3.11 | MIT | Active; **Python lags a major version** |
+| Skyvern | 1.0.57, 2026-11-06 | **AGPL-3.0** | Active; **licence blocks proprietary embedding** |
+| Inspect AI (UK AISI) | 0.3.289, 2026-11-10 | MIT | Very active; 200+ shipped evals |
+| SWE-bench (Princeton) | PyPI 5.0.2 | MIT | Active; **no GitHub release tags** |
+| LiteLLM (BerriAI) | 1.109.0, 2026-11-11 | MIT + paid `enterprise/` | Active; **5,132 open issues**; LICENSE references a non-existent `enterprise/LICENSE` (actual file is `LICENSE.md`) |
+| n8n | 2.47.4, 2026-11-11 | **SUL** + Enterprise for `.ee.` | Active; 210k★; **SUL forbids the exact use case of an agent platform** |
+
+**Measured licence/footprint facts:**
+- LiteLLM ships a **native `win_amd64` abi3 wheel, no compiler needed**, with **0 `enterprise/` files** — the PyPI distribution is MIT-clean. Unpacked size **131.6 MB** (proxy is 1,811 of 4,075 files). `litellm-core` exists as a smaller alternative but was not measured.
+- n8n's own License FAQ forbids *"external end users … build or configure their own workflows through your product, whether via a custom UI, our API, MCP, **or an AI agent acting on the user's behalf**"* and states *"The SUL test is not about UI visibility — it is about who controls the workflow logic."* A desktop agent platform is the forbidden case; embedding requires a commercial agreement.
+- Skyvern's AGPL-3.0 has no dual-licence carve-out in the repo.
+
+## 7.5.2 What each actually enforces vs. advertises
+
+| Product | Boundary reality |
+|---|---|
+| Playwright | **Storage isolation only** (`BrowserContext` = incognito-equivalent). No OS boundary. `storageState` is a bearer credential — Playwright's own docs warn against committing it. Driving the user's real Chrome via `userDataDir`/`connectOverCDP` inherits **every logged-in session**. |
+| Puppeteer | Same, and weaker: no worker-per-test discard, no fixture lifecycle, isolation entirely opt-in. Manual cookie handling. |
+| WebArena | Real Docker sites, but **no enforced reset between runs**; mints **auto-login cookies for every site** — the agent is a pre-authenticated superuser by design. |
+| Browser Use | Its own README: *"a guard for an aligned model, **not a sandbox**"*; *"The REPL worker runs model-written Python as your user"*; the 0.x file allowlist was **removed** in v1.0; local modes open an **unauthenticated CDP port on 127.0.0.1**. Env allowlist matching `KEY\|TOKEN\|SECRET\|PASSW` — *"That is all the allowlist does."* |
+| Stagehand | Local mode = your Chrome + deliberately persistent cookies. Cloud cache/replay/proxies are Browserbase-gated: *"with a local browser … the `cache` option has no effect and every call runs inference."* |
+| Skyvern | Component-separated services; **credential indirection is genuinely good** (model calls `login(credential_type, credential_id)` — value never enters model context). But `BROWSER_TYPE=cdp-connect` + `browser serve --tunnel` let Skyvern Cloud drive your local Chrome — account takeover as a feature. |
+| Inspect AI | **Sandbox is opt-in per call** — its own docs: *"Provisioning a sandbox does not automatically run tools… in the container. … only work that it requests through the `sandbox()` interface runs in the container."* Separates **Approvers** (pre-execution) from **Tool Result Review** (post-execution, before model sees it) — two distinct policy hooks. |
+| SWE-bench | Strong per-instance Docker. But the harness will *force* patches to apply (`--3way`, `--reject`, `patch --fuzz=5`), and its result cache is keyed only on `run_id`+`instance_id` — re-running with different predictions **silently reuses the first run's results**. |
+| LiteLLM | Gateway credential boundary (virtual keys, budgets). Not a filesystem/process boundary. |
+| n8n | **Unsafe by default**: *"Task runners are the only isolation layer between user-provided code… Without them, or with internal mode, anyone who can edit a workflow could potentially read your database, encryption key, stored credentials, and environment variables."* Hardening list: distroless image, `nobody:65532`, read-only rootfs, AppArmor `audit deny @{PROC}/[0-9]*/{environ,mounts} rwl,`. |
+
+## 7.5.3 Verification: who produces evidence vs. appearance
+
+| Product | What "success" means |
+|---|---|
+| **Playwright** | **Evidence** — web-first auto-retrying assertions on the live DOM. Caveats: proves the client-observable surface only; assertion quality *is* evidence quality; `toHaveScreenshot()` is the weakest form (pixel diffs, OS/font/AA variance). Ships **planner → generator → healer** agents via `npx playwright init-agents`. |
+| **Puppeteer** | **Appearance** — waits not assertions, no DOM trace, **no HAR** (measured absent from `docs/guides/`). You build everything. |
+| **WebArena** | **Contaminated** — ABC paper: *"WebArena overestimates performance of agents by 5.2% due to various issues in its string matching"*; for "N/A" tasks **the LLM judge accepts an empty reply as correct** — a do-nothing agent passes. |
+| **Browser Use** | **Self-report** — `result.is_successful()` is the model's own `finish(success)` verdict; docs: *"verify important external actions independently."* |
+| **Stagehand** | **Evidence-capable** — `observe()` returns **real Playwright selectors**, so an AI decision becomes a durable program fragment you can hand to `expect()`. But `act()` **self-heals**, trading flakiness for silent semantic drift. |
+| **Skyvern** | **LLM opinion** — `page.validate()` returns an uncalibrated `bool`; `page.extract()` is schema-typed (checkable). Rich artifacts (recording + HAR + per-action screenshot/reasoning) but nothing deterministic. |
+| **Inspect AI** | **Strongest** — immutable transcript as evidence; **deferred, re-runnable, editable scoring** (`--no-score` then `inspect score` over history). Judge-validity is unsolved but it integrates CJE calibration. |
+| **SWE-bench** | **Best mechanism, worst measurement** — two-sided FAIL_TO_PASS + PASS_TO_PASS contract, but: 7.7% Lite / 5.2% Verified pass **without correct patches**; **76%** buggy-file-path accuracy from issue text alone (memorization, dropping to ~53% on unseen repos); insufficient test cases; Pro-level gold leakage. |
+| **LiteLLM** | **None** — transport. Contributes cost/provenance evidence (which model/deployment actually answered when fallbacks fire). |
+| **n8n** | **None** — proves a workflow *ran*, not that the world changed. Per-node I/O JSON is the useful artifact. |
+
+## 7.5.4 Mechanisms worth stealing (ranked)
+
+1. **Playwright's trace format** — before/action/after DOM snapshot triples + screencast + network slice + console, indexed by one action timeline, replayable offline from a single zip. The correct target format for "prove the agent's UI change worked."
+2. **Inspe
+
+---
+
+# 7.5 Second-pass depth dossiers (2026-11-11)
+
+A second round of full-depth dossiers was commissioned in 4 batches of 10. One batch failed on a provider rate limit; two batches (memory/state, frameworks) substantially duplicate sections 7.1 and 7.4 already on record. This section records the batch that added new ground: **execution / browser / evaluation**.
+
+Products: Playwright, Puppeteer, WebArena, Browser Use, Stagehand, Skyvern, Inspect AI, SWE-bench, LiteLLM, n8n. Versions verified live against GitHub API, npm and PyPI on 2026-11-11. Labels: `[doc]` docs, `[src]` source, `[paper]` preprint, `[measured]` verified in-session, `[marketing]` vendor claim, `[unknown]` not established.
+
+## 7.5.1 Status and licence reality
+
+| Product | Version / date | Licence | Verdict |
+|---|---|---|---|
+| Playwright (Microsoft) | 1.65.0, 2026-11-05 | Apache-2.0 | Active; 99.9k stars, only 32 open issues |
+| Puppeteer (Google) | 25.17.0, 2026-11-10 | Apache-2.0 | Active; 95.8k stars |
+| WebArena (CMU et al.) | v0.2.0, **2023-10-21** | Apache-2.0 | **Frozen / superseded** by AgentLab + WebArena-Infinity |
+| Browser Use | 1.0.2, same day as research | MIT | Extremely active; v1.0 is a rewritten architecture |
+| Stagehand (Browserbase) | TS 4.4.0 / Py 0.3.11 | MIT | Active; **Python lags a major version** |
+| Skyvern | 1.0.57, 2026-11-06 | **AGPL-3.0** | Active; **licence blocks proprietary embedding** |
+| Inspect AI (UK AISI) | 0.3.289, 2026-11-10 | MIT | Very active; 200+ shipped evals |
+| SWE-bench (Princeton) | PyPI 5.0.2 | MIT | Active; no GitHub release tags |
+| LiteLLM (BerriAI) | 1.109.0, 2026-11-11 | MIT + paid enterprise/ | Active; 5,132 open issues; LICENSE references a non-existent `enterprise/LICENSE` (actual file is `LICENSE.md`) |
+| n8n | 2.47.4, 2026-11-11 | **SUL** + Enterprise for `.ee.` | Active; 210k stars; **SUL forbids the exact use case of an agent platform** |
+
+**Measured licence/footprint facts:**
+- LiteLLM ships a **native win_amd64 abi3 wheel, no compiler needed**, with **0 enterprise/ files** — the PyPI distribution is MIT-clean. Unpacked size **131.6 MB** (proxy is 1,811 of 4,075 files).
+- n8n's own License FAQ forbids *"external end users ... build or configure their own workflows through your product, whether via a custom UI, our API, MCP, **or an AI agent acting on the user's behalf**"* and states *"The SUL test is not about UI visibility — it is about who controls the workflow logic."* A desktop agent platform is the forbidden case; embedding requires a commercial agreement.
+- Skyvern's AGPL-3.0 has no dual-licence carve-out in the repo.
+
+## 7.5.2 What each actually enforces vs. advertises
+
+| Product | Boundary reality |
+|---|---|
+| Playwright | **Storage isolation only** (BrowserContext = incognito-equivalent). No OS boundary. `storageState` is a bearer credential — Playwright's own docs warn against committing it. Driving the user's real Chrome inherits **every logged-in session**. |
+| Puppeteer | Same, and weaker: no worker-per-test discard, no fixture lifecycle, isolation entirely opt-in. |
+| WebArena | Real Docker sites, but **no enforced reset between runs**; mints **auto-login cookies for every site** — the agent is a pre-authenticated superuser by design. |
+| Browser Use | Its own README: *"a guard for an aligned model, **not a sandbox**"*; *"The REPL worker runs model-written Python as your user"*; the 0.x file allowlist was **removed** in v1.0; local modes open an **unauthenticated CDP port on 127.0.0.1**. Env allowlist matching KEY/TOKEN/SECRET/PASSW — *"That is all the allowlist does."* |
+| Stagehand | Local mode = your Chrome + deliberately persistent cookies. Cloud cache/replay/proxies are Browserbase-gated: with a local browser the cache option has no effect and every call runs inference. |
+| Skyvern | Component-separated services; **credential indirection is genuinely good** (model calls `login(credential_type, credential_id)` — value never enters model context). But `BROWSER_TYPE=cdp-connect` + `browser serve --tunnel` let Skyvern Cloud drive your local Chrome — account takeover as a feature. |
+| Inspect AI | **Sandbox is opt-in per call** — its own docs: *"Provisioning a sandbox does not automatically run tools... in the container."* Separates **Approvers** (pre-execution) from **Tool Result Review** (post-execution, before model sees it) — two distinct policy hooks. |
+| SWE-bench | Strong per-instance Docker. But the harness will *force* patches to apply (--3way, --reject, patch --fuzz=5), and its result cache is keyed only on run_id+instance_id — re-running with different predictions **silently reuses the first run's results**. |
+| LiteLLM | Gateway credential boundary (virtual keys, budgets). Not a filesystem/process boundary. |
+| n8n | **Unsafe by default**: *"Task runners are the only isolation layer between user-provided code... Without them, or with internal mode, anyone who can edit a workflow could potentially read your database, encryption key, stored credentials, and environment variables."* Hardening list: distroless image, nobody:65532, read-only rootfs, AppArmor deny on /proc/*/environ. |
+
+## 7.5.3 Verification: who produces evidence vs. appearance
+
+| Product | What "success" means |
+|---|---|
+| **Playwright** | **Evidence** — web-first auto-retrying assertions on the live DOM. Caveats: proves the client-observable surface only; `toHaveScreenshot()` is the weakest form. Ships **planner → generator → healer** agents via `npx playwright init-agents`. |
+| **Puppeteer** | **Appearance** — waits not assertions, no DOM trace, **no HAR** (measured absent from docs/guides/). You build everything. |
+| **WebArena** | **Contaminated** — ABC paper: WebArena overestimates agents by **5.2%** due to string-matching issues; for "N/A" tasks **the LLM judge accepts an empty reply as correct** — a do-nothing agent passes. |
+| **Browser Use** | **Self-report** — `result.is_successful()` is the model's own verdict; docs: *"verify important external actions independently."* |
+| **Stagehand** | **Evidence-capable** — `observe()` returns **real Playwright selectors**, so an AI decision becomes a durable program fragment you can hand to `expect()`. But `act()` **self-heals**, trading flakiness for silent semantic drift. |
+| **Skyvern** | **LLM opinion** — `page.validate()` returns an uncalibrated bool; `page.extract()` is schema-typed. Rich artifacts but nothing deterministic. |
+| **Inspect AI** | **Strongest** — immutable transcript as evidence; **deferred, re-runnable, editable scoring** over history. Judge-validity is unsolved but CJE calibration is integrated. |
+| **SWE-bench** | **Best mechanism, worst measurement** — two-sided FAIL_TO_PASS + PASS_TO_PASS, but: **7.7%** Lite / **5.2%** Verified pass **without correct patches**; **76%** buggy-file-path accuracy from issue text alone (memorization, dropping to ~53% on unseen repos); insufficient tests; Pro-level gold leakage. |
+| **LiteLLM** | **None** — transport. Contributes cost/provenance evidence (which model actually answered when fallbacks fire). |
+| **n8n** | **None** — proves a workflow *ran*, not that the world changed. |
+
+## 7.5.4 Mechanisms worth stealing (ranked)
+
+1. **Playwright's trace format** — before/action/after DOM snapshot triples + screencast + network slice + console, indexed by one action timeline, replayable offline from a single zip.
+2. **Inspect's evidence/verdict split** — immutable transcript; scoring recomputable, editable, re-runnable over history. Plus **two distinct policy hooks**: pre-execution approval vs post-execution result review. Plus the **control channel**: detach long runs, supervise from another process (cancel/requeue/pause/interim-score).
+3. **SWE-bench's two-sided test contract** — new assertion flips to passing AND existing suite stays green. Plus `report <run_id>` = re-grade without re-running.
+4. **Stagehand's observe() → selector handoff** — every AI action emits a durable deterministic artifact; verification re-runs the artifact, not the LLM.
+5. **Skyvern's credential indirection** — credential_id, secret value never in model context. Strongest of the four secret patterns in this set.
+6. **Browser Use's REPL collapse** — one tool as a language instead of 40 tools, *only if* run inside an OS sandbox you own.
+7. **LiteLLM's normalised error taxonomy + per-call cost** — one retry/fallback policy instead of N; cost is part of the evidence.
+8. **n8n's two-plane split** — control plane never executes user code; execution plane independently hardened. Plus execution-data redaction as a first-class feature.
+9. **WebArena's id-based accessibility-tree action space** — stable ints over CSS selectors; deterministic, resolution-independent.
+
+## 7.5.5 Licence floor for vendoring
+
+- **MIT/Apache OK:** Playwright, Puppeteer, Browser Use, Stagehand, Inspect AI, SWE-bench, LiteLLM SDK.
+- **Blocked:** Skyvern (AGPL-3.0), n8n (SUL forbids the agent-platform use case). Both are excellent *idea* sources and unusable *dependency* sources for a proprietary desktop product.
+
+## 7.5.6 The design axis this batch names
+
+> **Did the model's claim get converted into something re-executable?**
+
+The best mechanisms in this set all convert LLM judgement into a deterministic artifact (Stagehand's selector, Skyvern's "replay agents as cached code", Inspect's transcript+rescoring, SWE-bench's FAIL_TO_PASS). The worst outcomes all come from trusting a self-report (Browser Use's `is_successful()`, Skyvern's `validate() -> bool`, WebArena's permissive matchers at -5.2%, SWE-bench's insufficient tests at 7.7%/5.2% false passes). This single axis determines whether the platform produces **evidence or appearance** — and it is now the platform's central design criterion.
