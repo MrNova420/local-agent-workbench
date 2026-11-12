@@ -155,6 +155,109 @@ These are now settled design constraints, each traceable to evidence in `platfor
 
 Adopt the six-metric set from §7.3 (`task_success_rate` split into deterministic vs graded, `requests_per_task`, `cached_token_ratio` with a post-tool-discovery regression assertion, `recovery_correctness` via boundary fault injection, `permission_violations` = 0, `false_verification_rate`), with **SWE-bench explicitly excluded as a KPI** (32.67% leakage, 76% file-path recall from issue text, METR's measured −19% for experienced developers).
 
+
+## 3d. Decisions from execution/browser/evaluation research
+
+From the depth dossiers in `platform-landscape-research.md` §7.5–7.6. These refine §3c.
+
+### The platform's central design axis
+
+> **Did the model's claim get converted into something re-executable?**
+
+Every reviewed product that produced reliable outcomes did this (Stagehand's observe()→selector, Skyvern's replay-as-code, Inspect's transcript+rescoring, SWE-bench's FAIL_TO_PASS). Every product that failed did so by trusting a self-report (Browser Use's is_successful(), Skyvern's uncalibrated validate()→bool, WebArena's permissive matchers at −5.2%, SWE-bench's insufficient tests at 7.7%/5.2% false passes).
+
+**Consequence:** the platform never accepts "the model said it succeeded" as a terminal outcome. Every terminal state carries either a re-executable verification artifact or an explicit `unverified` marker.
+
+### Adopted from this research
+
+| Decision | Source | Why |
+|---|---|---|
+| Every AI action emits a durable deterministic artifact (locator, command, script) that verification re-runs | Stagehand observe() → real Playwright selector | Converts model judgement into something a machine can re-check |
+| Two-sided test contract: new check passes AND existing suite stays green | SWE-bench FAIL_TO_PASS/PASS_TO_PASS | Generalises from tests to any verification |
+| Immutable evidence, recomputable verdicts — transcripts never mutated; scoring is a separate re-runnable pass | Inspect AI deferred scoring | The judge will improve; old verdicts must be re-derivable without re-running |
+| Two distinct policy hooks: pre-execution approval AND post-execution result review | Inspect AI Approvers + Tool Result Review | Most harnesses conflate them; that is how secrets leak into prompts |
+| Staged diff review as the default apply flow — AI changes live in a review sandbox until applied | Plandex cumulative diff review | Changes are staged, not applied; rejected diffs never touch project files |
+| Structural repo maps (tree-sitter) for large-repo context | Plandex project maps | More token-efficient and explainable than opaque semantic retrieval |
+| Headless session contract — list/inspect/continue sessions with --json, --continue, --session | Crush `crush session` | Sessions browsable by humans and machines; automation surface first-class |
+| Extension-bundle packaging — curated defaults, opt-in extras | Langflow v1.12 bundles | Controls default footprint; decouples release cadences |
+| Plain OTLP export for observability | Langflow OpenTelemetry | Any backend; no vendor lock; never a dependency |
+| Credential indirection — secrets referenced by ID, value never enters model context | Skyvern login(credential_type, credential_id) | Strongest of the four secret patterns reviewed |
+| Normalised provider error taxonomy + per-call cost as evidence | LiteLLM | One retry policy instead of N; "which model actually answered" is part of the record |
+| Execution-data redaction as a first-class feature | n8n | Configurable, not an afterthought |
+
+### Rejected from this research
+
+| Rejected | Reason |
+|---|---|
+| Skyvern as a dependency | AGPL-3.0 — fatal for proprietary embedding |
+| n8n as a dependency | SUL forbids "an AI agent acting on the user's behalf" configuring workflows — the exact product case |
+| Browser Use's REPL as default execution | Model-written Python as the user, no file allowlist, unauthenticated CDP port; only inside an OS sandbox we own |
+| Playwright Test's runner abstraction | Repo+CI shaped; take the Library API and trace format, not the runner |
+| Puppeteer as verification substrate | No assertions, no DOM trace, no HAR |
+| WebArena as infrastructure | Frozen since 2023, 1TB, pre-authenticated superuser, 5.2% validity leakage |
+| SWE-bench as KPI or dependency | Memorization contamination, 120GB/WSL2 |
+| LiteLLM proxy embedded | 131.6MB, Postgres+Redis, valuable features paid; SDK subset only |
+| Langflow as runtime dependency | Visual-graph-of-coding-loop is a negative pattern here; multi-tenant overhead |
+| Mentat (any form) | Dead twice |
+
+### Licence floor (vendoring)
+
+MIT/Apache permitted: Playwright, Puppeteer, Browser Use, Stagehand, Inspect AI, SWE-bench, LiteLLM SDK, Plandex, Langflow. Crush (verify "Other" terms first).
+
+Blocked: Skyvern (AGPL), n8n (SUL).
+
+### Platform evidence contract (new requirement)
+
+Every task terminal state is one of:
+
+| State | Meaning | Required artifacts |
+|---|---|---|
+| `verified` | Re-executable checks passed | New checks pass + prior suite green |
+| `partially_verified` | Some checks ran, some skipped | Exact list of what ran, passed, failed, skipped |
+| `unverified` | No executable verification | Explicit marker; never rendered as "done" |
+| `failed_checks` | Checks ran and failed | Failing outputs preserved verbatim |
+| `blocked` | Could not proceed | The specific blocker |
+
+This closes the false-verification gap: the UI cannot render "complete" without either a passing two-sided contract or an explicit `unverified` marker the user must accept.
+
+
+## 3e. Local small-model-first priority (user direction, 2026-11-11)
+
+The platform's primary target is **local small models first** — a 4B–9B model on consumer hardware (4–8 GB VRAM, partial CPU offload) — while remaining architecturally ready for everything else (larger local models, hosted APIs, subagents, remote execution). This is a priority order, not a capability cut.
+
+### Why this ordering
+
+1. The current Workbench's measured bottleneck is prompt evaluation on CPU-heavy runners: 56.9 s for 6,279 tokens on a resident 40B model with 6 layers on GPU. A 4B model at similar offload is the realistic developer experience today.
+2. Every research finding about latency, cache, and request count applies *more* to small models: fewer, fatter requests with byte-stable prefixes matter most when eval throughput is lowest.
+3. Small models fail differently: weaker tool-call reliability, shorter effective reasoning, more no-progress loops. The harness must compensate structurally, not by hoping.
+
+### Requirements this adds
+
+| Requirement | Rationale | Measured target |
+|---|---|---|
+| **Stable prefix is mandatory, not optimal** | Small models cannot afford full re-eval per tool call | ≥60% cached tokens from request 2 on every resident-model task; tested as a regression |
+| **Fewer requests per task** | Each request costs seconds-to-minutes of eval | Report `requests_per_task` median; regression budget per task tier |
+| **Tool schemas ≤ 14 resident, paged tail** | 50+ tools degrade selection accuracy *and* eat context | ≤2% of selected context for the resident catalog |
+| **Batching encouraged structurally** | One tool call per request is the current anti-pattern | Guidance + parallel-safe independent operations; measured request count drops |
+| **No-progress detection tuned for weak models** | Small models repeat plans more often | Fingerprint on host-observed state (already in Workbench); explicit `incomplete` outcome, never fake success |
+| **Verification is mandatory because the model can't self-assess** | `is_successful()`-style self-reports are unreliable at every size, worse at small | Evidence contract (§3d) enforced at every terminal state |
+| **Context projection is cheap to rebuild** | Small context windows fill faster | Derived view from canonical log; compaction overlap + retention (ADK pattern) |
+| **Graceful degradation by capability** | Not every model supports tools/vision/reasoning levels | Capability probe at session start; UI shows supported/unknown/unsupported per capability |
+
+### What stays ready for later (not built now, not designed away)
+
+- Hosted provider adapters (same capability contract)
+- Subagents as child sessions (§3c precondition applies)
+- Remote/VM execution backends (execution-boundary menu already specified)
+- Team/RBAC (explicitly out of v1 scope)
+- Multimodal attachments
+
+### Design rule
+
+> Optimize the loop for the slowest model you support honestly. A fast hosted model will only get faster; a small local model is the constraint that shapes the architecture.
+
+This is why the request pipeline (§spec 4) separates phases, why prefix stability is a hard invariant, why the evidence contract exists, and why `requests_per_task` is a first-class metric. Every one of those decisions is more valuable on a small model than on a hosted frontier model — and none of them is lost when a faster model is selected.
+
 ## 4. Product principles
 
 1. **One task, one durable truth.** UI panels, model prompts, event logs, and recovery derive from a canonical task record; no parallel state machines that silently drift.
