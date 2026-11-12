@@ -36,6 +36,7 @@
 | C5 | Compare features and **decide what to combine, redesign, or reject**. | Overlap matrix + adopted-pattern table + explicit rejects in research §4 and design §3b |
 | C6 | Aim for a **professional, high-quality, advanced** platform; be worthy of comparison with the best similar tools. | Quality bar in design §3; concrete screen flows, event protocol and executable acceptance tests in `separate-platform-spec.md` |
 | C8 | **Push further / continue focusing on the platform.** (2026-11-11) | Done: research consolidated, design refined, spec written, critical self-review added |
+| C9 | **Pause delegation; be quicker and more focused. Local small-model-first while still ready for everything.** (2026-11-11) | Done: research wrapped, §3d evidence contract + §3e small-model-first priority added to design |
 | C7 | **Later research phase:** after the platform design, broadly research additional tools/technologies to improve **both** products. | Recorded as the next phase: research §6 and design §10b |
 
 ## D. Working style
