@@ -773,3 +773,78 @@ Products: Playwright, Puppeteer, WebArena, Browser Use, Stagehand, Skyvern, Insp
 > **Did the model's claim get converted into something re-executable?**
 
 The best mechanisms in this set all convert LLM judgement into a deterministic artifact (Stagehand's selector, Skyvern's "replay agents as cached code", Inspect's transcript+rescoring, SWE-bench's FAIL_TO_PASS). The worst outcomes all come from trusting a self-report (Browser Use's `is_successful()`, Skyvern's `validate() -> bool`, WebArena's permissive matchers at -5.2%, SWE-bench's insufficient tests at 7.7%/5.2% false passes). This single axis determines whether the platform produces **evidence or appearance** — and it is now the platform's central design criterion.
+
+## 7.6 Remaining uncovered leads (2026-11-11)
+
+The failed batches were mostly redundant with §7.1/§7.4. These four items were genuinely uncovered; verified directly against GitHub/official sources.
+
+### Crush (Charmbracelet)
+
+| Field | Value |
+|---|---|
+| Repo | `charmbracelet/crush` — 29,052★, 2,365 forks, 535 open issues, licence "Other" |
+| Status | **Active and fast-moving** — v0.48.0 (2026-03-12), v0.50.0 following; latest releases 2026 |
+| Surfaces | Terminal TUI (macOS, Linux, **Windows PowerShell/WSL**, Android, FreeBSD/OpenBSD/NetBSD) + headless `crush run` |
+
+**Distinctive mechanisms:**
+1. **Subagents with live supervision** — background subagent teams visible in transcript/sidebar/header, with per-subagent names, mid-run follow-ups, stop, and **reassignment to a different model**. The most concrete subagent UX found in the catalog.
+2. **Hooks across the whole run lifecycle**, not just tools: sessions, turns, and tool calls.
+3. **Session management as a first-class CLI** — `crush session list`, `crush session {id}`, rename/delete, `--json` structured output, `--continue`/`--session` for headless session pickup. Sessions are browseable by both humans and agents.
+4. **LSP-enhanced context** — uses the language server for additional context (rare among this set).
+5. **Model switching mid-session while preserving context** — an explicit product feature.
+6. MCP over http, stdio and sse.
+
+**Disqualifiers:** licence is "Other" (not MIT/Apache — verify before vendoring); no published containment model; 535 open issues suggests high churn; no documented checkpoint/undo semantics in what was retrieved.
+
+**ADOPT:** the session-listing/headless-session contract (`--json`, `--continue`, `--session`) as the CLI/automation surface; live subagent supervision UX as the reference for a later subagent design; whole-run hooks as an extension lifecycle.
+**VERIFY:** licence terms; checkpoint/recovery semantics.
+
+### Plandex
+
+| Field | Value |
+|---|---|
+| Repo | `plandex-ai/plandex` — 15,908★, 1,190 forks, 71 open issues, **MIT** |
+| Status | **Open source active; Plandex Cloud wound down 2025-11-07.** New trials/subs/credits disabled; OSS remains on GitHub |
+
+**Distinctive mechanisms:**
+1. **Cumulative diff review sandbox** — AI changes stay separate from project files until the developer applies them; command execution is controlled for rollback/debug. The strongest "changes are staged, not applied" model found.
+2. **2M-token effective context** with default model pack (~100k/file); loads only what each step needs; **tree-sitter project maps** for indexing 20M+ token directories.
+3. **chat / tell mode** — chat for fleshing out ideas, tell mode for detailed plans and code, with an explicit prompt to switch.
+
+**Disqualifiers:** its Cloud business failed — a cautionary data point for hosted-agent economics; no published sandbox/containment model; single-vendor OSS.
+
+**ADOPT:** the cumulative diff-review sandbox as the default apply flow (changes staged → review → apply); tree-sitter structural maps as the large-repo context path.
+**REJECT:** chat/tell mode split as a UX — mode confusion is a known cost; prefer explicit intent (already in Workbench).
+
+### Mentat (AbanteAI)
+
+| Field | Value |
+|---|---|
+| Repo | `AbanteAI/archive-old-cli-mentat` — 2,539★, **ARCHIVED** |
+| Status | **Dead — twice.** CLI archived (README: "⚠ ARCHIVED PROJECT ⚠, no longer maintained"), renamed to an AI GitHub bot; that successor is also gone (mentat.ai DNS fails as of Aug 2026, repo 404s) |
+
+**Historical value only:** one of the first open-source terminal coding assistants (Python, 2023); auto git-context sync (detected repo/branch) and multi-file edits from natural language.
+
+**ADOPT:** nothing operational. **Record as lineage evidence:** the terminal-coding-assistant category has high mortality — a product in this space must plan for migration/export of sessions, rules and checkpoints. Reinforces the platform's portability requirement.
+**REJECT:** any dependency or design that assumes a single vendor's continuity.
+
+### Langflow
+
+| Field | Value |
+|---|---|
+| Repo | `langflow-ai/langflow` — **156,535★**, 10,387 forks, 1,307 open issues, **MIT** |
+| Status | **Active, very fast** — v1.13.2 released 2026-11-10; v1.12 added OpenTelemetry (2026-09-01) |
+
+**Distinctive mechanisms:**
+1. **Visual builder + API + MCP server from one flow** — every workflow becomes an MCP tool; Python source access for any component.
+2. **Extension bundles transition** (v1.12): default install is a curated provider set; opt-in providers installed separately (`langflow[bundles]` for all) — reduces default footprint and decouples release cadences.
+3. **Plain OTLP** OpenTelemetry for service health and flow runs — any OTel backend works, no vendor lock.
+
+**Disqualifiers:** 1,307 open issues; visual-graph-of-coding-loop is a negative pattern for a coding agent (from §7.4); multi-tenant/enterprise platform shape is overhead for a single-user local product.
+
+**ADOPT:** the **extension-bundle model** (curated defaults + opt-in extras) as the packaging pattern for provider/tool packs in our platform; plain-OTLP as the optional observability export.
+**REJECT:** visual workflow canvas as the primary coding-agent interface; Langflow as a runtime dependency.
+
+### Consolidated verdict
+
+The catalog's genuinely uncovered leads are now covered. Two dead products (Mentat, Plandex Cloud), one licence-unverified but feature-rich product (Crush), one enterprise platform (Langflow). The high-value adoptions are all **patterns, not dependencies**: staged diff review, tree-sitter repo maps, headless session contracts, subagent supervision UX, extension bundles, and OTLP export.
